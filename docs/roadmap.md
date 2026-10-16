@@ -8,6 +8,7 @@ Facts about the project live in `project_knowledge.md`; this file only orders th
 | Day | Date | Work |
 |---|---|---|
 | Fri | 2026-10-16 | Roadmap, repo setup, stage 1 spec and plans, issues |
+| Sat | 2026-10-17 | Morning: backend route skeleton + `openapi.json` and mobile scaffold merged, so every plan builds on them. A throwaway EAS APK build right after the mobile scaffold, to surface build problems early |
 | Sat–Mon | 2026-10-17 → 19 | Build stage 1, then stage 2. Demo APK built with EAS by Monday morning |
 | Tue | 2026-10-20 | Demo to the professor. Fixes only, no features |
 
@@ -25,7 +26,8 @@ Agreed for stage 1:
 - RAG: chunking, embedding, retrieval with filters (kind, tags).
 - Agents: the Chat multi-agent system on LangGraph, with grounded, cited answers.
 - Mobile: Expo app with the three sections, library, recording detail, settings, theme with dark mode.
-- Tooling: one-command install per side, lint, type checks, tests, CI.
+- Tooling: one-command install per side, lint, type checks, tests, CI. The backend install also downloads the models, so nothing downloads during the demo.
+- Setup doc: Tailscale (MagicDNS and HTTPS certificates enabled in the admin console), Hugging Face token with the pyannote model terms accepted, `.env` keys.
 
 Questions the stage 1 spec must answer:
 - Agent design: which agents exist (orchestrator, retrieval, summarizer, others), what each may call, how they hand off, and the graph.
@@ -36,6 +38,8 @@ Questions the stage 1 spec must answer:
 - Consent: what the app shows before a meeting recording.
 - The screen map and navigation (after usage, per the playbook).
 - Exact light model picks in `config/models.yaml`.
+- Tags: free-form, or typed by the brief's categories (topic, project, meeting type); how the LLM reuses existing tags to avoid near-duplicates.
+- Whether ASR and diarization each run in a subprocess (as tested in `live-debate-analysis`), which also frees GPU memory between steps.
 
 ### Stage 2: Stretch and polish (S features)
 
@@ -60,12 +64,12 @@ data/        runtime data, git-ignored (never committed)
 
 ### Run mode and security
 - One run mode: the server runs on the laptop; the phone is the client.
-- The server binds to `127.0.0.1` only. The phone reaches it through `tailscale serve`, which gives an HTTPS address on the private tailnet. Nothing is exposed on the LAN or the internet.
+- The server binds to `127.0.0.1` by default (the bind host is a setting). The phone reaches it through `tailscale serve`, which gives an HTTPS address on the private tailnet. Nothing is exposed on the LAN or the internet.
 - No accounts and no app-level auth: the tailnet is the boundary.
 - The server URL is a setting in the app, stored on the phone. It is the only thing the phone stores apart from UI preferences.
 
 ### Configuration: one place per concern
-- `config/app.json`: the app name and branding values. Read by the backend and by the Expo config (`mobile/app.config.ts`). No other file hard-codes the name.
+- `config/app.json`: the app name and branding values. Read by the backend and by the Expo config (`mobile/app.config.ts`), which passes them to the app through `extra` (read with `expo-constants`). App code never imports from `../config/`. No other file hard-codes the name.
 - `config/models.yaml`: providers (`base_url`, `key_env`) and models by role (`llm`, `embedder`, `asr`, `diarizer`), hosted or local; the `llm` role has an ordered fallback list. Code asks for a role, never a model name.
 - Secrets live only in environment variables, loaded from `backend/.env` (git-ignored). `models.yaml` names the variable (`key_env`); it never holds a key. A `base_url` with credentials in it is refused at load.
 - `backend/.env.example` lists every variable with no values.
@@ -92,12 +96,25 @@ data/
 
 ### Processing lifecycle
 `uploaded → transcribing → diarizing (meetings only) → analyzing → indexing → ready`, or `failed` with an error code and message from any step. The app polls the recording's status. One worker processes one recording at a time (one model on the GPU at a time).
+- On server startup, every recording in a non-terminal status is re-queued from the start of its pipeline (the laptop may sleep or restart mid-job).
+- A `failed` recording can be retried through the API.
+
+### Audio
+- The app uploads what expo-audio records (compressed, e.g. m4a). The backend keeps that file as the original.
+- For processing, the backend decodes it once to 16 kHz mono float32 and passes that in-memory waveform to both ASR and diarization. pyannote is never handed a file path.
+- Audio is served back with HTTP Range support, so the app can play from a given moment.
+
+### Speech dependencies
+- Speech models (torch, faster-whisper, pyannote) are an optional install group, with torch pinned to the CUDA (cu128) package index as in `live-debate-analysis`; PyPI's torch is CPU-only.
+- Windows-specific CUDA library loading is a platform shim that runs only on Windows.
+- ASR and diarization sit behind interfaces with fakes; CI never installs torch and never needs a Hugging Face token.
 
 ### API
 - REST + JSON under `/api/v1`, snake_case fields.
 - Errors: HTTP status plus `{"error": {"code": "<snake_case>", "message": "<human text>"}}`.
-- FastAPI's OpenAPI schema is the source of truth. The app's TypeScript types are generated from it (`openapi-typescript`), never written by hand; regenerating them is part of any API change.
-- Audio upload: multipart, one file per recording.
+- The backend's Pydantic models are the source of truth. The exported schema is committed as `backend/openapi.json`; CI fails if it is stale.
+- The app's TypeScript types are generated from the committed `openapi.json` (`openapi-typescript`), never written by hand. Mobile work needs no Python and no running backend. Regenerating both is part of any API change.
+- Audio upload: multipart, one file per recording. Audio download: `GET` with HTTP Range.
 
 ### Citations
 Every answer and summary claim that cites a source carries `{recording_id, segment_id, start_ms}`. The app opens the recording at that segment.
