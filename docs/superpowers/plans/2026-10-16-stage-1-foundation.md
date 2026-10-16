@@ -1,6 +1,7 @@
 # Stage 1 Foundation Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **Other agents (Codex, Antigravity, …):** work the tasks in order, one commit per task, ticking the boxes; follow `AGENTS.md`.
 
 **Goal:** Freeze everything the four parallel stage 1 plans share (schema, every API route and model, `openapi.json`, backend protocols and fakes, mobile scaffold, theme, API client, CI) so they can be built side by side from Saturday morning.
 
@@ -91,22 +92,26 @@
 ### Task 3: Protocols, fakes and composition root
 
 **Files:**
-- Create: `backend/app/speech/__init__.py`, `backend/app/speech/protocols.py`, `backend/app/speech/fakes.py`, `backend/app/rag/__init__.py`, `backend/app/rag/protocols.py`, `backend/app/rag/fakes.py`, `backend/app/agents/__init__.py`, `backend/app/agents/schemas.py`, `backend/app/processing/__init__.py`, `backend/app/processing/protocols.py`, `backend/app/processing/fakes.py`, `backend/app/container.py`, `backend/app/domain/__init__.py`, `backend/app/domain/types.py`, `backend/tests/conftest.py`
-- Test: `backend/tests/test_fakes.py`, `backend/tests/test_container.py`
+- Create: `backend/app/speech/__init__.py`, `backend/app/speech/protocols.py`, `backend/app/speech/fakes.py`, `backend/app/rag/__init__.py`, `backend/app/rag/protocols.py`, `backend/app/rag/fakes.py`, `backend/app/agents/__init__.py`, `backend/app/agents/schemas.py`, `backend/app/processing/__init__.py`, `backend/app/processing/protocols.py`, `backend/app/processing/fakes.py`, `backend/app/container.py`, `backend/app/domain/__init__.py`, `backend/app/domain/types.py`, `backend/app/domain/speakers.py`, `backend/app/domain/tags.py`, `backend/tests/conftest.py`
+- Test: `backend/tests/test_fakes.py`, `backend/tests/test_container.py`, `backend/tests/domain/test_speakers.py`, `backend/tests/domain/test_tags.py`
 
 **Interfaces:**
 - Consumes: Tasks 1–2.
 - Produces:
   - `app.domain.types`: `RecordingKind = Literal["meeting", "note"]`, `RecordingStatus = Literal["uploaded", "transcribing", "diarizing", "analyzing", "indexing", "ready", "failed"]` (API models in Task 4 reuse them).
+  - `app.domain.speakers` (shared by the processing and agents plans): `display_name(label: str, name: str | None) -> str` (`name` or `"Speaker A"`); `tokenize_speakers(text: str, label_to_id: Mapping[str, str]) -> str` (regex `\bSpeaker ([A-Z])\b`, case-sensitive, only labels in the map, a following `'s` kept; result `{{spk_…}}`); `render_speakers(text: str, id_to_display: Mapping[str, str]) -> str` (unknown ids left as is).
+  - `app.domain.tags`: `normalize_tag(name: str) -> str` (lowercase, trimmed, inner whitespace → `-`, cut to 24 chars); `match_existing_tag(name: str, existing: Collection[str]) -> str | None` (equal after normalisation, or after removing a trailing `s`).
   - `app.speech.protocols`: `AsrSegment(start_ms: int, end_ms: int, text: str)`, `DiarTurn(start_ms: int, end_ms: int, speaker: str)`; `class Asr(Protocol): def transcribe(self, audio_npy: Path) -> list[AsrSegment]`; `class Diarizer(Protocol): def diarize(self, audio_npy: Path) -> list[DiarTurn]`. (`audio_npy` = 16 kHz mono float32 `.npy`; the real implementations run child processes, processing plan.)
   - `app.speech.fakes`: `FakeAsr`, `FakeDiarizer` returning a fixed 6-segment, 2-speaker conversation scaled to the audio length (`np.load(path, mmap_mode="r").shape[0] / 16000`); an empty array → `[]`.
   - `app.rag.protocols`: `class Embedder(Protocol): dim: int; def embed_passages(self, texts: Sequence[str]) -> list[list[float]]; def embed_query(self, text: str) -> list[float]`. `app.rag.fakes.FakeEmbedder` (dim 384, deterministic hash-based unit vectors; the same text gives the same vector).
   - `app.agents.schemas`: the LLM output schemas exactly as processing spec §4 (`Item`, `ActionItem`, `MeetingAnalysis`, `NoteAnalysis`) and chat spec §3 (`ChatReply`), with their `Field` constraints.
   - `app.processing.protocols`: `TranscriptLine(s: int, speaker_label: str | None, text: str)`; `AnalysisRequest(kind: RecordingKind, lines: list[TranscriptLine], tag_vocabulary: list[str])`; `class Analyzer(Protocol): def analyze(self, request: AnalysisRequest) -> MeetingAnalysis | NoteAnalysis`. `app.processing.fakes.FakeAnalyzer`: title "Fake analysis", tags `["demo"]`, one item citing `[1]` per list (meeting) or one key point citing `[1]` plus `clean_text` = joined line text (note).
   - `app.container`: `@dataclass Container(settings: Settings, app_config: AppConfig, models: ModelsRegistry, db_path: Path, speech_backend_bound: Literal["real", "fake"], asr: Asr, diarizer: Diarizer, embedder: Embedder, analyzer: Analyzer)`; `build_container(settings: Settings) -> Container`. Binding points, marked by one comment each: when `speech_backend == "real"` the processing plan binds the real `Asr`/`Diarizer`/`Embedder`; the agents plan binds the real `Analyzer`. Until then `build_container` binds the fakes for every backend value and sets `speech_backend_bound="fake"`.
-  - `tests/conftest.py`: `container` fixture (tmp data dir, fakes, migrated db), reused by every later backend plan; Task 4 adds the `client` fixture.
+  - `tests/conftest.py`: an autouse fixture that `monkeypatch.delenv`s every `key_env` in `config/models.yaml` and `HF_TOKEN` (and restores `os.environ` after tests that load a temp `.env`), so tests never see the developer's real keys; `container` fixture (tmp data dir, empty temp `env_file`, fakes, migrated db), reused by every later backend plan; Task 4 adds the `client` fixture.
 
 - [ ] **Step 1: Write the failing tests.**
+  - `test_tokenize_leaves_lowercase_speaker`: "asked the speaker a question" unchanged; `test_tokenize_possessive_round_trip`: "Speaker A's idea" → tokenised → rendered with name "Sarah" → "Sarah's idea"; `test_tokenize_unknown_label_unchanged` ("Speaker Q" with no Q); `test_render_without_name` → "Speaker A".
+  - `test_normalize_tag`: `"  Q4 Planning "` → `"q4-planning"`; 30-char input cut to 24; `match_existing_tag("budgets", {"budget"}) == "budget"`.
   - `test_fake_asr_scales_to_audio` (10 s of zeros in a tmp `.npy`): segments sorted, last `end_ms <= 10_000`; empty array → `[]`.
   - `test_fake_embedder_deterministic_unit_vectors`: dim 384, norm ≈ 1, same input same output, different input different output.
   - `test_fake_analyzer_validates`: meeting request → `MeetingAnalysis` that passes its own model validation; note request → `NoteAnalysis` with `len(key_points) >= 1`.
@@ -166,7 +171,7 @@
   - Root `_layout.tsx`: loads fonts (splash until loaded), PaperProvider with the scheme-based theme (user preference wired by the chat-settings plan), `Stack` with `(tabs)`; Task 6 adds the QueryClientProvider.
   - `eas.json`: profile `preview` with `android.buildType: "apk"`, `distribution: "internal"`.
 
-- [ ] **Step 1: Scaffold.** From the repo root: `npx create-expo-app@latest mobile` with the non-interactive flags shown by `--help` (template with expo-router and TypeScript, SDK 58, no git init). Confirm `expo` is `~58` in `mobile/package.json`. Add packages with `npx expo install react-native-paper @tanstack/react-query @react-native-async-storage/async-storage expo-font @expo-google-fonts/ibm-plex-sans @expo-google-fonts/ibm-plex-mono expo-constants react-native-safe-area-context` and dev tools `npm i -D jest-expo @testing-library/react-native openapi-typescript eslint prettier eslint-config-expo`. Remove the template's example screens. `tsconfig` `strict: true`.
+- [ ] **Step 1: Scaffold.** From the repo root: `npx create-expo-app@latest mobile` with the non-interactive flags shown by `--help` (template with expo-router and TypeScript, SDK 58, no git init). Confirm `expo` is `~58` in `mobile/package.json`. Add packages with `npx expo install react-native-paper @tanstack/react-query @react-native-async-storage/async-storage expo-font @expo-google-fonts/ibm-plex-sans @expo-google-fonts/ibm-plex-mono expo-constants react-native-safe-area-context` and dev tools `npx expo install jest-expo eslint-config-expo -- --save-dev` (SDK-matched versions) and `npm i -D @testing-library/react-native openapi-typescript eslint prettier`. Remove the template's example screens. `tsconfig` `strict: true`.
 - [ ] **Step 2: `app.config.ts`** reads `../config/app.json` and sets `name`, `slug`, `version` and `extra: { appName, appVersion }`; Android package id derived from the slug. No other file mentions the name.
 - [ ] **Step 3: Write the failing tests.**
   - `tokens.test.ts`: every UI spec §4 hex value is present under its name in both themes (table-driven); `speaker` has 6 entries per theme.
@@ -180,7 +185,8 @@
 ### Task 6: Mobile API client, generated types, server URL
 
 **Files:**
-- Create: `mobile/src/api/schema.d.ts` (generated), `mobile/src/api/client.ts`, `mobile/src/api/errors.ts`, `mobile/src/api/queryClient.ts`, `mobile/src/settings/serverUrl.ts`, `mobile/package.json` script `gen:api`
+- Create: `mobile/src/api/schema.d.ts` (generated), `mobile/src/api/client.ts`, `mobile/src/api/errors.ts`, `mobile/src/api/queryClient.ts`, `mobile/src/settings/serverUrl.ts`
+- Modify: `mobile/package.json` (script `gen:api`), `mobile/app/_layout.tsx` (QueryClientProvider), `mobile/.prettierignore`, ESLint config (ignore the generated file)
 - Test: `mobile/src/api/client.test.ts`, `mobile/src/settings/serverUrl.test.ts`
 
 **Interfaces:**
