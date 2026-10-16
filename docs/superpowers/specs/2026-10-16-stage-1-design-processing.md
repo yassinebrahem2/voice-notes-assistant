@@ -39,7 +39,7 @@ Evidence: `yassinebrahem2/live-debate-analysis` runs Whisper and pyannote as sep
 - English only.
 
 ## 4. Analysis: the Summarizer agent (role `llm_analysis`)
-The Summarizer is an agent built by the agent factory (`create_agent(name="summarizer", response_format=ToolStrategy(...))`), used here and by Chat's multi-recording merge (chat file §3).
+The Summarizer is an agent built by the agent factory (`create_agent(name="summarizer", response_format=ToolStrategy(...))`), used here and by Chat's multi-recording merge (chat file §2).
 
 Input: the transcript rendered by turn, `Speaker B:` once per turn with `[S n]` before each segment (notes: `[S n]` before each segment, no speaker), plus the 40 most used existing tags.
 
@@ -73,7 +73,7 @@ Prompt core (meeting): summarize only what was said; every decision, action item
 After the call (server):
 - S numbers → segment ids; an unknown S number is removed and logged; an item left without a valid source is removed and logged.
 - `owner` checked against the recording's speakers → `speaker_id`, or null if unknown.
-- `Speaker X` → speaker token (data-API file §2).
+- `Speaker X` → speaker token (data-API file §3).
 - Tags normalised (lowercase, trimmed, spaces → hyphens, ≤ 24 chars, ≤ 4); a new tag equal to an existing one after normalisation or after removing a trailing "s" reuses it.
 - Stored in `recordings.analysis` and `title`.
 
