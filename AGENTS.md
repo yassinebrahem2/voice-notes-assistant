@@ -85,7 +85,7 @@ Four types, each with its template and label. Blank issues are disabled.
 ## Project rules
 - Never use the Artifact tool. UIs are real, working code in this repo.
 - The app name is not settled: it is defined only in `config/app.json`. Never hard-code it anywhere else (UI strings, file names, docs written for users, package metadata generated from it).
-- Models are chosen only in `config/models.yaml`, by role (`llm`, `embedder`, `asr`, `diarizer`). Code asks for a role, never a model name or provider.
+- Models are chosen only in `config/models.yaml`, by role (`llm`, `llm_analysis`, `embedder`, `asr`, `diarizer`). Code asks for a role, never a model name or provider.
 - Secrets live only in environment variables (`backend/.env`, git-ignored; `backend/.env.example` lists the names). Never put a key in a config file, a URL, a log line, an error message, a `repr` or a test fixture.
 - LLMs are hosted free tiers (Groq, Gemini fallback); never add a self-hosted LLM. Demo recordings only: free tiers may use inputs for training, so never send real private conversations.
 - LangGraph 1.x and LangChain 1.x APIs only (`langchain.agents.create_agent` and current LangGraph docs). Do not copy pre-1.0 tutorial patterns (`initialize_agent`, `AgentExecutor`, `langgraph.prebuilt.create_react_agent`) and do not add `langgraph-supervisor`.

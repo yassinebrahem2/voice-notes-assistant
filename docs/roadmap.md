@@ -72,7 +72,7 @@ Runtime data lives outside the repository (see Data layout).
 
 ### Configuration: one place per concern
 - `config/app.json`: the app name and branding values. Read by the backend and by the Expo config (`mobile/app.config.ts`), which passes them to the app through `extra` (read with `expo-constants`). App code never imports from `../config/`. No other file hard-codes the name.
-- `config/models.yaml`: providers (`base_url`, `key_env`) and models by role (`llm`, `embedder`, `asr`, `diarizer`), hosted or local; the `llm` role has an ordered fallback list. Code asks for a role, never a model name.
+- `config/models.yaml`: providers (`base_url`, `key_env`) and models by role (`llm` for Chat, `llm_analysis` for processing, `embedder`, `asr`, `diarizer`), hosted or local; each LLM role has an ordered failover list (configurable). Code asks for a role, never a model name.
 - Secrets live only in environment variables, loaded from `backend/.env` (git-ignored). `models.yaml` names the variable (`key_env`); it never holds a key. A `base_url` with credentials in it is refused at load.
 - `backend/.env.example` lists every variable with no values.
 
@@ -93,7 +93,7 @@ Runtime data lives outside the repository (see Data layout).
 
 ### Domain shapes (names fixed here; fields in the stage 1 spec)
 - Recording: `kind` is `meeting` or `note`. Has a title, tags, created time, duration, processing status, and `waveform_peaks` (a short list of peak levels from 0 to 1, computed by the backend when it decodes the audio; null until then), used for the waveform thumbnail and the player's seek bar.
-- Segment: one speaker turn (meetings) or one ASR segment (notes): `start_ms`, `end_ms`, `speaker_id` (meetings only), text.
+- Segment: one ASR segment (a few seconds, at most about 30 s) for both kinds: `start_ms`, `end_ms`, `speaker_id` (meetings only), text. The app shows consecutive same-speaker segments as one turn.
 - Speaker: per recording; diarizer label plus an optional user-given name.
 - Times are milliseconds from the start of the recording; wall-clock times are UTC ISO 8601.
 

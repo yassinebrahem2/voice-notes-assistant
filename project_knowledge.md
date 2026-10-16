@@ -43,6 +43,8 @@ Anything not listed here is unknown.
 - [USER] Audio is kept until the user deletes the recording.
 - [USER] Analysis output (stage 1 spec, section 3, approved 2026-10-16): meeting = title, 1–4 tags, overview, decisions, action items (owner and due date only when said), open questions, each item citing 1–3 transcript lines; note = title, tags, 3–8 cited key points and a clean note (tidy prose, no new content, not cited). One model call per normal-length recording; long recordings map-reduce.
 - [USER] Speaker renaming: summaries store speaker placeholders and render current names, so a rename reaches every summary already written without re-processing. Chat answers already written keep the names they were written with.
+- [USER] Search (stage 1 spec, section 4, approved 2026-10-16): segments are ASR-level for both kinds (meetings add a speaker per segment); chunks pack consecutive segments up to ~200 tokens with one-segment overlap, preferring speaker changes as boundaries; retrieval is exact, filtered by scope, tags and ready status, top 8; the "Not in your recordings" cut-off starts permissive and is calibrated on the demo recordings. No keyword search or re-ranking.
+- [USER] Two LLM roles: `llm` (Chat, Groq first) and `llm_analysis` (processing, Gemini Flash first), each with a configurable failover order in `config/models.yaml`. No rate-limit modelling or quota counting: the models registry and the single agent factory apply failover; a failing model (429 included) hands over to the next in the role's list.
 - [USER] Tags are free-form (not the brief's topic / project / meeting type categories), normalised, at most 4 per recording; the model reuses existing tags; the server merges near-identical spellings. Title, tags and speaker names are editable once a recording is ready; a ready recording is never re-processed.
 
 ### Models
@@ -73,7 +75,7 @@ Versions checked 2026-10-16; majors are pinned.
 - Speech: faster-whisper 1.2.1 (`distil-large-v3`); pyannote.audio 4.0.7 `speaker-diarization-community-1` for meetings only (needs `HF_TOKEN`). Speech dependencies are an optional install group; ASR and diarizer sit behind interfaces with fakes, so CI never installs torch or needs a token.
 - LLMs: Groq free tier first, Gemini free tier as fallback (OpenAI-compatible endpoints).
 - Agents: LangGraph 1.2 with LangChain 1.4 (1.x APIs such as `create_agent`; LangChain's model fallback for the LLM role, exact mechanism in the stage 1 spec). Not `langgraph-supervisor` (pre-1.0).
-- Model config: one `models.yaml` with providers (`base_url`, `key_env`) and models by role (`llm`, `embedder`, `asr`, `diarizer`), each hosted (provider + model id) or local (model id, device, precision); the LLM role has a fallback order; code asks for a role, never a model name.
+- Model config: one `models.yaml` with providers (`base_url`, `key_env`) and models by role (`llm`, `llm_analysis`, `embedder`, `asr`, `diarizer`), each hosted (provider + model id) or local (model id, device, precision); each LLM role has a configurable failover order; code asks for a role, never a model name.
 - Mobile: Expo SDK 58, expo-router, expo-audio, expo-keep-awake, TanStack Query 5, React Native Paper 5 (Material 3, dark mode). React Native version chosen by `npx expo install`.
 - Development on phones in Expo Go; the demo APK is built with EAS Build (cloud, free tier: 15 Android builds/month, low-priority queue with possible 90+ minute waits), by Monday 2026-10-19. Expo Go is the demo fallback.
 
@@ -92,7 +94,6 @@ Versions checked 2026-10-16; majors are pinned.
 ## 3. Open
 Each item is safe to decide later; the stage that decides it is named.
 - **Failure behaviour** per step (processing, LLM, network). Stage 1 spec.
-- **Chunking strategy**: a config choice; a comparison is not in scope for 2026-10-20. Stage 1 spec. [BRIEF]
 - **Privacy**: free LLM tiers (Gemini) may use inputs for training. Stage 1 spec. [BRIEF] (Recording consent: decided, no consent screen.)
 - **iOS**: works in Expo Go as a bonus (no custom native code); a standalone iOS build needs a paid Apple Developer account. Awaiting the user's yes. Roadmap.
 - **Initial light model picks** within the stack (e.g. Whisper size) are config edits, not design decisions.
