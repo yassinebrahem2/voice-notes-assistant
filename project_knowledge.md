@@ -36,6 +36,7 @@ Anything not listed here is unknown.
 - [USER] The transcription and diarization approach comes from `yassinebrahem2/live-debate-analysis` (faster-whisper + pyannote `speaker-diarization-community-1`, batch over files, benchmarked on a Windows laptop with a 6 GB RTX 4050).
 - [BRIEF] Transcription, tagging and retrieval are deterministic workflows, not agents. Only the reasoning parts are agents.
 - [BRIEF] RAG: transcripts are chunked, embedded and stored in a vector store; questions retrieve relevant chunks first.
+- [USER] Agent design (stage 1 spec, section 2, approved 2026-10-16): an **Orchestrator** agent decides which tools to call (transcript search, recording lookup, summarize) and writes the cited answer; a deterministic citation check runs after it. The **Summarizer** is an agent too (its own prompt and structured output, called by the orchestrator and by processing); it makes one complete summary per recording during processing, which Chat reuses. Rejected: a fixed router pipeline, agent handoff swarms, and a summarizer that reads transcript parts on demand.
 
 ### Data
 - [AGREED] Everything lives on the laptop: recordings, audio files, transcripts, tags, summaries, the vector index. The phone keeps only its settings (server URL).
@@ -87,7 +88,6 @@ Versions checked 2026-10-16; majors are pinned.
 
 ## 3. Open
 Each item is safe to decide later; the stage that decides it is named.
-- **Agent design**: which agents exist and how they hand off. Stage 1 spec.
 - **Failure behaviour** per step (processing, LLM, network). Stage 1 spec.
 - **Chunking strategy**: a config choice; a comparison is not in scope for 2026-10-20. Stage 1 spec. [BRIEF]
 - **Privacy**: free LLM tiers (Gemini) may use inputs for training. Stage 1 spec. [BRIEF] (Recording consent: decided, no consent screen.)
