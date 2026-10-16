@@ -33,6 +33,8 @@ yarn-error.*
 
 # Local runtime data (the default data dir is outside the repo; this guards overrides)
 data/
+# ...except the UI design skill's bundled catalogs
+!.claude/skills/ui-ux-pro-max/data/
 
 # OS / editors
 .DS_Store
