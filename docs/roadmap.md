@@ -16,7 +16,7 @@ Facts about the project live in `project_knowledge.md`; this file only orders th
 
 ### Stage 1: Core MVP (every M feature)
 
-The four-person team needs parallel work from day one, so stage 1 is the whole must-have feature set, split into plans that run in parallel against the contracts below. It is done when the demo walkthrough works for real on an Android phone talking to the laptop: record a meeting and a note, see them processed, rename speakers, read the summary and the clean note, and ask Chat questions with citations that open the transcript line.
+The four-person team needs parallel work from day one, so stage 1 is the whole must-have feature set. As the playbook requires for a stage too big for one plan, it is split into several plans, each small enough to review and assign on its own, running in parallel against the contracts below. It is done when the demo walkthrough works for real on an Android phone talking to the laptop: record a meeting and a note, see them processed, rename speakers, read the summary and the clean note, and ask Chat questions with citations that open the transcript line.
 
 Agreed for stage 1:
 - Everything marked M in `project_knowledge.md` (Meetings, Notes, Chat, everywhere).
@@ -105,7 +105,7 @@ Runtime data lives outside the repository (see Data layout).
 ### Audio
 - The app uploads what expo-audio records (compressed, e.g. m4a). The backend keeps that file as the original.
 - For processing, the backend decodes it once to 16 kHz mono float32 and passes that in-memory waveform to both ASR and diarization. pyannote is never handed a file path.
-- If playback is in scope (decided with the roadmap's approval), audio is served back with HTTP Range support so the app can play from a given moment.
+- Audio is served back with HTTP Range support, so the app can play from a given moment (playback is a must-have).
 
 ### Speech dependencies
 - Speech models (torch, faster-whisper, pyannote) are an optional install group, with torch pinned to the CUDA (cu128) package index as in `live-debate-analysis`; PyPI's torch is CPU-only.
@@ -117,10 +117,10 @@ Runtime data lives outside the repository (see Data layout).
 - Errors: HTTP status plus `{"error": {"code": "<snake_case>", "message": "<human text>"}}`.
 - The backend's Pydantic models are the source of truth. The exported schema is committed as `backend/openapi.json`; CI fails if it is stale.
 - The app's TypeScript types are generated from the committed `openapi.json` (`openapi-typescript`), never written by hand. Mobile work needs no Python and no running backend. Regenerating both is part of any API change.
-- Audio upload: multipart, one file per recording. Audio download (if playback is in scope): `GET` with HTTP Range.
+- Audio upload: multipart, one file per recording. Audio download: `GET` with HTTP Range.
 
 ### Citations
-Every answer and summary claim that cites a source carries `{recording_id, segment_id, start_ms}`. The app opens the recording at that segment.
+Every answer and summary claim that cites a source carries `{recording_id, segment_id, start_ms}`. The app opens the recording at that segment and can play the audio from `start_ms`.
 
 ### Database rules
 - SQLite with foreign keys on; schema changes are numbered SQL migration files applied at startup, never edited after merge.

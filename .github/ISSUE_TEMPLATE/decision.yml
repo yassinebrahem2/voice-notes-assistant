@@ -1,0 +1,32 @@
+name: Decision
+description: A real decision that needs the lead or the team. Not for bugs, chores or ideas.
+title: "[Decision] "
+labels: ["decision"]
+assignees: ["yassinebrahem2"]
+body:
+  - type: input
+    id: context
+    attributes:
+      label: Blocked task
+      description: The task sub-issue this blocks (#number), and the plan path
+    validations:
+      required: true
+  - type: textarea
+    id: question
+    attributes:
+      label: Decision needed
+    validations:
+      required: true
+  - type: textarea
+    id: options
+    attributes:
+      label: Options
+      description: Each option with its trade-offs. Mark the one you recommend.
+    validations:
+      required: true
+  - type: textarea
+    id: blocking
+    attributes:
+      label: What is blocked until this is decided
+    validations:
+      required: true

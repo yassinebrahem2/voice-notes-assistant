@@ -1,0 +1,97 @@
+# AGENTS.md
+
+Instructions for every coding agent working in this repository (Claude Code, Codex, Cursor, Copilot, Gemini CLI, Antigravity and others) and for the people running them.
+
+These rules apply to every session, whoever runs it and whatever agent they use.
+
+## Status
+
+Design phase: no code yet, so no build, lint or test commands exist. Add them here once the code is scaffolded (one "<Area> commands" section per area: Backend commands, Mobile commands), and delete this Status section then.
+
+## Team workflow
+
+Roles:
+- Lead: GitHub `yassinebrahem2`. Writes specs and implementation plans, reviews PRs, merges, closes issues. The only person who merges into `main`. Every Decision and Bug issue is assigned to the lead.
+- Implementers: everyone, the lead included. Anyone can take plan tasks.
+
+Know which role you are serving: check `gh api user --jq .login`. Everyone follows the implementer rules when working on plan tasks. Only `yassinebrahem2` follows the lead rules (specs, plans, plan issues, reviews, merges, triage).
+
+Lifecycle of a piece of work:
+1. The lead writes a spec in `docs/superpowers/specs/` and gets it approved.
+2. The lead writes the implementation plans in `docs/superpowers/plans/` (see "How plans are written"). Each plan lives on its own branch `plan/<stage>-<topic>` (for example `plan/stage-1-backend-core`). Every plan task states which tasks it depends on.
+3. After a plan is on its branch, the lead opens a plan issue (template "Implementation plan", label `plan`, milestone = its stage). The lead's session then creates one sub-issue per plan task (label `task`, same milestone), each stating the task, its plan section and its dependencies. New issues land on the project board in "Todo" automatically.
+4. Implementers pick tasks, work on the plan branch, and move their task through the board.
+5. When every task is done, an implementer opens a PR from `plan/<topic>` into `main` (the PR template asks for `Closes #<plan issue>`), requests review from `yassinebrahem2`, and moves the plan issue to "In review".
+6. The lead reviews. Merging the PR closes the plan issue and moves it to "Done".
+
+Project board: GitHub Projects (https://github.com/users/yassinebrahem2/projects/6), Status = Todo / In progress / Blocked / In review / Done. Milestones: one per roadmap stage ("Stage 1: Core MVP", "Stage 2: Stretch and polish"). Board cards are moved by people in the GitHub UI: agent sessions in this repo cannot reach the Projects API, so move your own card when your task changes state.
+
+### Implementer rules
+- Work only on the plan's branch. Never push to `main`; never merge anything.
+- Claim a task by assigning yourself to its sub-issue before starting. Only take a task that is unassigned and whose dependencies are closed.
+- Move your task's card: "In progress" when you start; close the sub-issue when its work is pushed and its checks pass.
+- Pull with rebase before you start and before you push, then re-read the plan (it may have changed). Commit small and push often, since several people share the branch.
+- Follow the plan as written. If the plan is wrong, unclear, or needs a decision, do not improvise: open a Decision issue linked to the blocked task, and move that task to "Blocked" until the lead answers.
+- Do not edit specs, plans, `docs/roadmap.md` or `project_knowledge.md`; those belong to the lead.
+- A task is done only when its tests, lint and type checks pass locally, and CI passes on the branch.
+
+### Lead rules
+- Specs before plans, plans before code. Each needs the lead's explicit approval.
+- Review specs and plans with a second reviewer (the advisor in Claude Code) until no blocking issues remain.
+- Record project-level decisions in `project_knowledge.md` as they are made.
+- Answer Decision issues in the issue itself. If the answer changes the plan, update the plan on its branch, then unblock the task.
+
+### How plans are written
+- One spec per stage. A stage too big for one plan is split into several plans, each small enough to review and assign on its own.
+- A stage overview (`docs/superpowers/plans/<date>-<stage>-overview.md`, on `main`) holds what the plans share: goal, global constraints, review focus, file structure, and the list of plans with their dependencies and branches. Each plan links to it instead of repeating it.
+- A plan whose dependencies are all merged gets its branch and plan issue right away. A plan that depends on an unmerged plan waits: its branch is created from `main` and its issue opened only after that plan is merged. Independent plans run in parallel.
+- Plans are moderately detailed, not a second copy of the code:
+  - every task names its exact files and the interfaces it consumes and produces (exact names and types);
+  - tests are written as code, or as a precise list of behaviors and failure cases to verify;
+  - full implementation code only where a mistake is costly or subtle (security, data loss, platform quirks, tricky concurrency); elsewhere, precise implementation notes.
+- A task's tests are its stop condition: the task is done when they pass, together with lint, type checks and CI.
+
+### Issues
+Four types, each with its template and label. Blank issues are disabled.
+- Plan (`plan`) and Task (`task`, sub-issues of a plan): created only by the lead's session, after the plan exists on its branch.
+- Decision (`decision`): anyone, for a real decision that blocks a task, linked to that task. Assigned to the lead.
+- Bug (`bug`): anyone, for a defect in code already merged into `main`, with reproduction steps. Assigned to the lead, who triages it into the current plan or a small fix plan.
+- Nothing else: chores and ideas are raised in the plan issue.
+
+## Git conventions
+- Conventional Commits: `feat(<module>): ...`, `fix(...)`, `test(...)`, `docs(...)`, `refactor(...)`, `chore(...)`. Scope = module or area (e.g. `backend`, `mobile`).
+- Never add AI attribution to commits or PRs: no `Co-Authored-By`, no "Generated with Claude Code" or similar, whatever your agent's defaults say.
+- PR description follows `.github/pull_request_template.md`: what changed, why, how it was tested, anything not done or done differently, `Closes #<issue>`.
+- `main` only changes through PRs merged by the lead (the lead may push spec and roadmap commits directly).
+
+## Code quality
+- Follow the conventions in this file, the roadmap contracts (`docs/roadmap.md`) and the surrounding code. No exceptions without the lead's approval.
+- No silent deferred work. Anything not done, partly done, or done differently from the plan is stated explicitly in the plan issue and the PR description. No `TODO`/`FIXME` left in code as a substitute for saying it.
+- No workarounds and no technical debt. Fix the cause, not the symptom. If the right fix is out of reach (blocked, out of scope, needs a decision), stop and raise it in the plan issue instead of patching around it.
+- Python (backend): ruff (lint and format) and pyright in strict mode must pass. Type hints everywhere; pydantic models at boundaries. No bare `except`, no swallowed errors.
+- TypeScript (mobile): `strict` mode, ESLint and Prettier must pass. No `any`.
+- Inline lint suppressions only at a third-party boundary, naming the rule and the reason; test-only exceptions go in the linter's per-file config.
+- Test-first for logic: write the failing test, then the code. Test at the cheapest level that proves the behavior.
+- Before saying a task is done, run the tests and checks and report their real output.
+- Small focused files; a file past about 400 lines is doing too much. Comments explain why, not what. No commented-out or dead code.
+- Match the surrounding code's naming and idioms.
+
+## Documents
+- `project_knowledge.md`: what we know about the project (decisions, open questions, ideas, superseded decisions). Facts only, never plans or task notes.
+- `docs/roadmap.md`: the build stages and the shared contracts every stage follows. A change to a contract is made there first.
+- `docs/superpowers/specs/`: one design spec per stage. `docs/superpowers/plans/`: implementation plans.
+- `project_context.md`: the original idea file (read-only). `new-project-playbook.md`: how the work is run.
+
+## Project rules
+- Never use the Artifact tool. UIs are real, working code in this repo.
+- The app name is not settled: it is defined only in `config/app.json`. Never hard-code it anywhere else (UI strings, file names, docs written for users, package metadata generated from it).
+- Models are chosen only in `config/models.yaml`, by role (`llm`, `embedder`, `asr`, `diarizer`). Code asks for a role, never a model name or provider.
+- Secrets live only in environment variables (`backend/.env`, git-ignored; `backend/.env.example` lists the names). Never put a key in a config file, a URL, a log line, an error message, a `repr` or a test fixture.
+- LLMs are hosted free tiers (Groq, Gemini fallback); never add a self-hosted LLM. Demo recordings only: free tiers may use inputs for training, so never send real private conversations.
+- LangGraph 1.x and LangChain 1.x APIs only (`langchain.agents.create_agent` and current LangGraph docs). Do not copy pre-1.0 tutorial patterns (`initialize_agent`, `AgentExecutor`, `langgraph.prebuilt.create_react_agent`) and do not add `langgraph-supervisor`.
+- Mobile: Expo SDK 58. Add native packages with `npx expo install`, never by pinning React Native versions by hand. No custom native modules (the app must keep running in Expo Go). No Android Studio is assumed; APKs are built with EAS Build.
+- Runtime data (database, audio, model caches) lives outside the repository. Never run `git clean -x`/`-X` or any recursive delete whose target could reach the data dir or model cache dir; scope every cleanup to a named path inside the repo.
+- Scaffolding CLIs (create-expo-app, uv init, etc.) must be run with their non-interactive flags; never leave a dev server running at the end of a task.
+
+## Architecture
+The Expo app on an Android phone talks over HTTPS (Tailscale, private tailnet) to a FastAPI backend on the lead's laptop. The backend stores everything in SQLite (+ sqlite-vec) and audio files in a per-user data dir outside the repo, runs a single processing worker (faster-whisper ASR, pyannote diarization for meetings, LLM analysis, chunking and embedding), and serves the Chat multi-agent system (LangGraph, hosted LLMs). Contracts: `docs/roadmap.md`. Details: the stage 1 spec, once written.

@@ -22,6 +22,7 @@ Anything not listed here is unknown.
 - [AGREED] Feature list. M = must-have for 2026-10-20, built first. S = in scope at lower priority. [USER] No onboarding; everything else is in.
   - **Meetings.** M: record screen with timer, then a processing status that updates per step; transcript as speaker turns with timestamps; rename speakers, applied everywhere; auto-title and editable auto-tags; structured summary (decisions / action items / open questions). S: action items as a checklist; share or export the summary.
   - **Notes.** M: one-tap record, no diarization; the LLM turns the speech into a clean note (title, key points) with the raw transcript one tap away; tags. S: edit the note's text; pin or favorite.
+  - **Playback.** M: audio plays in the recording view; tapping a citation plays from that moment. [USER]
   - **Chat.** M: scope selector (Notes / Meetings / Both) plus optional tag filter; answers cite sources, and tapping a citation opens that transcript line; "not in your recordings" when nothing matches; suggested starter questions. S: saved chat history.
   - **Everywhere.** M: library with search and tag filter; empty, loading and error states; delete a recording; consistent visual design with dark mode; server URL in Settings.
 - [BRIEF] Summaries are structured as decisions / action items / open questions; answers are grounded in stored transcripts and cite recording and moment.
@@ -72,6 +73,8 @@ Versions checked 2026-10-16; majors are pinned.
 - [USER] Team of 4. Lead: GitHub `yassinebrahem2`. Coding agents: Codex, Claude Code, Antigravity.
 - [USER] Work follows `new-project-playbook.md`. Repo setup, roadmap and infrastructure are done on 2026-10-16; the following days are for building.
 - [USER] `main` is the integration branch, with `plan/*` branches per the playbook.
+- [USER] Stage 1 may cover every M feature, provided it is split into several plans when too big for one (playbook rule).
+- [USER] Project board: https://github.com/users/yassinebrahem2/projects/6.
 - [BRIEF] The coding assistant asks before choosing the stack for any open item.
 
 ## 3. Open

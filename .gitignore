@@ -1,0 +1,42 @@
+# Secrets
+.env
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+dist/
+build/
+
+# Node / Expo
+node_modules/
+.expo/
+.expo-shared/
+dist-web/
+web-build/
+*.apk
+*.aab
+*.jks
+*.keystore
+*.p8
+*.p12
+*.mobileprovision
+npm-debug.*
+yarn-error.*
+
+# Local runtime data (the default data dir is outside the repo; this guards overrides)
+data/
+
+# OS / editors
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
