@@ -37,13 +37,14 @@
 **Interfaces:**
 - Produces:
   - `new_id(prefix: Literal["rec", "seg", "spk", "chk", "tag", "cht", "msg"]) -> str` → `"rec_01J…"` (prefix + `_` + 26-char ULID).
-  - `Settings` (pydantic-settings, env prefix none, reads `backend/.env`): `data_dir: Path`, `model_cache_dir: Path`, `bind_host: str = "127.0.0.1"`, `port: int = 8000`, `speech_backend: Literal["real", "fake"] = "real"`, `upload_max_bytes: int = 200_000_000`, `chunk_max_tokens: int = 200`, `chunk_min_tokens_at_speaker_change: int = 80`, `retrieval_k: int = 8`, `retrieval_max_distance: float` (permissive provisional default, e.g. `0.6`), `chat_deadline_s: float = 75`, `speech_step_timeout_s: float = 1800`, `asr_device: str | None = None`, `diarizer_device: str | None = None`, `groq_api_key: SecretStr | None`, `gemini_api_key: SecretStr | None`, `hf_token: SecretStr | None`. `data_dir` default: `platformdirs.user_data_dir(<slug of app name>)`; `model_cache_dir` default: `<data_dir>/models`.
-  - `load_settings(app: AppConfig) -> Settings`.
+  - `Settings` (pydantic-settings, env prefix none, reads `backend/.env`): `data_dir: Path`, `model_cache_dir: Path`, `bind_host: str = "127.0.0.1"`, `port: int = 8000`, `speech_backend: Literal["real", "fake"] = "real"`, `upload_max_bytes: int = 200_000_000`, `chunk_max_tokens: int = 200`, `chunk_min_tokens_at_speaker_change: int = 80`, `retrieval_k: int = 8`, `retrieval_max_distance: float = 0.6` (permissive, provisional; calibrated by the agents plan), `chat_deadline_s: float = 75`, `speech_step_timeout_s: float = 1800`, `asr_device: str | None = None`, `diarizer_device: str | None = None`. No per-provider key fields: keys are found through `key_env`. `data_dir` default: `platformdirs.user_data_dir(<slug of app name>)`; `model_cache_dir` default: `<data_dir>/models`.
+  - `load_settings(app: AppConfig, env_file: Path = <repo>/backend/.env) -> Settings`: first loads `env_file` into `os.environ` without overriding variables already set (so `key_env` lookups and child processes see the keys), then builds `Settings`.
+  - `provider_key(registry: ModelsRegistry, provider: str) -> SecretStr | None` reads `os.environ[registry.providers[provider].key_env]`; `hf_token() -> SecretStr | None` reads `HF_TOKEN`. These are the only places keys are read.
   - `AppConfig(name: str, version: str)` and `load_app_config(path: Path = <repo>/config/app.json) -> AppConfig`.
   - `ModelsRegistry` with `providers: dict[str, Provider]` (`base_url: HttpUrl`, `key_env: str`) and `roles: Roles` where `llm` and `llm_analysis` are `list[LlmEntry]` (min 1; `provider`, `model`, `reasoning: dict[str, str | int] = {}`, `max_request_tokens: int`, `timeout_s: float`), `embedder: LocalModel`, `asr: LocalModel`, `diarizer: LocalModel` (`model`, `device: str`, `compute_type: str | None = None`). `load_models_registry(path: Path, settings: Settings) -> ModelsRegistry` applies `asr_device` / `diarizer_device` overrides (cpu → `compute_type="int8"` for asr).
   - `ConfigError(Exception)` for every load failure.
 
-- [ ] **Step 1: Create the uv project.** `uv init --app --no-workspace --python 3.12 backend` (non-interactive), then `uv add fastapi~=0.143 "uvicorn[standard]" pydantic-settings pyyaml platformdirs python-ulid "sqlite-vec==0.1.9" numpy python-multipart` and `uv add --dev pytest httpx ruff pyright`. Configure ruff (line length 120, rule sets `E,F,I,B,UP,S,SIM,RUF`; `S101` allowed in `tests/` via per-file config) and pyright strict for `app` and `tests` in `pyproject.toml`. The speech extra is added by the processing plan, not here.
+- [ ] **Step 1: Create the uv project.** `uv init --app --no-workspace --python 3.12 backend` (non-interactive); delete the generated `main.py`; then `uv add fastapi~=0.143 "uvicorn[standard]" pydantic-settings pyyaml platformdirs python-ulid "sqlite-vec==0.1.9" numpy python-multipart` and `uv add --dev pytest httpx ruff pyright`. Set `[tool.pytest.ini_options] pythonpath = ["."]` (an `--app` project is not installed, so tests need it to `import app`). Configure ruff (line length 120, rule sets `E,F,I,B,UP,S,SIM,RUF`; `S101` allowed in `tests/` via per-file config) and pyright strict for `app` and `tests` in `pyproject.toml`. The speech extra is added by the processing plan, not here.
 - [ ] **Step 2: Write `config/app.json`** with the working name from `project_knowledge.md` as `name` and `"version": "0.1.0"`, and `config/models.yaml` with the initial picks of platform spec §1: providers `groq` (`https://api.groq.com/openai/v1`, `GROQ_API_KEY`) and `gemini` (`https://generativelanguage.googleapis.com/v1beta/openai/`, `GEMINI_API_KEY`); `llm`: groq `openai/gpt-oss-20b` then gemini Flash; `llm_analysis`: gemini Flash then groq `openai/gpt-oss-120b`; `embedder` `BAAI/bge-small-en-v1.5` cpu; `asr` `distil-large-v3` cuda `int8_float16`; `diarizer` `pyannote/speaker-diarization-community-1` cuda. Use `gemini-flash-latest` as the Gemini id for now (the agents plan confirms ids). `.env.example` lists `GROQ_API_KEY=`, `GEMINI_API_KEY=`, `HF_TOKEN=`, `SPEECH_BACKEND=`, `ASR_DEVICE=`, `DIARIZER_DEVICE=`.
 - [ ] **Step 3: Write the failing tests.**
   - `test_new_id_format`: `re.fullmatch(r"rec_[0-9A-HJKMNP-TV-Z]{26}", new_id("rec"))`; two calls differ.
@@ -53,7 +54,8 @@
   - `test_registry_missing_role_names_it`: no `llm_analysis` → `ConfigError` whose message contains `"llm_analysis"`.
   - `test_registry_unknown_provider_in_role` → `ConfigError`.
   - `test_asr_device_override_cpu`: settings `asr_device="cpu"` → `roles.asr.device == "cpu"` and `compute_type == "int8"`.
-  - `test_settings_repr_hides_keys`: `Settings(groq_api_key="sk-secret", …)`; `"sk-secret" not in repr(settings)` and not in `str(settings.model_dump())`.
+  - `test_env_file_reaches_os_environ`: a temp `.env` with `GROQ_API_KEY=sk-secret` and no such env var set (`monkeypatch.delenv`); after `load_settings`, `provider_key(registry, "groq")` returns it, and an already-set env var is not overridden.
+  - `test_keys_never_in_reprs`: `"sk-secret" not in repr(provider_key(...))`, not in `repr(settings)` and not in `repr(registry)`.
   - `test_settings_defaults_bind_localhost`: `bind_host == "127.0.0.1"`.
 - [ ] **Step 4: Run** `cd backend && uv run pytest tests/test_ids.py tests/config -v` → FAIL (modules missing).
 - [ ] **Step 5: Implement** the modules with the signatures above. The credentials check rejects any `base_url` whose parsed URL has a username or password, and its message names the provider only.
@@ -71,11 +73,13 @@
 - Produces:
   - `connect(db_path: Path) -> sqlite3.Connection`: `PRAGMA foreign_keys=ON`, `journal_mode=WAL`, `row_factory=sqlite3.Row`, sqlite-vec loaded (`sqlite_vec.load(conn)` after `enable_load_extension(True)`, then disabled again).
   - `apply_migrations(conn: sqlite3.Connection) -> list[str]`: applies `migrations/NNN_*.sql` not yet in table `schema_migrations(version TEXT PRIMARY KEY, applied_at TEXT)`, in order, each in a transaction; returns the versions applied.
-  - Schema exactly as data-API spec §1: tables `recordings` (incl. `claimed INTEGER NOT NULL DEFAULT 0`, `client_upload_id TEXT NOT NULL UNIQUE`, `status` CHECK in the seven statuses, `kind` CHECK in `meeting`/`note`), `speakers`, `segments` (`idx` with `UNIQUE(recording_id, idx)`), `chunks` (`embedding BLOB NOT NULL`), `tags` (`name UNIQUE`), `recording_tags`, `chats`, `messages` (`role` CHECK). Children reference parents with `ON DELETE CASCADE`. Indexes: `segments(recording_id, idx)`, `chunks(recording_id)`, `recordings(status, claimed)`, `messages(chat_id, created_at)`.
+  - Schema exactly as data-API spec §1: tables `recordings` (incl. `claimed INTEGER NOT NULL DEFAULT 0`, `client_upload_id TEXT NOT NULL UNIQUE`, `status` CHECK in the seven statuses, `kind` CHECK in `meeting`/`note`), `speakers`, `segments` (`idx` with `UNIQUE(recording_id, idx)`), `chunks` (`embedding BLOB NOT NULL`), `tags` (`name UNIQUE`), `recording_tags`, `chats`, `messages` (`role` CHECK). Children reference their recording or chat with `ON DELETE CASCADE`. Within a recording: `segments.speaker_id → speakers(id) ON DELETE SET NULL`; `chunks.first_segment_id` / `last_segment_id → segments(id) ON DELETE CASCADE`; `speakers` has `UNIQUE(recording_id, label)`. (This lets a resumed or retried step delete its own partial output; stage 1 adds no migration after `001`.) Indexes: `segments(recording_id, idx)`, `chunks(recording_id)`, `recordings(status, claimed)`, `messages(chat_id, created_at)`.
 
 - [ ] **Step 1: Write the failing tests.**
   - `test_apply_migrations_creates_all_tables` (tmp path): table names ⊇ the nine tables; second call returns `[]`.
   - `test_foreign_keys_on_and_cascade`: insert a recording with a speaker, two segments, a chunk and a tag link; `DELETE FROM recordings` → all child rows gone, the tag row remains.
+  - `test_deleting_speakers_nulls_segment_speaker`: delete a recording's speakers → its segments remain with `speaker_id IS NULL`.
+  - `test_deleting_segments_removes_chunks`: delete a recording's segments → its chunks are gone.
   - `test_status_check_rejects_unknown_status` → `sqlite3.IntegrityError`.
   - `test_client_upload_id_unique` → `sqlite3.IntegrityError` on duplicate.
   - `test_sqlite_vec_loaded`: `SELECT vec_distance_cosine(?, ?)` on two equal 3-float BLOBs (`struct.pack("3f", …)`) returns `0.0`.
@@ -99,7 +103,7 @@
   - `app.rag.protocols`: `class Embedder(Protocol): dim: int; def embed_passages(self, texts: Sequence[str]) -> list[list[float]]; def embed_query(self, text: str) -> list[float]`. `app.rag.fakes.FakeEmbedder` (dim 384, deterministic hash-based unit vectors; the same text gives the same vector).
   - `app.agents.schemas`: the LLM output schemas exactly as processing spec §4 (`Item`, `ActionItem`, `MeetingAnalysis`, `NoteAnalysis`) and chat spec §3 (`ChatReply`), with their `Field` constraints.
   - `app.processing.protocols`: `TranscriptLine(s: int, speaker_label: str | None, text: str)`; `AnalysisRequest(kind: RecordingKind, lines: list[TranscriptLine], tag_vocabulary: list[str])`; `class Analyzer(Protocol): def analyze(self, request: AnalysisRequest) -> MeetingAnalysis | NoteAnalysis`. `app.processing.fakes.FakeAnalyzer`: title "Fake analysis", tags `["demo"]`, one item citing `[1]` per list (meeting) or one key point citing `[1]` plus `clean_text` = joined line text (note).
-  - `app.container`: `@dataclass Container(settings: Settings, app_config: AppConfig, models: ModelsRegistry, db_path: Path, asr: Asr, diarizer: Diarizer, embedder: Embedder, analyzer: Analyzer)`; `build_container(settings: Settings) -> Container`. Binding points, marked by one comment each: when `speech_backend == "real"` the processing plan binds the real `Asr`/`Diarizer`/`Embedder`; the agents plan binds the real `Analyzer`. Until then `build_container` binds the fakes for every backend value and `/health` reports `speech_backend` as configured.
+  - `app.container`: `@dataclass Container(settings: Settings, app_config: AppConfig, models: ModelsRegistry, db_path: Path, speech_backend_bound: Literal["real", "fake"], asr: Asr, diarizer: Diarizer, embedder: Embedder, analyzer: Analyzer)`; `build_container(settings: Settings) -> Container`. Binding points, marked by one comment each: when `speech_backend == "real"` the processing plan binds the real `Asr`/`Diarizer`/`Embedder`; the agents plan binds the real `Analyzer`. Until then `build_container` binds the fakes for every backend value and sets `speech_backend_bound="fake"`.
   - `tests/conftest.py`: `container` fixture (tmp data dir, fakes, migrated db), reused by every later backend plan; Task 4 adds the `client` fixture.
 
 - [ ] **Step 1: Write the failing tests.**
@@ -128,7 +132,7 @@
   - `app.domain.analysis`: `Citation`, `AnalysisItem`, `AnalysisActionItem`, `MeetingSummary`, `NoteContent` exactly as data-API spec §2.
   - API models (Pydantic, `snake_case`, used as `response_model`): `RecordingOut` (using `RecordingKind` / `RecordingStatus` from Task 3) (id, kind, title, status, failed_step, error_code, error_message, created_at, duration_ms, tags: list[TagOut], waveform_peaks: list[float] | None, processing: bool (= claimed)); `SpeakerOut` (id, label, name, display_name); `SegmentOut` (id, idx, start_ms, end_ms, speaker_id, text); `RecordingDetailOut(RecordingOut)` + speakers, segments, `summary: MeetingSummary | None`, `note: NoteContent | None`; `RecordingPatchIn` (title: str | None = Field(None, max_length=60), tags: list[str] | None = Field(None, max_length=4)); `SpeakerPatchIn` (name: str = Field(max_length=40)); `TagOut` (id, name, count); `ChatOut` (id, created_at); `CitationOut` (n, recording_id, segment_id, start_ms, recording_title); `MessageOut` (id, role, text, reply_type, citations, created_at); `ChatDetailOut` (id, messages); `AskIn` (text: str = Field(min_length=1, max_length=2000), scope: Literal["notes","meetings","both"], tag_ids: list[str] = []); `RunAcceptedOut` (run_id); `RunOut` (status: Literal["running","done","failed"], steps: list[str], message: MessageOut | None, error: ErrorBody | None); `HealthOut` (app_name, version, speech_backend, roles: dict[str, str]).
   - Routes under `/api/v1`, paths, methods and status codes exactly as data-API spec §4. `POST /recordings` declares multipart `kind: Form`, `client_upload_id: Form`, `file: UploadFile`, responses 200 and 201 with `RecordingOut`. `GET /recordings/{id}/audio` declares `200`/`206` with `audio/*` content. All handlers except `/health` call `not_implemented()`. Each route has a stable `operation_id` (e.g. `list_recordings`, `upload_recording`, `get_run`) so generated client names do not change later.
-  - `GET /health` is real: `roles` maps each role to `"ready"` or a reason, by presence checks only (`llm`/`llm_analysis`: the first entry's key env var set; `diarizer`: `hf_token` set when `speech_backend == "real"`; local models: `"ready"` here, refined by the processing plan); `speech_backend` from settings.
+  - `GET /health` is real: `roles` maps each role to `"ready"` or a reason, by presence checks only (`llm`/`llm_analysis`: the first entry's key env var set; `diarizer`: `hf_token()` set when the bound backend is real; local models: `"ready"` here, refined by the processing plan); `speech_backend` = `container.speech_backend_bound` (what is actually bound, not the setting).
   - `create_app(container: Container) -> FastAPI` with `title` from `AppConfig.name` and `version` from `AppConfig.version`; `get_container(request) -> Container` dependency in `deps.py`.
   - `app.cli`: `python -m app.cli serve` (creates the data dir, applies migrations, runs uvicorn on `bind_host:port`) and `python -m app.cli export-openapi [--check]` (writes `backend/openapi.json` sorted and indented; `--check` exits 1 if it differs). The processing plan adds `setup`.
 
@@ -136,9 +140,10 @@
   - `test_stub_route_returns_contract_shape`: `GET /api/v1/recordings` → 501, body `{"error": {"code": "not_implemented", "message": …}}`.
   - `test_validation_error_shape`: `POST /api/v1/chats/cht_x/messages` with `{"text": ""}` → 422, `code == "validation_error"`, no `detail` key.
   - `test_unknown_path_shape`: `GET /api/v1/nope` → 404, `code == "not_found"`.
-  - `test_unhandled_exception_is_generic`: a test-only route raising `RuntimeError("secret path /x")` → 500, `code == "internal_error"`, `"secret" not in` body.
-  - `test_health_reports_roles`: with no keys set → `roles["llm"] != "ready"` and mentions `GROQ_API_KEY`; with keys set → `"ready"`; `app_name` equals `config/app.json` name; `speech_backend` echoes settings.
+  - `test_unhandled_exception_is_generic` (client built with `TestClient(app, raise_server_exceptions=False)`): a test-only route raising `RuntimeError("secret path /x")` → 500, `code == "internal_error"`, `"secret" not in` body.
+  - `test_health_reports_roles`: with no keys set → `roles["llm"] != "ready"` and mentions `GROQ_API_KEY`; with keys set → `"ready"`; `app_name` equals `config/app.json` name; with the setting `real` but fakes bound, `speech_backend == "fake"`; keys present only in a temp `.env` (not in the environment) still give `"ready"`.
   - `test_openapi_is_fresh`: `export-openapi --check` exits 0 (fails when `openapi.json` is stale).
+  - `test_error_codes_in_openapi`: `openapi.json` has an `ErrorCode` schema whose enum equals every `ErrorCode` member (the mobile error mapping relies on it).
   - `test_routes_exist`: for each (method, path) in the data-API spec §4 table, `app.openapi()["paths"]` contains it; every operation has an `operationId`.
 - [ ] **Step 2: Run** `uv run pytest tests/api -v` → FAIL.
 - [ ] **Step 3: Implement** errors, models, routers, `create_app` and the CLI, then `uv run python -m app.cli export-openapi` to write `backend/openapi.json`.
@@ -170,6 +175,7 @@
 - [ ] **Step 5: Implement** tokens, theme, fonts, motion, `TabBar`, `RecordAction`, layouts and four placeholder screens (each shows its title using the Paper theme).
 - [ ] **Step 6: Run** `npx jest`, `npx tsc --noEmit`, `npx eslint .`, `npx prettier --check .` → all clean. `npx expo start` opens in Expo Go on a phone and shows the tab bar in both themes (then stop it).
 - [ ] **Step 7: Commit** `feat(mobile): add Expo scaffold, theme and tab bar`.
+- [ ] **Step 8 (manual, lead: EAS account): throwaway APK.** `npx eas-cli init`: because `app.config.ts` is dynamic, EAS cannot write into it; copy the printed project id into `extra.eas.projectId` and set `owner` in `app.config.ts`, commit (`chore(mobile): add EAS project id`). Then `npx eas-cli build -p android --profile preview`, install the APK on an Android phone, check it opens and shows the tab bar; record the build time and any problem in the plan issue. An agent implementer closes the code part (Steps 1–7) and leaves this step to the lead.
 
 ### Task 6: Mobile API client, generated types, server URL
 
@@ -187,7 +193,7 @@
   - `queryClient`: TanStack Query client; queries `retry: 2` with backoff; mutations `retry: 0`.
   - `normalizeServerUrl(input: string): { url: string; https: boolean }` (trim, drop trailing `/`, keep scheme); `getServerUrl(): Promise<string | null>`, `setServerUrl(url: string): Promise<void>` (AsyncStorage key `server_url`), `useServerUrl()` hook.
 
-- [ ] **Step 1: Generate types** with `npm run gen:api`.
+- [ ] **Step 1: Generate types** with `npm run gen:api`; add `src/api/schema.d.ts` to `.prettierignore` and to the ESLint ignores (generated code).
 - [ ] **Step 2: Write the failing tests** (mock `fetch` and AsyncStorage):
   - `apiFetch` returns parsed JSON on 200; on 501 with the contract body throws `ApiError` with `code "not_implemented"` and the server message; on a body that is not the contract shape throws `code "internal_error"`; on a rejected fetch throws `"network_error"`; on timeout throws `"timeout"`.
   - `normalizeServerUrl("  https://laptop.tail.ts.net/ ")` → `{ url: "https://laptop.tail.ts.net", https: true }`; `"http://x"` → `https: false`.
@@ -197,7 +203,7 @@
 - [ ] **Step 5: Run** jest, tsc, eslint, prettier → clean.
 - [ ] **Step 6: Commit** `feat(mobile): add typed API client and server URL setting`.
 
-### Task 7: CI, AGENTS.md commands, setup doc, throwaway APK
+### Task 7: CI, AGENTS.md commands, setup doc
 
 **Files:**
 - Create: `.github/workflows/backend.yml`, `.github/workflows/mobile.yml`, `docs/setup.md`
@@ -212,10 +218,9 @@
 - [ ] **Step 1: Write both workflows**; push the branch and confirm both jobs pass on GitHub.
 - [ ] **Step 2: Update `AGENTS.md`**: remove "Status"; add "Backend commands" (install `cd backend && uv sync`; run `uv run python -m app.cli serve`; test, lint, format, types and openapi commands as in CI; the speech extra arrives with the processing plan) and "Mobile commands" (`npm ci`, `npx expo start`, `npm run gen:api`, test/lint/format/types as in CI, EAS `npx eas-cli build -p android --profile preview`).
 - [ ] **Step 3: Write `docs/setup.md`** (the parts needed now): Tailscale on laptop and phone (same tailnet, MagicDNS and HTTPS certificates enabled in the admin console), `tailscale serve --bg 8000` (never `tailscale funnel`), the resulting `https://<machine>.<tailnet>.ts.net` URL entered in the app; `backend/.env` from `.env.example`, each teammate with their own keys, the demo laptop's keys used for nothing else; checking `sqlite_vec` loads (`uv run python -c "import sqlite3, sqlite_vec; c=sqlite3.connect(':memory:'); c.enable_load_extension(True); sqlite_vec.load(c); print('ok')"`). The processing plan adds the speech install, Hugging Face token and model download sections.
-- [ ] **Step 4: Throwaway APK.** `npx eas-cli build -p android --profile preview` (EAS account of the lead); install the APK on an Android phone; it opens and shows the tab bar. Record the build time and any problem in the plan issue (not a code change).
-- [ ] **Step 5: Phone check over Tailscale.** Laptop runs `serve` + `tailscale serve`; the phone (Expo Go) can reach `https://<machine>.<tailnet>.ts.net/api/v1/health` (browser is enough). Record the result in the plan issue.
-- [ ] **Step 6: Commit** `chore: add CI, agent commands and setup doc`.
+- [ ] **Step 4 (manual, lead): phone check over Tailscale.** Laptop runs `serve` + `tailscale serve`; the phone (Expo Go) can reach `https://<machine>.<tailnet>.ts.net/api/v1/health` (browser is enough). Record the result in the plan issue.
+- [ ] **Step 5: Commit** `chore: add CI, agent commands and setup doc`.
 
 ## Self-review notes
 - Spec coverage: schema (data-API §1) Task 2; LLM schemas Task 3; stored analysis shape (§2), routes (§4) and errors (§5) Task 4; config and registry (platform §1) Task 1; navigation and tokens (UI §1, §4) Task 5; client error mapping (UI §6, partial) Task 6; CI and testing frame (platform §4) Task 7; Tailscale setup (platform §2–§3) Task 7. Everything else belongs to plans 2–5.
-- Dependencies: Task 2 needs 1; Task 3 needs 1–2; Task 4 needs 1–3; Task 5 needs nothing; Task 6 needs 4 and 5; Task 7 needs 4 and 6. Backend (1→2→3→4) and mobile (5) run in parallel.
+- Dependencies: Task 2 needs 1; Task 3 needs 1–2; Task 4 needs 1–3; Task 5 needs nothing; Task 6 needs 4 and 5; Task 7 needs 4 and 6. Manual lead steps: Task 5 Step 8 (APK), Task 7 Step 4 (phone over Tailscale). Backend (1→2→3→4) and mobile (5) run in parallel.
