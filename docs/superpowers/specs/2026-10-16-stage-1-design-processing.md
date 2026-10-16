@@ -15,6 +15,8 @@ One worker in the server process takes one recording at a time (roadmap lifecycl
 | done | `ready` | temp folder deleted |
 
 - Claim: recordings carry a `claimed` flag. The worker takes the oldest unclaimed recording in a non-terminal status with `UPDATE recordings SET claimed=1 WHERE id=? AND claimed=0 AND status NOT IN ('ready','failed')` and processes it from its current status; a new upload starts at `uploaded` (decode runs first). `claimed` is cleared when the recording reaches `ready` or `failed`.
+- Status moves: the worker sets `transcribing` when decode starts, then each step's status as it starts (table above). Retry maps `failed_step` to a resume status: `decoding` → `uploaded` (decode runs again), every other step → its own status.
+- Any step that needs the waveform decodes first if `audio.npy` is missing (e.g. after a restart).
 - Each step first deletes its own partial output, so it is idempotent.
 - Resume: on server start, every `claimed` flag is cleared first, then recordings in a non-terminal status are re-queued at the step they were in (roadmap). Resuming at diarizing or later re-decodes the audio (the waveform is not stored); stored `waveform_peaks` are kept.
 - Retry (`POST …/retry`, only `failed`) sets the status to `failed_step`'s status with `claimed=0`, so the worker resumes there, keeping completed steps' output.

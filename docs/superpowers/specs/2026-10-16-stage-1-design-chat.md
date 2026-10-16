@@ -14,7 +14,7 @@ Part of the stage 1 spec (overview: `2026-10-16-stage-1-design.md`). Approved in
   5. `ToolCallLimitMiddleware(run_limit=4)` (default `exit_behavior="continue"`): further tool calls are refused with a message and the model answers with what it has.
 - Structured output is always `ToolStrategy(schema)`, never a raw schema: a raw schema becomes `AutoStrategy`, which may pick native JSON-schema output with `strict=True` that an OpenAI-compatible endpoint can reject, and that would only surface on fallback.
 - `llm_analysis` does not use the fallback middleware; the processing workflow walks its list (processing file §4).
-- The first backend agent task smoke-tests the same agent, tools and `ToolStrategy` against Groq and Gemini (manual, needs keys, not in CI).
+- The first backend agent task smoke-tests, against Groq and Gemini (manual, needs keys, not in CI): the Orchestrator with tools and `ToolStrategy`; the forced final turn with earlier tool calls in the history (if an endpoint rejects a named `tool_choice` or the tool history, the forced turn binds only `ChatReply` with `tool_choice="required"`); and the Summarizer on a sample transcript (the `llm_analysis` path).
 
 ## 2. Orchestrator agent
 `create_agent(name="orchestrator", tools=[…], response_format=ToolStrategy(ChatReply), context_schema=ChatContext, middleware=[…])`.
