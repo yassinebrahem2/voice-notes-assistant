@@ -41,6 +41,9 @@ Anything not listed here is unknown.
 ### Data
 - [AGREED] Everything lives on the laptop: recordings, audio files, transcripts, tags, summaries, the vector index. The phone keeps only its settings (server URL).
 - [USER] Audio is kept until the user deletes the recording.
+- [USER] Analysis output (stage 1 spec, section 3, approved 2026-10-16): meeting = title, 1–4 tags, overview, decisions, action items (owner and due date only when said), open questions, each item citing 1–3 transcript lines; note = title, tags, 3–8 cited key points and a clean note (tidy prose, no new content, not cited). One model call per normal-length recording; long recordings map-reduce.
+- [USER] Speaker renaming: summaries store speaker placeholders and render current names, so a rename reaches every summary already written without re-processing. Chat answers already written keep the names they were written with.
+- [USER] Tags are free-form (not the brief's topic / project / meeting type categories), normalised, at most 4 per recording; the model reuses existing tags; the server merges near-identical spellings. Title, tags and speaker names are editable once a recording is ready; a ready recording is never re-processed.
 
 ### Models
 - [AGREED] One model configuration file, following the design (not the code) of `multimodal-rag-agent`'s registry, keys only in environment variables (details under Tech stack).
