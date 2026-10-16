@@ -49,6 +49,14 @@ Anything not listed here is unknown.
 - [USER] React Native. Android is the target (APK).
 - [USER] No Android Studio or Android SDK installs.
 
+### UI (stage 1 spec, section 1, approved 2026-10-16)
+- [USER] The design must look polished and not AI-generated; the recording moment must feel "epic and snappy"; the UI is dynamic (live, state-driven: recording level, processing progress, playback position, agent work).
+- [AGREED] Navigation: custom tab bar Meetings · Notes · ● · Chat · Settings; the centred ● is a record action, not a tab.
+- [USER] Recording asks the kind first: tap ●, choose Meeting or Note, recording starts as the full-screen transition ends. Live waveform while recording.
+- [USER] No consent screen or notice before a meeting recording.
+- [AGREED] Visual direction "Tape": warm near-black / paper themes, one red-orange signal colour, IBM Plex Sans + Plex Mono, no gradients, glass, sparkle icons or emoji. React Native Paper re-themed for dialogs, menus and inputs; signature pieces are custom.
+- [AGREED] UI design skills `ui-ux-pro-max` and `mobile-app-ui-design` are vendored in `.claude/skills/`.
+
 ### Deployment
 - [USER] The phone reaches the laptop through a tunnel. The server URL is configurable in the app.
 - [AGREED] Tailscale as the tunnel; `tailscale serve` gives the laptop an HTTPS address (Android release builds block plain `http://`). Nothing is exposed publicly.
@@ -82,7 +90,7 @@ Each item is safe to decide later; the stage that decides it is named.
 - **Agent design**: which agents exist and how they hand off. Stage 1 spec.
 - **Failure behaviour** per step (processing, LLM, network). Stage 1 spec.
 - **Chunking strategy**: a config choice; a comparison is not in scope for 2026-10-20. Stage 1 spec. [BRIEF]
-- **Privacy and consent**: recording consent; free LLM tiers (Gemini) may use inputs for training. Stage 1 spec. [BRIEF]
+- **Privacy**: free LLM tiers (Gemini) may use inputs for training. Stage 1 spec. [BRIEF] (Recording consent: decided, no consent screen.)
 - **iOS**: works in Expo Go as a bonus (no custom native code); a standalone iOS build needs a paid Apple Developer account. Awaiting the user's yes. Roadmap.
 - **Initial light model picks** within the stack (e.g. Whisper size) are config edits, not design decisions.
 

@@ -92,7 +92,7 @@ Runtime data lives outside the repository (see Data layout).
 - IDs are opaque to the app; it never parses them.
 
 ### Domain shapes (names fixed here; fields in the stage 1 spec)
-- Recording: `kind` is `meeting` or `note`. Has a title, tags, created time, duration, processing status.
+- Recording: `kind` is `meeting` or `note`. Has a title, tags, created time, duration, processing status, and `waveform_peaks` (a short list of peak levels from 0 to 1, computed by the backend when it decodes the audio; null until then), used for the waveform thumbnail and the player's seek bar.
 - Segment: one speaker turn (meetings) or one ASR segment (notes): `start_ms`, `end_ms`, `speaker_id` (meetings only), text.
 - Speaker: per recording; diarizer label plus an optional user-given name.
 - Times are milliseconds from the start of the recording; wall-clock times are UTC ISO 8601.
