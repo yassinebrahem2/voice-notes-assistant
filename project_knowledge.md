@@ -9,7 +9,7 @@ Anything not listed here is unknown.
 - Goal: a mobile app that records audio from meetings, conversations, or a single person talking and brainstorming. Recordings are transcribed and saved. The user can tag them, ask questions about them in natural language, and get summaries of meetings and conversations.
 - Problem: spoken information (decisions, ideas, action items) gets lost because recordings are rarely re-listened to and transcripts are unorganized. The app makes that audio searchable and queryable.
 - Deadline: Tuesday 2026-10-20, a demo to the professor. [USER]
-- Done for now: a working end-to-end system on a real phone. It does not need to be perfect, but it must look polished and high quality, UX-wise and feature-wise. [USER]
+- Done for now: a working end-to-end system on a real Android phone. It does not need to be perfect, but it must look polished and high quality, UX-wise and feature-wise. [USER]
 
 ## 2. Decided
 
@@ -17,32 +17,37 @@ Anything not listed here is unknown.
 - [USER] Single user, no accounts.
 - [USER] Recordings are in English.
 - [USER] The app name is not settled and must be configurable from one place.
-- [USER] Three sections:
-  - **Meetings**: several people talk; diarization is crucial.
-  - **Notes**: voice note-taking; a different thing from meetings.
-  - **Chat**: a chatbot that can be set to answer about notes, about meetings, or both.
-- [USER] Base user flow (the simplest version, to be detailed): record → transcript with speaker labels → saved, auto-tags suggested and editable → library by date and tag → open one for transcript and summary → ask questions with answers citing recording and timestamp, or "not in your recordings".
-- [BRIEF] Capabilities: audio capture; transcription; tagging (topic, project, meeting type); question answering grounded in stored transcripts, citing recording and moment; summaries structured as decisions / action items / open questions.
+- [USER] Three sections: **Meetings** (several people; diarization is crucial), **Notes** (voice note-taking, a different thing from meetings), **Chat** (a chatbot set to answer about notes, meetings, or both).
+- [AGREED] Recording happens live on the phone; on stop, the audio is uploaded and processed on the laptop. No live transcript.
+- [AGREED] Feature list. M = must-have for 2026-10-20, built first. S = in scope at lower priority. [USER] No onboarding; everything else is in.
+  - **Meetings.** M: record screen with timer, then a processing status that updates per step; transcript as speaker turns with timestamps; rename speakers, applied everywhere; auto-title and editable auto-tags; structured summary (decisions / action items / open questions). S: action items as a checklist; share or export the summary.
+  - **Notes.** M: one-tap record, no diarization; the LLM turns the speech into a clean note (title, key points) with the raw transcript one tap away; tags. S: edit the note's text; pin or favorite.
+  - **Chat.** M: scope selector (Notes / Meetings / Both) plus optional tag filter; answers cite sources, and tapping a citation opens that transcript line; "not in your recordings" when nothing matches; suggested starter questions. S: saved chat history.
+  - **Everywhere.** M: library with search and tag filter; empty, loading and error states; delete a recording; consistent visual design with dark mode; server URL in Settings.
+- [BRIEF] Summaries are structured as decisions / action items / open questions; answers are grounded in stored transcripts and cite recording and moment.
 
 ### Architecture
 - [USER] Multi-agent and RAG are requirements.
-- [USER] The phone app records; transcription and diarization run on a laptop that acts as the server. Diarization output gives the timestamps.
-- [USER] LLMs are always hosted (free options), never self-hosted. Embedders may run on the laptop or be hosted (undecided).
+- [USER] The laptop is the server: it hosts the backend, transcription, diarization and storage. The phone is the client.
+- [USER] LLMs are always hosted (free options), never self-hosted. Embedders may run on the laptop or be hosted.
+- [USER] Light models.
 - [USER] No automation platform. Everything is code.
-- [USER] The transcription and diarization approach comes from `yassinebrahem2/live-debate-analysis` (Python; faster-whisper `large-v3` fp16 + pyannote `speaker-diarization-community-1`; batch over files, tested on a Windows laptop with a 6 GB RTX 4050).
+- [USER] The transcription and diarization approach comes from `yassinebrahem2/live-debate-analysis` (faster-whisper + pyannote `speaker-diarization-community-1`, batch over files, benchmarked on a Windows laptop with a 6 GB RTX 4050).
 - [BRIEF] Transcription, tagging and retrieval are deterministic workflows, not agents. Only the reasoning parts are agents.
 - [BRIEF] RAG: transcripts are chunked, embedded and stored in a vector store; questions retrieve relevant chunks first.
 
 ### Data
-- [USER] Audio is stored temporarily, until it is transcribed.
+- [USER] Audio is kept until the user deletes the recording.
 
 ### Models
-- [USER] Model configuration follows the model registry design of `multimodal-rag-agent`, configurable from one file.
-- [USER] Accepted: reuse that registry's design, not its code: one `models.yaml` with providers (`base_url`, `key_env`) and models (`type`, `provider`, `wire_model_id`), keys only in environment variables, a small loader. (Accepted for the hosted-only version; the amendment for local speech/embedder entries is under Open.)
+- [AGREED] One model configuration file, following the design (not the code) of `multimodal-rag-agent`'s registry: providers (`base_url`, `key_env`), models (`type`, `provider`, `wire_model_id`), keys only in environment variables, a small loader.
 - [USER] The app name lives in its own single config value.
 
 ### Mobile
-- [USER] React Native (the easiest stack). iPhone via Expo Go first; Android APK later.
+- [USER] React Native. Android only (APK).
+
+### Deployment
+- [USER] The phone reaches the laptop through a tunnel. The server URL is configurable in the app.
 
 ### Prompting [BRIEF]
 - Structured output for summaries.
@@ -55,30 +60,26 @@ Anything not listed here is unknown.
 - [BRIEF] The coding assistant asks before choosing the stack for any open item.
 
 ## 3. Open
-- **Live transcription.** The debate pipeline is batch over whole files; pyannote community-1 relabels speakers on every chunk; expo-audio records to a file and has no chunk stream. Options: record live and process on stop (tested pipeline), or a live transcript as a stretch (dev build with a streaming library, needs a Mac; or chunked uploads that lose words at the seams). Blocks the recording flow.
-- **Data location.** Best reading: everything on the laptop (SQLite plus a vector store), phone as a thin client. Not yet confirmed.
-- **Keeping audio.** Deleting audio after transcription means citations cannot play the moment back. Keep it until the user deletes it?
-- **Registry amendment.** The one file must also cover local speech models (ASR, diarizer) and possibly a local embedder, not only hosted LLMs.
-- **GPU limits on the laptop.** 6 GB card: one GPU model at a time, so processing jobs run one at a time; Whisper and pyannote in separate steps; a laptop embedder runs on CPU or is hosted.
-- **Teammates' machines.** OS and GPU of each teammate; a CPU dev profile (small model, sherpa-onnx CPU diarization) may be needed. Each developer needs `HF_TOKEN` and must accept the pyannote model's terms.
-- **Demo network.** Campus Wi-Fi often isolates clients; phone hotspot or a tunnel (e.g. Tailscale); server URL as an app setting.
-- **Expo Go SDK version.** The App Store Expo Go supports one SDK version; check before pinning.
-- **Feature detail per section** (Meetings, Notes, Chat, global), must-have vs. stretch.
+- **Data location** (Claude recommends: everything on the laptop, phone keeps only its settings; awaiting the user's yes).
+- **Registry amendment** (Claude recommends a role-based file covering local speech models too; awaiting the user's yes).
+- **Stack** (proposal awaiting the user's yes): backend, vector store, embedder, ASR and diarizer models, LLM provider, agent framework, mobile UI kit, APK build path.
+- **Tunnel and security**: which tunnel; whether a bearer token is needed.
+- **Spikes not yet run**: sqlite-vec loading on the laptop's Python; a tool-call round trip with the chosen free provider and framework; pyannote loading with `HF_TOKEN`.
 - **Agent design**: which agents exist and how they hand off. Decided in the stage 1 spec.
-- Failure behaviour (to be discussed).
-- Chunking strategy, and whether a comparison is in scope. [BRIEF]
-- Privacy and consent handling. [BRIEF]
-- Tags: automatic, manual, or both (the brief says both).
+- **Failure behaviour**. Decided in the stage 1 spec.
+- **Chunking strategy**. A config choice; a comparison is not in scope for 2026-10-20. [BRIEF]
+- **Privacy and consent**. Decided in the stage 1 spec. Free LLM tiers may use inputs for training.
 
 ## 4. Ideas
-- (none yet)
+- Live transcript while recording (user: "we'll see if we can reach it later").
 
 ## 5. Changed
-- Upload audio and transcribe on the server (brief) → transcription and diarization on the phone (2026-10-16, user) → recording on the phone, transcription and diarization on a laptop server (2026-10-16, user: on-device models need a development build, which Expo Go cannot run).
-- Server deployed in the cloud (2026-10-16, user) → laptop as the server (2026-10-16, user).
-- Expo Go on iPhone with on-device models → React Native via Expo Go with processing on the laptop (2026-10-16, user).
-- "Never locally hosted" for all models → LLMs never self-hosted; embedders may be local (2026-10-16, user clarification).
-- "Data saved locally" (meaning unclear) → see Open: data location.
+- Upload audio and transcribe on the server (brief) → transcription and diarization on the phone (2026-10-16, user) → recording on the phone, transcription and diarization on the laptop (2026-10-16, user: on-device models need a native build).
+- iPhone first via Expo Go, Android later (2026-10-16, user) → Android only (2026-10-16, user).
+- Server deployed in the cloud (2026-10-16, user) → hosted on the laptop, reached through a tunnel (2026-10-16, user).
+- "Never locally hosted" for all models → LLMs never self-hosted; embedders may be local (2026-10-16, user).
+- Audio stored temporarily until transcribed (2026-10-16, user) → kept until the user deletes it (2026-10-16, user: citations can play the moment back).
+- Live recording with live transcript (2026-10-16, user) → record live, process on stop; live transcript moved to Ideas (2026-10-16, user).
 - Timestamps and speaker labels "desirable, not decided" (brief) → diarization is in and provides timestamps (2026-10-16, user).
 - Automation platform vs. custom backend open (brief) → all code (2026-10-16, user).
 
