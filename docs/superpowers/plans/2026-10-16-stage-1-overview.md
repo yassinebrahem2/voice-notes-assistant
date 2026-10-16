@@ -28,11 +28,13 @@ Every must-have feature working end to end on a real Android phone talking to th
 ## File ownership
 - Foundation owns: `backend/` project files, `app/config`, `app/db` (and migration `001`), `app/api` (app factory, errors, models, routers), the protocols and fakes, `app/container.py`, `app/cli.py`, CI workflows; `mobile/` scaffold, `mobile/app/_layout.tsx`, `mobile/app/(tabs)/_layout.tsx`, theme, API client and generated types.
 - Feature plans fill in their routers' handlers and add files in their own packages; they edit a foundation file only where their plan names it.
+- Route ownership: processing owns every recordings and tags route (upload, list and search, detail, PATCH title and tags, speaker rename, delete, retry, audio, `GET /tags`), with the read endpoints first so mobile can use real data early; agents owns the chats and runs routes.
+- Analysis split: agents owns the `Analyzer` (prompts, failover walk, map-reduce); processing owns the post-processing of its output (S numbers to citations, owner to `speaker_id`, speaker tokens, tag reuse) using `app.domain.speakers` and `app.domain.tags` from the foundation.
 
 ## Plans
 | # | Plan | Branch | Depends on | State |
 |---|---|---|---|---|
-| 1 | Foundation: backend skeleton, schema, all routes and models, openapi.json, protocols and fakes, mobile scaffold, theme, API client, CI, Tailscale setup, throwaway APK | `plan/stage-1-foundation` | none | written |
+| 1 | Foundation: backend skeleton, schema, all routes and models, openapi.json, protocols and fakes, mobile scaffold, theme, API client, CI, Tailscale setup, throwaway APK | `plan/stage-1-foundation` | none | issue #1 |
 | 2 | Processing: upload, audio and Range, worker (claim, resume, retry, delete), speech child processes, chunking and indexing, laptop setup command | `plan/stage-1-processing` | 1 | not written |
 | 3 | Agents: registry and agent factory, Summarizer, Orchestrator and tools, retrieval, Chat runs, provider smoke test, relevance calibration | `plan/stage-1-agents` | 1 | not written |
 | 4 | Mobile recording: record fan-out and recorder, waveform, upload queue, libraries, recording detail, player, Tier 2 polish | `plan/stage-1-mobile-recording` | 1 | not written |
