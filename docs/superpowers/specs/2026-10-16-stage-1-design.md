@@ -1,6 +1,6 @@
 # Stage 1 design: Core MVP
 
-Status: written 2026-10-16 from sections 1–6 approved by the lead in the Phase 4 brainstorming. Awaiting the lead's review of this written spec.
+Status: approved by the lead on 2026-10-16 (written from sections 1–6 of the Phase 4 brainstorming, reviewed with the advisor until clean).
 Facts and decisions: `project_knowledge.md`. Stages and shared contracts: `docs/roadmap.md` (this spec follows them and does not restate them). The app name is never written here; it comes from `config/app.json`.
 
 This spec is split into an overview (this file) and one file per area:
