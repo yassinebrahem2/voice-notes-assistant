@@ -76,7 +76,7 @@ Chat question:
 | Prompts and structured output schemas | Processing file §4, chat file §3 |
 | Chunking | Processing file §5 |
 | Failure behaviour | UI file §6, processing file §6, chat file §6 |
-| Speaker renaming | Data-API file §1, processing file §4 |
+| Speaker renaming | Data-API file §3, processing file §4 |
 | Consent | No consent screen or notice (lead decision) |
 | Screen map and navigation | UI file §1–§3 |
 | Light model picks | Platform file §1 |

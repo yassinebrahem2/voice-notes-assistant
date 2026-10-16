@@ -9,8 +9,8 @@ Part of the stage 1 spec (overview: `2026-10-16-stage-1-design.md`). Approved in
 - `llm` role middleware stack (first = outermost):
   1. `ModelFallbackMiddleware(*rest_of_list)`: verified to call `handler(request.override(model=fallback))` on an exception, and tools and structured output are bound per request inside the handler, so each fallback model gets them re-bound. This answers the roadmap's `with_fallbacks` / `bind_tools` question.
   2. `ModelRetryMiddleware(max_retries=1, retry_on=<predicate>, on_failure="error")`: the predicate retries 5xx, timeouts and connection errors, never 429 or 400 (a Groq 400 for a malformed tool call goes straight to the next model). `on_failure="error"` is required: the default `"continue"` turns an exhausted retry into a normal message and the fallback would never trigger.
-  3. Final-answer middleware (ours, `wrap_model_call`): counts model calls in the run; on the last allowed call (6) it overrides the request so that only the `ChatReply` structured-output tool remains, forcing the model to answer from what it has gathered.
-  4. `ModelCallLimitMiddleware(run_limit=7, exit_behavior="end")`: a safety net behind the final-answer middleware, normally never reached; if reached the run fails with `ai_unavailable`.
+  3. Final-answer middleware (ours, `wrap_model_call`): counts the model turns of the current run from the request's state (AI messages after the run's human message), never from a counter on the middleware instance (the agent is shared by concurrent runs, and a failed-over step must not count twice). On the 6th turn it calls `request.override(tools=[], tool_choice=<the ChatReply structured-output tool>)` (`ModelRequest` has `tools` and `tool_choice`, verified), so the model must answer from what it has gathered. The exact tool-choice value is confirmed in the smoke test.
+  4. `ModelCallLimitMiddleware(run_limit=7, exit_behavior="end")`: a safety net behind the final-answer middleware, normally never reached; if reached, the run ends with the fixed reply described in §6.
   5. `ToolCallLimitMiddleware(run_limit=4)` (default `exit_behavior="continue"`): further tool calls are refused with a message and the model answers with what it has.
 - Structured output is always `ToolStrategy(schema)`, never a raw schema: a raw schema becomes `AutoStrategy`, which may pick native JSON-schema output with `strict=True` that an OpenAI-compatible endpoint can reject, and that would only surface on fallback.
 - `llm_analysis` does not use the fallback middleware; the processing workflow walks its list (processing file §4).
@@ -24,8 +24,8 @@ Run context (`ChatContext`, set by the server, never tool arguments): scope (`no
 Input: the question plus the last 6 turns of the chat. History renders past citations as plain text, e.g. "(Budget sync, 12:04)", never as labels.
 
 Tools (all see only `ready` recordings and apply scope and tag filter from the context; asked about a recording still processing, they say it is not ready yet):
-- `search_transcripts(query: str, k: int = 8)`: retrieval (§5). Returns passages labelled `[P1]…`, each with recording title, date, speaker names (current names, e.g. "Sarah (Speaker A)"), timestamp and text, wrapped in `<sources>`. A passage is one chunk; its citation target is the chunk's first segment.
-- `find_recordings(text?: str, date_from?: str, date_to?: str, tags?: list[str])`: metadata lookup, returns recordings labelled `[R1]…` (title, date, duration, tags, one-line overview). Citation target: the recording's first segment, `start_ms` 0.
+- `search_transcripts(query: str, k: int = 8)`: retrieval (§5). Returns passages labelled `[P1]…`, each with recording title, date, speaker names (current names, e.g. "Sarah (Speaker A)"), timestamp and text, wrapped in `<sources>`. Passages beyond `max_distance` are dropped, so "nothing within the cut-off" is known. A passage is one chunk; its citation target is the chunk's first segment.
+- `find_recordings(text?: str, date_from?: str, date_to?: str, tags?: list[str])`: metadata lookup, returns recordings labelled `[R1]…` (title, date, duration, tags, and the overview for a meeting or the first key point for a note). Citation target: the recording's first segment, `start_ms` 0.
 - `summarize(sources: list[str], focus?: str)`: takes labels (`"R2"`, or `"P4"` meaning its recording), never IDs. One meeting → its stored summary (no model call); one note → its stored key points; several → one merge call to the Summarizer (role `llm`) over the stored, rendered summaries, output `ChatSummary {overview, decisions, action_items, open_questions}` citing the `[P n]` labels of the items it was given. Stored items are registered as passages so the Orchestrator can cite them.
 - Each tool writes a status line through `runtime.stream_writer`: "Searching meetings…", "Found 6 passages", "Looking up recordings…", "Summarizing 2 meetings…". The graph adds "Writing answer…".
 
@@ -48,6 +48,7 @@ START → orchestrator ⇄ tools (search_transcripts, find_recordings, summarize
 `check_citations`:
 - maps each `[P n]` / `[R n]` to `{recording_id, segment_id, start_ms}` (plus recording title for display) and drops unknown labels;
 - `answer` with no valid citation left → the fixed reply "Not in your recordings.";
+- no `ChatReply` at all → the fixed reply "I couldn't finish answering that. Try asking it another way.";
 - retrieval found nothing within the relevance cut-off and the answer cites nothing → "Not in your recordings.";
 - stores the assistant message with resolved citations, never labels.
 
@@ -61,9 +62,9 @@ START → orchestrator ⇄ tools (search_transcripts, find_recordings, summarize
 ## 6. Chat runs and failures
 - `POST …/messages` stores the user message and starts the run as a background task: `ainvoke` under `asyncio.wait_for` with a 75 s deadline (setting), so cancellation really stops it. Steps are kept in memory per run.
 - Run states: `running` → `done` (assistant message stored) | `failed` with:
-  - `ai_unavailable`: every model in `llm` failed, output stayed invalid after validation re-asks, or the safety-net call limit was reached → "Couldn't reach the AI right now.";
+  - `ai_unavailable`: every model in `llm` failed → "Couldn't reach the AI right now.";
   - `timed_out`: the deadline passed → "That took too long.".
-- There is no "too many steps" failure: the final-answer middleware always forces an answer on the last allowed call.
+- There is no "too many steps" failure: the final-answer middleware forces an answer on the last allowed turn. If even that produces no valid `ChatReply` (or the safety-net limit ends the run), `check_citations` returns the fixed reply "I couldn't finish answering that. Try asking it another way." and the run ends `done`. `ai_unavailable` is only for "every model in `llm` failed".
 - Retry re-runs the stored user message (it is not stored twice) under the same run id, replacing the failed run.
 - Server restart: runs live in memory, so polling returns 404 and the app shows "Interrupted" + Retry.
 - "Not in your recordings." is a normal reply, not an error.

@@ -11,6 +11,7 @@ Part of the stage 1 spec (overview: `2026-10-16-stage-1-design.md`). Follows the
 | kind | text | `meeting` \| `note` |
 | client_upload_id | text unique | from the app; makes upload idempotent |
 | status | text | `uploaded`, `transcribing`, `diarizing`, `analyzing`, `indexing`, `ready`, `failed` |
+| claimed | int | 1 while the worker processes it (processing file §1) |
 | failed_step | text null | the step that failed (`decoding`, `transcribing`, `diarizing`, `analyzing`, `indexing`) |
 | error_code / error_message | text null | set when `failed` |
 | title | text null | null until analysed; editable when `ready` |
@@ -18,7 +19,7 @@ Part of the stage 1 spec (overview: `2026-10-16-stage-1-design.md`). Follows the
 | duration_ms | int null | set by decode |
 | audio_ext | text | original upload extension (`m4a`) |
 | waveform_peaks | text null | JSON list of 96 floats 0–1, set by decode |
-| analysis | text null | JSON of the stored analysis (processing file §4), speaker tokens inside text |
+| analysis | text null | JSON of the stored analysis (§2), speaker tokens inside text |
 
 **speakers** (meetings): id `spk_…`, recording_id, label (`A`, `B`… by first appearance), name (null until renamed).
 
@@ -34,10 +35,38 @@ Not stored: chat run state (in memory, keyed by the user message id); decoded au
 
 Delete of a recording removes its rows (cascade), chunks with their embeddings, audio file and temp folder in one operation (roadmap), under the claim rule in the processing file §6.
 
-## 2. Speaker tokens
+## 2. Stored and API analysis shape
+Separate from the LLM output schemas (processing file §4), whose Field constraints apply only to model output; the fixed result for an empty recording (no tags, no items) is a valid stored value.
+```python
+class Citation(BaseModel):          # roadmap Citations contract
+    recording_id: str
+    segment_id: str
+    start_ms: int
+
+class AnalysisItem(BaseModel):
+    text: str                       # rendered with current speaker names in the API
+    citations: list[Citation]
+
+class AnalysisActionItem(AnalysisItem):
+    owner_speaker_id: str | None
+    due: str | None
+
+class MeetingSummary(BaseModel):
+    overview: str
+    decisions: list[AnalysisItem]
+    action_items: list[AnalysisActionItem]
+    open_questions: list[AnalysisItem]
+
+class NoteContent(BaseModel):
+    key_points: list[AnalysisItem]
+    clean_text: str
+```
+`recordings.analysis` holds `MeetingSummary` (meetings) or `NoteContent` (notes); `GET /recordings/{id}` returns it as `summary` or `note`. S numbers never leave the backend.
+
+## 3. Speaker tokens
 Stored analysis text never contains names. On write, `Speaker X` (regex `\bSpeaker ([A-Z])\b` with optional `'s`, only labels that exist in the recording, case-sensitive) becomes `{{spk_…}}`. One server-side renderer turns tokens into the current name (or "Speaker A") for the API, for Chat tool output and for the merge call, so no client or model ever sees a raw token. The API returns rendered text.
 
-## 3. REST API (`/api/v1`)
+## 4. REST API (`/api/v1`)
 | Method and path | Purpose | Notes |
 |---|---|---|
 | `GET /health` | identity and readiness | `{app_name, version, speech_backend: "real"\|"fake", roles: {llm, llm_analysis, embedder, asr, diarizer: "ready"\|"<reason>"}}`; presence checks only, no model loading |
@@ -56,7 +85,7 @@ Stored analysis text never contains names. On write, `Speaker X` (regex `\bSpeak
 | `GET /chats/{chat_id}/runs/{run_id}` | poll | `{status: "running"\|"done"\|"failed", steps: [str], message?, error?}`; 404 `not_found` if the run is gone |
 | `POST /chats/{chat_id}/runs/{run_id}/retry` | retry | re-runs the stored question under the same run id; allowed when the run failed or no longer exists (server restart); 409 `not_failed` while it is running or done |
 
-## 4. Errors
+## 5. Errors
 Shape (roadmap): `{"error": {"code": "<snake_case>", "message": "<human text>"}}`. FastAPI's `RequestValidationError` (422) and `HTTPException` are mapped to this shape by exception handlers.
 
 Closed list of codes (a backend enum exported in `openapi.json`): `validation_error`, `not_found`, `payload_too_large`, `unsupported_media_type`, `recording_busy`, `not_failed`, `not_ready`, `audio_unreadable`, `transcription_failed`, `diarization_failed`, `analysis_failed`, `indexing_failed`, `ai_unavailable`, `timed_out`, `internal_error`.

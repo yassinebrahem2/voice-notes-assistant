@@ -14,10 +14,10 @@ One worker in the server process takes one recording at a time (roadmap lifecycl
 | index | `indexing` | chunk (§5), embed, store |
 | done | `ready` | temp folder deleted |
 
-- Claim: `UPDATE recordings SET status='transcribing' WHERE id=? AND status='uploaded'`; only a claimed row is processed.
+- Claim: recordings carry a `claimed` flag. The worker takes the oldest unclaimed recording in a non-terminal status with `UPDATE recordings SET claimed=1 WHERE id=? AND claimed=0 AND status NOT IN ('ready','failed')` and processes it from its current status; a new upload starts at `uploaded` (decode runs first). `claimed` is cleared when the recording reaches `ready` or `failed`.
 - Each step first deletes its own partial output, so it is idempotent.
-- Resume: on server start, a recording in a non-terminal status is re-queued at the step it was in (roadmap). Resuming at diarizing or later re-decodes the audio (the waveform is not stored); stored `waveform_peaks` are kept.
-- Retry (`POST …/retry`, only `failed`) resumes at `failed_step`, keeping completed steps' output.
+- Resume: on server start, every `claimed` flag is cleared first, then recordings in a non-terminal status are re-queued at the step they were in (roadmap). Resuming at diarizing or later re-decodes the audio (the waveform is not stored); stored `waveform_peaks` are kept.
+- Retry (`POST …/retry`, only `failed`) sets the status to `failed_step`'s status with `claimed=0`, so the worker resumes there, keeping completed steps' output.
 - Zero segments after transcription (silence, accidental tap): no diarization or LLM call; analysis is the fixed result title "Untitled recording", no items, no tags; then `ready`.
 - Analysis runs only before `ready`; a `ready` recording is never re-processed, so user edits to title, tags and speaker names are never overwritten.
 
@@ -27,8 +27,8 @@ Evidence: `yassinebrahem2/live-debate-analysis` runs Whisper and pyannote as sep
 - The child imports only `app.speech`; it never touches the database or the LLM layer. The parent writes results.
 - Non-zero exit (including CUDA out-of-memory) → the step's error code; child stderr goes to the server log only; a configurable step timeout kills a hung child.
 - Every child gets the model cache dir (`HF_HOME` and the fastembed cache path); `serve` sets `HF_HUB_OFFLINE=1`, so nothing downloads during the demo and a missing model fails at once.
-- ASR (faster-whisper, `asr` role): device and compute type from `config/models.yaml` (`cuda` + `int8_float16` on the laptop; `cpu` + `int8` works on any machine, slower); `language="en"`, `vad_filter=True`, `condition_on_previous_text=False`. Output: segments with start, end, text.
-- Diarizer (pyannote `speaker-diarization-community-1`, `diarizer` role, needs `HF_TOKEN`): device from config; CPU works, slower.
+- ASR (faster-whisper, `asr` role): device and compute type from `config/models.yaml` (`cuda` + `int8_float16`), overridable per machine with `ASR_DEVICE=cpu` in `backend/.env` (`cpu` + `int8`, slower); `language="en"`, `vad_filter=True`, `condition_on_previous_text=False`. Output: segments with start, end, text.
+- Diarizer (pyannote `speaker-diarization-community-1`, `diarizer` role, needs `HF_TOKEN`): device from config, overridable with `DIARIZER_DEVICE=cpu`; CPU works, slower.
 - Backends: `real` or `fake`, chosen in backend settings. `fake` returns a canned transcript and speakers for any audio; used by tests and CI (no torch) and for instant UI work. `/health` and Settings show "Speech: fake (dev)" when it is active.
 
 ## 3. Prompts: shared rules
@@ -63,12 +63,12 @@ class MeetingAnalysis(BaseModel):
 class NoteAnalysis(BaseModel):
     title: str = Field(max_length=60)
     tags: list[str] = Field(min_length=1, max_length=4)
-    key_points: list[Item] = Field(min_length=3, max_length=8)
+    key_points: list[Item] = Field(min_length=1, max_length=8)  # as many as the content supports
     clean_text: str        # tidy prose of what was said; fillers and false starts removed; nothing added; not cited
 ```
 `ToolStrategy` re-asks the model after a validation error (`handle_errors` defaults to `True`, verified in langchain 1.4.6).
 
-Prompt core (meeting): summarize only what was said; every decision, action item and open question cites 1–3 `[S n]`; a decision was agreed by the group, an action item has a doer, an open question was raised and not settled; never guess owners or dates. Note: key points cite; the clean note keeps the speaker's meaning and adds nothing.
+Prompt core (meeting): summarize only what was said; every decision, action item and open question cites 1–3 `[S n]`; a decision was agreed by the group, an action item has a doer, an open question was raised and not settled; never guess owners or dates. Note: as many key points as the content supports (at most 8), each cited; the clean note keeps the speaker's meaning and adds nothing.
 
 After the call (server):
 - S numbers → segment ids; an unknown S number is removed and logged; an item left without a valid source is removed and logged.
@@ -77,10 +77,10 @@ After the call (server):
 - Tags normalised (lowercase, trimmed, spaces → hyphens, ≤ 24 chars, ≤ 4); a new tag equal to an existing one after normalisation or after removing a trailing "s" reuses it.
 - Stored in `recordings.analysis` and `title`.
 
-Failover walk (no middleware for this role): the workflow picks the first model in `llm_analysis` and plans from its `max_request_tokens` (input estimate chars/4 + output and reasoning allowance):
+Failover walk (no fallback middleware for this role; each model's Summarizer is built with `ModelCallLimitMiddleware(run_limit=2, exit_behavior="end")`, so validation re-asks are bounded and a missing structured response moves on to the next model): the workflow picks the first model in `llm_analysis` and plans from its `max_request_tokens` (input estimate chars/4 + output and reasoning allowance):
 - fits → one call;
 - too large → map-reduce: split on segment boundaries; one map call per section → `SectionNotes` (meeting: decisions, action items, open questions; note: key points and that section's part of the clean note) with global S numbers; one reduce call → title, tags, overview and merged items (meeting) or title, tags, key points (note) from the section notes only; a note's clean text is the sections' parts joined in order by code.
-- Each model gets at most 2 attempts (validation re-asks included); then the next model in the list, re-planning from its `max_request_tokens`. All exhausted → `failed` with `analysis_failed`.
+- Each model gets at most 2 model calls per request (validation re-asks included); then the next model in the list, re-planning from its `max_request_tokens`. All exhausted → `failed` with `analysis_failed`.
 
 ## 5. Chunking and indexing
 - Chunks pack consecutive segments up to ≈ 200 tokens (chars/4), never splitting a segment (ASR segments are well under the embedder's 512-token input).
@@ -94,5 +94,5 @@ Failover walk (no middleware for this role): the workflow picks the first model 
 - Each step catches its errors, logs them, and sets `failed` with `failed_step` and a code: `audio_unreadable`, `transcription_failed`, `diarization_failed`, `analysis_failed`, `indexing_failed`. The worker then takes the next recording; one failure never stops the queue.
 - Diarization failure fails the meeting (no silent fallback to one speaker).
 - Upload limits: max size in settings (default 200 MB) → `payload_too_large`; unsupported type → `unsupported_media_type`. A failed upload leaves no row and no partial file.
-- Delete vs worker: queued, ready and failed recordings delete at once; the recording the worker has claimed returns `409 recording_busy`. Delete is a conditional delete that skips claimed rows; SQLite serialises the claim and the delete, so they cannot interleave.
+- Delete vs worker: queued, ready and failed recordings delete at once; the recording the worker has claimed returns `409 recording_busy`. Delete is `DELETE … WHERE id=? AND claimed=0`; SQLite serialises the claim and the delete, so they cannot interleave.
 - Every LLM request has a timeout per model from `models.yaml`; a timeout counts as that model failing.

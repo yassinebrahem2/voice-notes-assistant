@@ -8,8 +8,8 @@ Part of the stage 1 spec (overview: `2026-10-16-stage-1-design.md`). Approved in
   - `llm` (Chat): Groq `openai/gpt-oss-20b` (light, tool use), then a Gemini Flash model.
   - `llm_analysis` (processing): a Gemini Flash model, then Groq `openai/gpt-oss-120b`.
   - `embedder`: fastembed `BAAI/bge-small-en-v1.5`, local, CPU.
-  - `asr`: faster-whisper `distil-large-v3`, local, `cuda` + `int8_float16` on the laptop (`cpu` + `int8` elsewhere).
-  - `diarizer`: pyannote `speaker-diarization-community-1`, local, `cuda` on the laptop (`cpu` elsewhere).
+  - `asr`: faster-whisper `distil-large-v3`, local, `cuda` + `int8_float16` (env override `ASR_DEVICE=cpu` switches to `cpu` + `int8`).
+  - `diarizer`: pyannote `speaker-diarization-community-1`, local, `cuda` (env override `DIARIZER_DEVICE=cpu`).
   - The exact Gemini Flash id and both providers' current ids are confirmed in the first backend task from each provider's `GET /models`; the failover order stays editable in the file.
 - Backend settings (env-overridable, pydantic-settings): data dir (default `platformdirs.user_data_dir` named from `config/app.json`), model cache dir, bind host (default `127.0.0.1`), port, speech backend (`real` | `fake`), upload size limit (200 MB), chunk size / boundary minimum / overlap, retrieval `k` and `max_distance`, Chat deadline (75 s), speech step timeout.
 - Secrets only in env vars: `backend/.env` (git-ignored), names listed in `backend/.env.example`: `GROQ_API_KEY`, `GEMINI_API_KEY`, `HF_TOKEN`.
@@ -19,7 +19,7 @@ Part of the stage 1 spec (overview: `2026-10-16-stage-1-design.md`). Approved in
 |---|---|---|
 | Laptop (Windows, GPU), install | `uv run --extra speech python -m app.cli setup` | syncs dependencies including torch, downloads every model into the model cache dir, checks `.env` and prints anything missing |
 | Laptop, run | `uv run --extra speech python -m app.cli serve` | starts the API and the worker on `127.0.0.1` with `HF_HUB_OFFLINE=1`; then `tailscale serve` per the setup doc |
-| Teammates without a GPU | same commands; `asr` and `diarizer` set to `cpu` in `models.yaml` | the real pipeline, slower |
+| Teammates without a GPU | same commands with `ASR_DEVICE=cpu` and `DIARIZER_DEVICE=cpu` in their `backend/.env` | the real pipeline, slower; `models.yaml` stays on `cuda` |
 | Dev / CI | `uv sync`, `uv run pytest` | no speech extra, no torch; speech backend `fake` |
 | Mobile | `npm ci`, `npx expo start` | Expo Go; the APK comes from EAS profile `preview` |
 
