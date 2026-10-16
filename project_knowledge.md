@@ -59,7 +59,7 @@ Versions checked 2026-10-16; majors are pinned.
 - Embedder: fastembed 0.9, `BAAI/bge-small-en-v1.5`, local on CPU.
 - Speech: faster-whisper 1.2.1 (`distil-large-v3`); pyannote.audio 4.0.7 `speaker-diarization-community-1` for meetings only (needs `HF_TOKEN`). Speech dependencies are an optional install group; ASR and diarizer sit behind interfaces with fakes, so CI never installs torch or needs a token.
 - LLMs: Groq free tier first, Gemini free tier as fallback (OpenAI-compatible endpoints).
-- Agents: LangGraph 1.2 with LangChain 1.4 (1.x APIs such as `create_agent`; `with_fallbacks` for the LLM fallback). Not `langgraph-supervisor` (pre-1.0).
+- Agents: LangGraph 1.2 with LangChain 1.4 (1.x APIs such as `create_agent`; LangChain's model fallback for the LLM role, exact mechanism in the stage 1 spec). Not `langgraph-supervisor` (pre-1.0).
 - Model config: one `models.yaml` with providers (`base_url`, `key_env`) and models by role (`llm`, `embedder`, `asr`, `diarizer`), each hosted (provider + model id) or local (model id, device, precision); the LLM role has a fallback order; code asks for a role, never a model name.
 - Mobile: Expo SDK 58, expo-router, expo-audio, expo-keep-awake, TanStack Query 5, React Native Paper 5 (Material 3, dark mode). React Native version chosen by `npx expo install`.
 - Development on phones in Expo Go; the demo APK is built with EAS Build (cloud, free tier: 15 Android builds/month, low-priority queue with possible 90+ minute waits), by Monday 2026-10-19. Expo Go is the demo fallback.

@@ -26,7 +26,7 @@ Agreed for stage 1:
 - RAG: chunking, embedding, retrieval with filters (kind, tags).
 - Agents: the Chat multi-agent system on LangGraph, with grounded, cited answers.
 - Mobile: Expo app with the three sections, library, recording detail, settings, theme with dark mode.
-- Tooling: one-command install per side, lint, type checks, tests, CI. The backend install also downloads the models, so nothing downloads during the demo.
+- Tooling: one-command install per side (the laptop and dev/CI installs differ; see questions), lint, type checks, tests, CI. The backend install also downloads the models, so nothing downloads during the demo.
 - Setup doc: Tailscale (MagicDNS and HTTPS certificates enabled in the admin console), Hugging Face token with the pyannote model terms accepted, `.env` keys.
 
 Questions the stage 1 spec must answer:
@@ -39,6 +39,8 @@ Questions the stage 1 spec must answer:
 - The screen map and navigation (after usage, per the playbook).
 - Exact light model picks in `config/models.yaml`.
 - Tags: free-form, or typed by the brief's categories (topic, project, meeting type); how the LLM reuses existing tags to avoid near-duplicates.
+- The two installs: the laptop install (speech extras, model downloads) and the dev/CI install (fakes, no torch), each one command.
+- The LLM fallback mechanism for tool-calling agents (e.g. LangChain 1.x agent middleware vs. `with_fallbacks`, which may not expose `bind_tools`).
 - Whether ASR and diarization each run in a subprocess (as tested in `live-debate-analysis`), which also frees GPU memory between steps.
 
 ### Stage 2: Stretch and polish (S features)
@@ -59,8 +61,8 @@ backend/     Python service (FastAPI, worker, speech, RAG, agents)
 mobile/      Expo app
 config/      app.json (name and branding), models.yaml (models by role)
 docs/        roadmap, specs, plans
-data/        runtime data, git-ignored (never committed)
 ```
+Runtime data lives outside the repository (see Data layout).
 
 ### Run mode and security
 - One run mode: the server runs on the laptop; the phone is the client.
@@ -76,12 +78,13 @@ data/        runtime data, git-ignored (never committed)
 
 ### Data layout (laptop)
 ```
-data/
-  app.db                  SQLite: all records and the vector index (sqlite-vec)
+<data dir>/
+  app.db                       SQLite: all records and the vector index (sqlite-vec)
   audio/<recording_id>.<ext>   original audio, deleted with its recording
-  models/                 Hugging Face and fastembed caches
+<model cache dir>/             Hugging Face and fastembed caches (several GB)
 ```
-- The data directory path is a backend setting (default `data/` at the repo root).
+- The data dir defaults to the per-user app-data directory (`platformdirs.user_data_dir`, named from `config/app.json`), outside the checkout, so no git command (e.g. `git clean -x`) can reach it. It is a backend setting.
+- The model cache dir is a separate setting, so it can sit on whichever drive has space. The setup doc states the disk space needed.
 - Deleting a recording deletes its rows, its vectors and its audio file in one operation.
 
 ### IDs
@@ -102,7 +105,7 @@ data/
 ### Audio
 - The app uploads what expo-audio records (compressed, e.g. m4a). The backend keeps that file as the original.
 - For processing, the backend decodes it once to 16 kHz mono float32 and passes that in-memory waveform to both ASR and diarization. pyannote is never handed a file path.
-- Audio is served back with HTTP Range support, so the app can play from a given moment.
+- If playback is in scope (decided with the roadmap's approval), audio is served back with HTTP Range support so the app can play from a given moment.
 
 ### Speech dependencies
 - Speech models (torch, faster-whisper, pyannote) are an optional install group, with torch pinned to the CUDA (cu128) package index as in `live-debate-analysis`; PyPI's torch is CPU-only.
@@ -114,7 +117,7 @@ data/
 - Errors: HTTP status plus `{"error": {"code": "<snake_case>", "message": "<human text>"}}`.
 - The backend's Pydantic models are the source of truth. The exported schema is committed as `backend/openapi.json`; CI fails if it is stale.
 - The app's TypeScript types are generated from the committed `openapi.json` (`openapi-typescript`), never written by hand. Mobile work needs no Python and no running backend. Regenerating both is part of any API change.
-- Audio upload: multipart, one file per recording. Audio download: `GET` with HTTP Range.
+- Audio upload: multipart, one file per recording. Audio download (if playback is in scope): `GET` with HTTP Range.
 
 ### Citations
 Every answer and summary claim that cites a source carries `{recording_id, segment_id, start_ms}`. The app opens the recording at that segment.
