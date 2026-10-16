@@ -68,7 +68,7 @@ Runtime data lives outside the repository (see Data layout).
 - One run mode: the server runs on the laptop; the phone is the client.
 - The server binds to `127.0.0.1` by default (the bind host is a setting). The phone reaches it through `tailscale serve`, which gives an HTTPS address on the private tailnet. Nothing is exposed on the LAN or the internet.
 - No accounts and no app-level auth: the tailnet is the boundary.
-- The server URL is a setting in the app, stored on the phone. It is the only thing the phone stores apart from UI preferences.
+- The server URL is a setting in the app, stored on the phone. It is the only thing the phone stores apart from UI preferences and audio waiting to be uploaded (kept until uploaded or deleted).
 
 ### Configuration: one place per concern
 - `config/app.json`: the app name and branding values. Read by the backend and by the Expo config (`mobile/app.config.ts`), which passes them to the app through `extra` (read with `expo-constants`). App code never imports from `../config/`. No other file hard-codes the name.
@@ -99,8 +99,8 @@ Runtime data lives outside the repository (see Data layout).
 
 ### Processing lifecycle
 `uploaded → transcribing → diarizing (meetings only) → analyzing → indexing → ready`, or `failed` with an error code and message from any step. The app polls the recording's status. One worker processes one recording at a time (one model on the GPU at a time).
-- On server startup, every recording in a non-terminal status is re-queued from the start of its pipeline (the laptop may sleep or restart mid-job).
-- A `failed` recording can be retried through the API.
+- On server startup, every recording in a non-terminal status is re-queued at the step it was in (the laptop may sleep or restart mid-job); each step first removes its own partial output.
+- A `failed` recording can be retried through the API; retry resumes from the failed step, keeping the output of completed steps.
 
 ### Audio
 - The app uploads what expo-audio records (compressed, e.g. m4a). The backend keeps that file as the original.

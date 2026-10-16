@@ -45,6 +45,7 @@ Anything not listed here is unknown.
 - [USER] Speaker renaming: summaries store speaker placeholders and render current names, so a rename reaches every summary already written without re-processing. Chat answers already written keep the names they were written with.
 - [USER] Search (stage 1 spec, section 4, approved 2026-10-16): segments are ASR-level for both kinds (meetings add a speaker per segment); chunks pack consecutive segments up to ~200 tokens with one-segment overlap, preferring speaker changes as boundaries; retrieval is exact, filtered by scope, tags and ready status, top 8; the "Not in your recordings" cut-off starts permissive and is calibrated on the demo recordings. No keyword search or re-ranking.
 - [USER] Two LLM roles: `llm` (Chat, Groq first) and `llm_analysis` (processing, Gemini Flash first), each with a configurable failover order in `config/models.yaml`. No rate-limit modelling or quota counting: the models registry and the single agent factory apply failover; a failing model (429 included) hands over to the next in the role's list.
+- [USER] Failure behaviour (stage 1 spec, section 5, approved 2026-10-16): every failure is visible with a code and a one-tap Retry where possible. Audio that failed to upload stays on the phone until uploaded or deleted; uploads are idempotent. Processing retry and restart resume at the failed or interrupted step. Chat never fails for "too many steps": on its last allowed model call the orchestrator loses its tools and must answer from what it has. A recording being processed cannot be deleted until processing finishes.
 - [USER] Tags are free-form (not the brief's topic / project / meeting type categories), normalised, at most 4 per recording; the model reuses existing tags; the server merges near-identical spellings. Title, tags and speaker names are editable once a recording is ready; a ready recording is never re-processed.
 
 ### Models
@@ -93,7 +94,6 @@ Versions checked 2026-10-16; majors are pinned.
 
 ## 3. Open
 Each item is safe to decide later; the stage that decides it is named.
-- **Failure behaviour** per step (processing, LLM, network). Stage 1 spec.
 - **Privacy**: free LLM tiers (Gemini) may use inputs for training. Stage 1 spec. [BRIEF] (Recording consent: decided, no consent screen.)
 - **iOS**: works in Expo Go as a bonus (no custom native code); a standalone iOS build needs a paid Apple Developer account. Awaiting the user's yes. Roadmap.
 - **Initial light model picks** within the stack (e.g. Whisper size) are config edits, not design decisions.
