@@ -88,6 +88,6 @@ Stored analysis text never contains names. On write, `Speaker X` (regex `\bSpeak
 ## 5. Errors
 Shape (roadmap): `{"error": {"code": "<snake_case>", "message": "<human text>"}}`. FastAPI's `RequestValidationError` (422) and `HTTPException` are mapped to this shape by exception handlers.
 
-Closed list of codes (a backend enum exported in `openapi.json`): `validation_error`, `not_found`, `payload_too_large`, `unsupported_media_type`, `recording_busy`, `not_failed`, `not_ready`, `audio_unreadable`, `transcription_failed`, `diarization_failed`, `analysis_failed`, `indexing_failed`, `ai_unavailable`, `timed_out`, `internal_error`.
+Closed list of codes (a backend enum exported in `openapi.json`): `validation_error`, `not_found`, `payload_too_large`, `unsupported_media_type`, `recording_busy`, `not_failed`, `not_ready`, `audio_unreadable`, `transcription_failed`, `diarization_failed`, `analysis_failed`, `indexing_failed`, `ai_unavailable`, `timed_out`, `not_implemented` (501, routes the foundation stubs until a feature plan fills them), `internal_error`.
 
 Messages never contain keys, URLs with credentials, data-dir paths or stack traces; details go to the server log.
