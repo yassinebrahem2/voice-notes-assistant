@@ -37,17 +37,32 @@ Anything not listed here is unknown.
 - [BRIEF] RAG: transcripts are chunked, embedded and stored in a vector store; questions retrieve relevant chunks first.
 
 ### Data
+- [AGREED] Everything lives on the laptop: recordings, audio files, transcripts, tags, summaries, the vector index. The phone keeps only its settings (server URL).
 - [USER] Audio is kept until the user deletes the recording.
 
 ### Models
-- [AGREED] One model configuration file, following the design (not the code) of `multimodal-rag-agent`'s registry: providers (`base_url`, `key_env`), models (`type`, `provider`, `wire_model_id`), keys only in environment variables, a small loader.
+- [AGREED] One model configuration file, following the design (not the code) of `multimodal-rag-agent`'s registry, keys only in environment variables (details under Tech stack).
 - [USER] The app name lives in its own single config value.
 
 ### Mobile
-- [USER] React Native. Android only (APK).
+- [USER] React Native. Android is the target (APK).
+- [USER] No Android Studio or Android SDK installs.
 
 ### Deployment
 - [USER] The phone reaches the laptop through a tunnel. The server URL is configurable in the app.
+- [AGREED] Tailscale as the tunnel; `tailscale serve` gives the laptop an HTTPS address (Android release builds block plain `http://`). Nothing is exposed publicly.
+
+### Tech stack [AGREED]
+Versions checked 2026-10-16; majors are pinned.
+- Backend: Python 3.12, FastAPI 0.143, uv. One background worker processes recordings one at a time (the 6 GB GPU holds one model at a time).
+- Storage: SQLite with sqlite-vec 0.1.9 (vectors in the same file, exact search). Fallback if extensions cannot load: LanceDB 0.40.
+- Embedder: fastembed 0.9, `BAAI/bge-small-en-v1.5`, local on CPU.
+- Speech: faster-whisper 1.2.1 (`distil-large-v3`); pyannote.audio 4.0.7 `speaker-diarization-community-1` for meetings only (needs `HF_TOKEN`). Speech dependencies are an optional install group; ASR and diarizer sit behind interfaces with fakes, so CI never installs torch or needs a token.
+- LLMs: Groq free tier first, Gemini free tier as fallback (OpenAI-compatible endpoints).
+- Agents: LangGraph 1.2 with LangChain 1.4 (1.x APIs such as `create_agent`; `with_fallbacks` for the LLM fallback). Not `langgraph-supervisor` (pre-1.0).
+- Model config: one `models.yaml` with providers (`base_url`, `key_env`) and models by role (`llm`, `embedder`, `asr`, `diarizer`), each hosted (provider + model id) or local (model id, device, precision); the LLM role has a fallback order; code asks for a role, never a model name.
+- Mobile: Expo SDK 58, expo-router, expo-audio, expo-keep-awake, TanStack Query 5, React Native Paper 5 (Material 3, dark mode). React Native version chosen by `npx expo install`.
+- Development on phones in Expo Go; the demo APK is built with EAS Build (cloud, free tier: 15 Android builds/month, low-priority queue with possible 90+ minute waits), by Monday 2026-10-19. Expo Go is the demo fallback.
 
 ### Prompting [BRIEF]
 - Structured output for summaries.
@@ -60,22 +75,23 @@ Anything not listed here is unknown.
 - [BRIEF] The coding assistant asks before choosing the stack for any open item.
 
 ## 3. Open
-- **Data location** (Claude recommends: everything on the laptop, phone keeps only its settings; awaiting the user's yes).
-- **Registry amendment** (Claude recommends a role-based file covering local speech models too; awaiting the user's yes).
-- **Stack** (proposal awaiting the user's yes): backend, vector store, embedder, ASR and diarizer models, LLM provider, agent framework, mobile UI kit, APK build path.
-- **Tunnel and security**: which tunnel; whether a bearer token is needed.
-- **Spikes not yet run**: sqlite-vec loading on the laptop's Python; a tool-call round trip with the chosen free provider and framework; pyannote loading with `HF_TOKEN`.
-- **Agent design**: which agents exist and how they hand off. Decided in the stage 1 spec.
-- **Failure behaviour**. Decided in the stage 1 spec.
-- **Chunking strategy**. A config choice; a comparison is not in scope for 2026-10-20. [BRIEF]
-- **Privacy and consent**. Decided in the stage 1 spec. Free LLM tiers may use inputs for training.
+Each item is safe to decide later; the stage that decides it is named.
+- **Agent design**: which agents exist and how they hand off. Stage 1 spec.
+- **Failure behaviour** per step (processing, LLM, network). Stage 1 spec.
+- **Chunking strategy**: a config choice; a comparison is not in scope for 2026-10-20. Stage 1 spec. [BRIEF]
+- **Privacy and consent**: recording consent; free LLM tiers (Gemini) may use inputs for training. Stage 1 spec. [BRIEF]
+- **iOS**: works in Expo Go as a bonus (no custom native code); a standalone iOS build needs a paid Apple Developer account. Awaiting the user's yes. Roadmap.
+- **Initial light model picks** within the stack (e.g. Whisper size) are config edits, not design decisions.
 
 ## 4. Ideas
 - Live transcript while recording (user: "we'll see if we can reach it later").
+- Standalone iOS build (needs an Apple Developer account).
 
 ## 5. Changed
 - Upload audio and transcribe on the server (brief) → transcription and diarization on the phone (2026-10-16, user) → recording on the phone, transcription and diarization on the laptop (2026-10-16, user: on-device models need a native build).
-- iPhone first via Expo Go, Android later (2026-10-16, user) → Android only (2026-10-16, user).
+- iPhone first via Expo Go, Android later (2026-10-16, user) → Android as the target (2026-10-16, user); iOS in Expo Go under Open.
+- PydanticAI as the agent framework (proposed) → LangGraph (2026-10-16, agreed: better known by the team's coding agents, built-in model fallback, diagram for the demo).
+- Pre-build checks on the laptop (proposed) → skipped; fallbacks documented instead (2026-10-16, user).
 - Server deployed in the cloud (2026-10-16, user) → hosted on the laptop, reached through a tunnel (2026-10-16, user).
 - "Never locally hosted" for all models → LLMs never self-hosted; embedders may be local (2026-10-16, user).
 - Audio stored temporarily until transcribed (2026-10-16, user) → kept until the user deletes it (2026-10-16, user: citations can play the moment back).
@@ -87,3 +103,4 @@ Anything not listed here is unknown.
 - `project_knowledge.md`: this file.
 - `project_context.md`: the original idea file, kept unchanged as the source of [BRIEF].
 - `new-project-playbook.md`: how the work is run.
+- `docs/roadmap.md`: stages and shared contracts (Phase 2).
