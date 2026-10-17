@@ -5,7 +5,11 @@ from typing import cast
 import pytest
 import yaml
 
-from app.config.settings import Settings
+from app.config.app_config import load_app_config
+from app.config.settings import Settings, load_settings
+from app.container import Container, build_container
+from app.db.connection import connect
+from app.db.migrate import apply_migrations
 
 
 @pytest.fixture(autouse=True)
@@ -23,3 +27,21 @@ def isolate_provider_keys(monkeypatch: pytest.MonkeyPatch) -> None:
     for provider in registry["providers"].values():
         monkeypatch.delenv(provider["key_env"], raising=False)
     monkeypatch.delenv("HF_TOKEN", raising=False)
+
+
+@pytest.fixture
+def container(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Container:
+    env_file = tmp_path / ".env"
+    env_file.write_text("", encoding="utf-8")
+    monkeypatch.setenv("DATA_DIR", str(tmp_path / "data"))
+    monkeypatch.setenv("MODEL_CACHE_DIR", str(tmp_path / "models"))
+    monkeypatch.setenv("SPEECH_BACKEND", "fake")
+    settings = load_settings(load_app_config(), env_file=env_file)
+    result = build_container(settings)
+    result.settings.data_dir.mkdir(parents=True)
+    connection = connect(result.db_path)
+    try:
+        apply_migrations(connection)
+    finally:
+        connection.close()
+    return result
