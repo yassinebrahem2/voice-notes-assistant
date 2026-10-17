@@ -39,8 +39,8 @@ def test_seed_demo_inserts_two_ready_recordings(cli_container: Container) -> Non
         assert meeting["status"] == "ready"
         assert meeting["waveform_peaks"] is not None
         peaks = cast(list[float], json.loads(meeting["waveform_peaks"]))
-        assert isinstance(peaks, list)
-        assert len(peaks) > 0
+        assert len(peaks) == 96
+        assert all(0.0 <= p <= 1.0 for p in peaks)
 
         # Summary structure: 1 decision, 1 action item with owner, 1 open question, each cited
         assert meeting["analysis"] is not None
@@ -69,14 +69,19 @@ def test_seed_demo_inserts_two_ready_recordings(cli_container: Container) -> Non
         for chk in m_chunks:
             vec = unpack_embedding(chk["embedding"])
             assert len(vec) == 384
+            # Chunking rule: one line per segment, labelled by speaker label, never by name.
+            for line in str(chk["text"]).splitlines():
+                assert line.startswith(("Speaker A: ", "Speaker B: "))
+                assert "Sarah" not in line
+                assert "Alex" not in line
 
         # 2. Ready note
         note = rows[0] if rows[0]["kind"] == "note" else rows[1]
         assert note["status"] == "ready"
         assert note["waveform_peaks"] is not None
         note_peaks = cast(list[float], json.loads(note["waveform_peaks"]))
-        assert isinstance(note_peaks, list)
-        assert len(note_peaks) > 0
+        assert len(note_peaks) == 96
+        assert all(0.0 <= p <= 1.0 for p in note_peaks)
 
         # Note structure: 3 key points, clean note
         assert note["analysis"] is not None
@@ -85,6 +90,9 @@ def test_seed_demo_inserts_two_ready_recordings(cli_container: Container) -> Non
         for kp in note_content.key_points:
             assert len(kp.citations) >= 1
         assert len(note_content.clean_text) > 0
+        # Clean text is tidy prose, not markdown.
+        for line in note_content.clean_text.splitlines():
+            assert not line.lstrip().startswith(("#", "-"))
 
         # Note chunks with embeddings
         n_chunks = conn.execute("SELECT * FROM chunks WHERE recording_id = ?", (note["id"],)).fetchall()

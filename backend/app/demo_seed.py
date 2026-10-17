@@ -1,6 +1,7 @@
 """Seed realistic demo recordings for mobile development."""
 
 import json
+import math
 import sqlite3
 
 from ulid import ULID
@@ -18,6 +19,17 @@ from app.domain.analysis import (
 from app.domain.tags import normalize_tag
 from app.ids import new_id
 from app.rag.vectors import pack_embedding
+
+# Data-API contract: waveform_peaks is a JSON list of 96 floats in 0..1.
+_PEAK_COUNT = 96
+
+
+def _demo_peaks(phase: float) -> list[float]:
+    """Speech-like peaks: a slow envelope modulated by faster syllable bursts, always within 0..1."""
+    return [
+        round(0.08 + 0.84 * (0.5 + 0.5 * math.sin(i * 0.21 + phase)) * abs(math.sin(i * 0.9 + phase)), 3)
+        for i in range(_PEAK_COUNT)
+    ]
 
 
 class DemoSeedError(RuntimeError):
@@ -45,8 +57,8 @@ def _seed_demo_meeting(conn: sqlite3.Connection, container: Container) -> str:
     spk_b_id = new_id("spk")
 
     segment_data: list[tuple[int, int, str, str]] = [
-        (0, 7500, spk_a_id, "Good morning Alex. Let's do a quick sync on the project status."),
-        (8000, 16500, spk_b_id, "Morning Sarah. The mobile shell and tab navigation are in place."),
+        (0, 7500, spk_a_id, "Good morning. Let's do a quick sync on the project status."),
+        (8000, 16500, spk_b_id, "Morning. The mobile shell and tab navigation are in place."),
         (17000, 26000, spk_a_id, "Great. Did we decide on the database schema for chunks and vectors?"),
         (26500, 37000, spk_b_id, "Yes, we agreed to store sqlite-vec embeddings as little-endian float32 blobs."),
         (37500, 47000, spk_a_id, "Perfect, let's make that official. Who will handle the indexing pipeline?"),
@@ -80,7 +92,7 @@ def _seed_demo_meeting(conn: sqlite3.Connection, container: Container) -> str:
         ],
     )
 
-    peaks = [round(0.1 + 0.8 * abs((i % 10 - 5) / 5.0), 3) for i in range(50)]
+    peaks = _demo_peaks(0.0)
     conn.execute(
         """INSERT INTO recordings (
             id, kind, client_upload_id, status, claimed, title, created_at,
@@ -110,9 +122,14 @@ def _seed_demo_meeting(conn: sqlite3.Connection, container: Container) -> str:
 
     _insert_tags(conn, meeting_id, ["standup", "planning"])
 
-    # Chunks
-    chunk1_text = " ".join(s[3] for s in segment_data[0:4])
-    chunk2_text = " ".join(s[3] for s in segment_data[4:8])
+    # Chunking rule (processing spec section 5): one line per segment, labelled by speaker label, never by name.
+    labels = {spk_a_id: "A", spk_b_id: "B"}
+
+    def chunk_text(segments: list[tuple[int, int, str, str]]) -> str:
+        return "\n".join(f"Speaker {labels[spk_id]}: {text}" for _, _, spk_id, text in segments)
+
+    chunk1_text = chunk_text(segment_data[0:4])
+    chunk2_text = chunk_text(segment_data[4:8])
     vectors = container.embedder.embed_passages([chunk1_text, chunk2_text])
 
     for chk_text, first_idx, last_idx, start_ms, end_ms, vec in [
@@ -164,14 +181,13 @@ def _seed_demo_note(conn: sqlite3.Connection, container: Container) -> str:
             ),
         ],
         clean_text=(
-            "# Architecture Ideas for Offline Search\n\n"
-            "- Store vector indexes in SQLite using sqlite-vec.\n"
-            "- Chunk boundaries align with speaker turns or token limits.\n"
-            "- Cosine distance provides robust short-query recall."
+            "We should keep all vector indexes in SQLite, using sqlite-vec, for simplicity. "
+            "Chunk boundaries should break at speaker turns when possible, or otherwise at token limits. "
+            "Cosine distance with normalized embeddings gives the best recall across short queries."
         ),
     )
 
-    peaks = [round(0.1 + 0.6 * ((i % 8) / 8.0), 3) for i in range(40)]
+    peaks = _demo_peaks(1.3)
     conn.execute(
         """INSERT INTO recordings (
             id, kind, client_upload_id, status, claimed, title, created_at,
