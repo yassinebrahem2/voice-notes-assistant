@@ -22,10 +22,11 @@ import { ScopeBar } from './ScopeBar';
 import { isActive, type RunView } from './runMachine';
 import { Starters } from './Starters';
 import { StatusLine } from './StatusLine';
+import { useReduceMotion } from './useReduceMotion';
 import { useHasReadyRecording, useTags } from './useChatData';
 import { useChatSession } from './useChatSession';
 
-const NO_RECORDING =
+export const NO_RECORDING =
   'Chat answers from your recordings. Record something first.';
 
 function Pill({ label, onPress }: { label: string; onPress: () => void }) {
@@ -45,8 +46,14 @@ function Pill({ label, onPress }: { label: string; onPress: () => void }) {
 
 function TurnResult({ run, onRetry }: { run: RunView; onRetry: () => void }) {
   if (isActive(run)) return <StatusLine steps={run.steps} />;
-  if (run.phase === 'done' && run.message)
-    return <AnswerText message={run.message} />;
+  if (run.phase === 'done') {
+    // A done run is final, so Retry would only resume polling it.
+    return run.message ? (
+      <AnswerText message={run.message} />
+    ) : (
+      <Text variant="bodyMedium">No answer came back</Text>
+    );
+  }
   const text =
     run.phase === 'interrupted'
       ? 'Interrupted'
@@ -67,6 +74,7 @@ export function ChatScreen() {
   const tags = useTags();
   const hasReady = useHasReadyRecording();
   const [draft, setDraft] = useState('');
+  const reduceMotion = useReduceMotion();
   const scroll = useRef<ScrollViewInstance>(null);
 
   const running = chat.turns.some((turn) => isActive(turn.run));
@@ -106,7 +114,9 @@ export function ChatScreen() {
           style={styles.flex}
           contentContainerStyle={styles.turns}
           keyboardShouldPersistTaps="handled"
-          onContentSizeChange={() => scroll.current?.scrollToEnd()}
+          onContentSizeChange={() =>
+            scroll.current?.scrollToEnd({ animated: reduceMotion === false })
+          }
         >
           {chat.turns.length === 0 && hasReady === false && (
             <View style={styles.empty}>

@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { fireEvent, render, screen } from '@testing-library/react-native';
+import { act, fireEvent, render, screen } from '@testing-library/react-native';
 import { router } from 'expo-router';
 import { PaperProvider } from 'react-native-paper';
 
@@ -7,7 +7,7 @@ import { apiFetch } from '../api/client';
 import type { Schemas } from '../api/errors';
 import { openFanOut } from '../recording/fanOutStore';
 import { paperTheme } from '../theme/paperTheme';
-import { ChatScreen } from './ChatScreen';
+import { ChatScreen, NO_RECORDING } from './ChatScreen';
 import type { RunView } from './runMachine';
 import { useChatSession } from './useChatSession';
 
@@ -180,4 +180,43 @@ test('Send sends the typed text and New chat starts over', async () => {
   expect(ask).toHaveBeenCalledWith('Hello there');
   await fireEvent.press(screen.getByRole('button', { name: 'New chat' }));
   expect(newChat).toHaveBeenCalledTimes(1);
+});
+
+test('starters replace the record prompt once a recording becomes ready', async () => {
+  jest.useFakeTimers();
+  try {
+    let status = 'transcribing';
+    fetchMock.mockImplementation(async (path: string) =>
+      path === 'tags' ? [] : [{ status }],
+    );
+    await setup();
+    expect(await screen.findByText(NO_RECORDING)).toBeTruthy();
+    status = 'ready';
+    await act(() => jest.advanceTimersByTimeAsync(5_000));
+    expect(await screen.findAllByTestId('starter')).not.toHaveLength(0);
+    expect(screen.queryByText(NO_RECORDING)).toBeNull();
+  } finally {
+    jest.useRealTimers();
+  }
+});
+
+test('an unreachable server is not polled forever', async () => {
+  jest.useFakeTimers();
+  try {
+    fetchMock.mockRejectedValue(new Error('offline'));
+    await setup();
+    await act(() => jest.advanceTimersByTimeAsync(1_000));
+    const calls = fetchMock.mock.calls.length;
+    await act(() => jest.advanceTimersByTimeAsync(30_000));
+    expect(fetchMock).toHaveBeenCalledTimes(calls);
+  } finally {
+    jest.useRealTimers();
+  }
+});
+
+test('a done run without a message shows a label and no Retry', async () => {
+  session([{ question: 'Q?', run: { phase: 'done', steps: [] } }]);
+  await setup();
+  expect(await screen.findByText('No answer came back')).toBeTruthy();
+  expect(screen.queryByRole('button', { name: 'Retry' })).toBeNull();
 });

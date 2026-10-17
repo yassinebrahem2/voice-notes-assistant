@@ -1,32 +1,13 @@
 import { useEffect, useState } from 'react';
-import { AccessibilityInfo, Animated, StyleSheet, View } from 'react-native';
+import { Animated, StyleSheet, View } from 'react-native';
 import { Text, useTheme } from 'react-native-paper';
 
 import { motion } from '../theme/motion';
 import type { TapeTheme } from '../theme/paperTheme';
 import { radius, spacing } from '../theme/tokens';
+import { useReduceMotion } from './useReduceMotion';
 
 const DOTS = 3;
-
-// null until the system setting is known, so the dots never animate for a user who turned motion off.
-function useReduceMotion(): boolean | null {
-  const [reduce, setReduce] = useState<boolean | null>(null);
-  useEffect(() => {
-    let active = true;
-    void AccessibilityInfo.isReduceMotionEnabled().then((enabled) => {
-      if (active) setReduce(enabled);
-    });
-    const subscription = AccessibilityInfo.addEventListener(
-      'reduceMotionChanged',
-      setReduce,
-    );
-    return () => {
-      active = false;
-      subscription.remove();
-    };
-  }, []);
-  return reduce;
-}
 
 export function StatusLine({ steps }: { steps: string[] }) {
   const { tape } = useTheme<TapeTheme>();
