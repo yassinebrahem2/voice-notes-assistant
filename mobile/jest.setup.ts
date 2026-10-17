@@ -1,6 +1,9 @@
+import mockAsyncStorage from '@react-native-async-storage/async-storage/jest/async-storage-mock';
 import { setUpTests } from 'react-native-reanimated';
 
 setUpTests();
+
+jest.mock('@react-native-async-storage/async-storage', () => mockAsyncStorage);
 
 // Under Jest (Node.js), stub ExpoAudio native module so expo-audio can load
 const g = globalThis as unknown as {

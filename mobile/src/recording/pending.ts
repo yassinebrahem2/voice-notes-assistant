@@ -1,3 +1,4 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { randomUUID } from 'expo-crypto';
 import { Directory, File, Paths } from 'expo-file-system';
 
@@ -13,27 +14,9 @@ export interface PendingUpload {
 
 const PENDING_STORAGE_KEY = 'pending_uploads';
 
-type AsyncStorageType = {
-  getItem: (key: string) => Promise<string | null>;
-  setItem: (key: string, value: string) => Promise<void>;
-};
-
-let storageInstance: AsyncStorageType | null = null;
-
-function getStorage(): AsyncStorageType {
-  if (!storageInstance) {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const mod = require('@react-native-async-storage/async-storage') as {
-      default: AsyncStorageType;
-    };
-    storageInstance = mod.default;
-  }
-  return storageInstance;
-}
-
 async function getStoredList(): Promise<PendingUpload[]> {
   try {
-    const raw = await getStorage().getItem(PENDING_STORAGE_KEY);
+    const raw = await AsyncStorage.getItem(PENDING_STORAGE_KEY);
     if (!raw) return [];
     const parsed = JSON.parse(raw);
     return Array.isArray(parsed) ? parsed : [];
@@ -43,7 +26,7 @@ async function getStoredList(): Promise<PendingUpload[]> {
 }
 
 async function saveStoredList(items: PendingUpload[]): Promise<void> {
-  await getStorage().setItem(PENDING_STORAGE_KEY, JSON.stringify(items));
+  await AsyncStorage.setItem(PENDING_STORAGE_KEY, JSON.stringify(items));
 }
 
 export async function enqueue(

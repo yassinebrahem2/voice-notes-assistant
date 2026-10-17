@@ -1,14 +1,7 @@
 import { ApiError, parseApiError, type Schemas } from '../api/errors';
+import { getServerUrl } from '../settings/serverUrl';
 import type { RecordingKind } from './fanOut';
 import { enqueue, removePending, type PendingUpload } from './pending';
-
-async function fetchServerUrl(): Promise<string | null> {
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const mod = require('../settings/serverUrl') as {
-    getServerUrl: () => Promise<string | null>;
-  };
-  return mod.getServerUrl();
-}
 
 export async function uploadPending(
   item: PendingUpload,
@@ -17,7 +10,7 @@ export async function uploadPending(
 ): Promise<Schemas['RecordingOut']> {
   let serverUrl: string | null;
   try {
-    serverUrl = await fetchServerUrl();
+    serverUrl = await getServerUrl();
   } catch {
     throw new ApiError(
       0,

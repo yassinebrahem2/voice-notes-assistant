@@ -29,8 +29,40 @@ jest.mock('expo-font', () => ({
 }));
 
 jest.mock('expo-router', () => ({
-  router: { back: jest.fn(), push: jest.fn() },
+  router: { back: jest.fn(), push: jest.fn(), replace: jest.fn() },
   useLocalSearchParams: jest.fn(() => ({ kind: 'meeting' })),
+}));
+
+jest.mock('./pending', () => ({
+  enqueue: jest.fn(() =>
+    Promise.resolve({
+      clientUploadId: 'test-uuid',
+      kind: 'meeting',
+      path: 'file:///mock/path.m4a',
+      createdAt: '2026-10-17T00:00:00Z',
+      durationMs: 500,
+    }),
+  ),
+  removePending: jest.fn(() => Promise.resolve()),
+}));
+
+jest.mock('./upload', () => ({
+  uploadPending: jest.fn(() =>
+    Promise.resolve({
+      id: 'rec_test_1',
+      kind: 'meeting',
+      status: 'uploaded',
+      title: null,
+      created_at: '2026-10-17T00:00:00Z',
+      duration_ms: 500,
+      processing: false,
+      error_code: null,
+      error_message: null,
+      failed_step: null,
+      tags: [],
+      waveform_peaks: null,
+    }),
+  ),
 }));
 
 jest.mock('expo-haptics', () => ({
@@ -388,6 +420,11 @@ describe('RecordScreen', () => {
       Haptics.ImpactFeedbackStyle.Medium,
     );
     expect(screen.getByTestId('upload-progress-ring')).toBeTruthy();
+
+    await act(async () => {
+      jest.advanceTimersByTime(500);
+    });
+    expect(router.replace).toHaveBeenCalledWith('/recording/rec_test_1');
     unmount();
   });
 
