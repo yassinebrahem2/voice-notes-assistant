@@ -57,6 +57,42 @@ class SleepingChatModel(BaseChatModel):
         return "sleeping-chat-model"
 
 
+class CancellableSlowChatModel(BaseChatModel):
+    delay: float = 10.0
+    was_cancelled: bool = False
+
+    def _generate(
+        self,
+        messages: list[BaseMessage],
+        stop: list[str] | None = None,
+        run_manager: Any = None,
+        **kwargs: Any,
+    ) -> ChatResult:
+        time.sleep(self.delay)
+        return ChatResult(generations=[])
+
+    async def _agenerate(
+        self,
+        messages: list[BaseMessage],
+        stop: list[str] | None = None,
+        run_manager: Any = None,
+        **kwargs: Any,
+    ) -> ChatResult:
+        try:
+            await asyncio.sleep(self.delay)
+        except asyncio.CancelledError:
+            self.was_cancelled = True
+            raise
+        return ChatResult(generations=[])
+
+    def bind_tools(self, tools: Sequence[Any], **kwargs: Any) -> Self:
+        return self
+
+    @property
+    def _llm_type(self) -> str:
+        return "cancellable-slow-chat-model"
+
+
 class SlowScriptedModel(BaseChatModel):
     delay: float = 0.5
     messages: list[AIMessage]
@@ -292,6 +328,45 @@ def test_deadline_times_out(container: Container, monkeypatch: pytest.MonkeyPatc
             "code": "timed_out",
             "message": "That took too long.",
         }
+
+
+def test_deadline_times_out_and_cancels_model(container: Container, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(container.settings, "chat_deadline_s", 0.2)
+
+    model = CancellableSlowChatModel(delay=10.0)
+
+    def fake_role_models(_reg: object, _role: object) -> list[BaseChatModel]:
+        return [model]
+
+    monkeypatch.setattr("app.llm.factory.role_models", fake_role_models)
+
+    with TestClient(create_app(container)) as client:
+        create_res = client.post("/api/v1/chats")
+        chat_id = create_res.json()["id"]
+
+        ask_res = client.post(
+            f"/api/v1/chats/{chat_id}/messages",
+            json={"text": "Wait forever", "scope": "both"},
+        )
+        run_id = ask_res.json()["run_id"]
+
+        run_data: dict[str, Any] | None = None
+        for _ in range(100):
+            res = client.get(f"/api/v1/chats/{chat_id}/runs/{run_id}")
+            assert res.status_code == 200
+            data: dict[str, Any] = res.json()
+            if data["status"] == "failed":
+                run_data = data
+                break
+            time.sleep(0.05)
+
+        assert isinstance(run_data, dict)
+        assert run_data["status"] == "failed"
+        assert run_data["error"] == {
+            "code": "timed_out",
+            "message": "That took too long.",
+        }
+        assert model.was_cancelled is True
 
 
 def test_unknown_run_404_then_retry_reuses_message(container: Container, monkeypatch: pytest.MonkeyPatch) -> None:

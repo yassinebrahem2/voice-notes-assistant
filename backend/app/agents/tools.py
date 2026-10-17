@@ -261,7 +261,7 @@ def find_recordings(
 
 
 @tool
-def summarize(
+async def summarize(
     sources: list[str],
     focus: str | None = None,
     *,
@@ -312,7 +312,13 @@ def summarize(
 
         # Several recordings: merge using chat_merge agent
         per_recording_blocks: list[str] = [
-            format_merge_recording_block(row, rec_id_to_label[str(row["id"])], conn) for row in rec_rows
+            format_merge_recording_block(
+                row,
+                rec_id_to_label[str(row["id"])],
+                conn,
+                runtime.context.sources,
+            )
+            for row in rec_rows
         ]
 
         merge_body = escape_untrusted("\n\n".join(per_recording_blocks))
@@ -333,7 +339,7 @@ def summarize(
 
         agent_res = cast(
             dict[str, Any],
-            agent.invoke({"messages": [HumanMessage(content=user_prompt)]}),  # pyright: ignore[reportUnknownMemberType]
+            await agent.ainvoke({"messages": [HumanMessage(content=user_prompt)]}),  # pyright: ignore[reportUnknownMemberType]
         )
         structured: ChatSummary | None = agent_res.get("structured_response")
         if structured is None:

@@ -14,7 +14,7 @@ from app.agents.sources import SourceRegistry
 from app.agents.tools import find_recordings, summarize
 from app.container import Container
 from app.db.connection import connect
-from app.domain.analysis import AnalysisActionItem, AnalysisItem, MeetingSummary
+from app.domain.analysis import AnalysisActionItem, AnalysisItem, Citation, MeetingSummary
 from app.rag.retrieve import Hit
 from tests.agents.fake_models import ScriptedChatModel
 from tests.seed import seed_chunk, seed_recording
@@ -202,8 +202,8 @@ def test_summarize_one_recording_no_model_call(container: Container, monkeypatch
         store=None,
     )
 
-    summarize_fn = cast(Any, summarize).func
-    result = str(summarize_fn(sources=[r1], runtime=runtime))
+    summarize_coro = cast(Any, summarize).coroutine
+    result = str(asyncio.run(summarize_coro(sources=[r1], runtime=runtime)))
 
     assert model_called is False
     assert "Summarizing 1 recording…" in steps
@@ -261,8 +261,8 @@ def test_summarize_accepts_p_label(container: Container) -> None:
         store=None,
     )
 
-    summarize_fn = cast(Any, summarize).func
-    result = str(summarize_fn(sources=[p1], runtime=runtime))
+    summarize_coro = cast(Any, summarize).coroutine
+    result = str(asyncio.run(summarize_coro(sources=[p1], runtime=runtime)))
     assert "<sources>" in result
     assert "Pick tickets 1-5." in result
 
@@ -297,8 +297,8 @@ def test_summarize_not_ready(container: Container) -> None:
         store=None,
     )
 
-    summarize_fn = cast(Any, summarize).func
-    result = str(summarize_fn(sources=[r1], runtime=runtime))
+    summarize_coro = cast(Any, summarize).coroutine
+    result = str(asyncio.run(summarize_coro(sources=[r1], runtime=runtime)))
     assert "not ready yet" in result.lower()
 
 
@@ -327,12 +327,12 @@ def test_summarize_several_drops_unknown_labels(container: Container, monkeypatc
     r1 = registry.add_recording({"recording_id": rec1, "title": "Sync 1", "start_ms": 0})
     r2 = registry.add_recording({"recording_id": rec2, "title": "Sync 2", "start_ms": 0})
 
-    # Model returns ChatSummary with a decision citing [r1, "R99"] and another citing only ["R99"]
+    # Model returns ChatSummary with a decision citing ["P1", "P99"] and another citing only ["P99"]
     merged_summary = ChatSummary(
         overview="Merged syncs",
         decisions=[
-            ChatSummaryItem(text="Valid decision", sources=[r1, "R99"]),
-            ChatSummaryItem(text="Invalid decision", sources=["R99"]),
+            ChatSummaryItem(text="Valid decision", sources=["P1", "P99"]),
+            ChatSummaryItem(text="Invalid decision", sources=["P99"]),
         ],
         action_items=[],
         open_questions=[],
@@ -374,12 +374,115 @@ def test_summarize_several_drops_unknown_labels(container: Container, monkeypatc
         store=None,
     )
 
-    summarize_fn = cast(Any, summarize).func
-    result = str(summarize_fn(sources=[r1, r2], runtime=runtime))
+    summarize_coro = cast(Any, summarize).coroutine
+    result = str(asyncio.run(summarize_coro(sources=[r1, r2], runtime=runtime)))
     assert "Summarizing 2 recordings…" in steps
     assert "Valid decision" in result
+    assert "[P1]" in result
     assert "Invalid decision" not in result
-    assert "R99" not in result
+    assert "P99" not in result
+
+
+def test_summarize_several_merged_item_cites_stored_decision(
+    container: Container,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    conn = connect(container.db_path)
+    try:
+        citation = Citation(
+            recording_id="placeholder",
+            segment_id="seg_rec1_dec",
+            start_ms=45000,
+        )
+        m1 = MeetingSummary(
+            overview="Sync 1 overview",
+            decisions=[AnalysisItem(text="Deploy on Friday", citations=[citation])],
+            action_items=[],
+            open_questions=[],
+        )
+        rec1 = seed_recording(
+            conn,
+            kind="meeting",
+            title="Sync 1",
+            analysis=m1,
+            segments=[(0, 5000, None, "Intro"), (40000, 50000, None, "We deploy on Friday")],
+        )
+
+        m2 = MeetingSummary(
+            overview="Sync 2 overview",
+            decisions=[AnalysisItem(text="Code freeze on Thursday", citations=[])],
+            action_items=[],
+            open_questions=[],
+        )
+        rec2 = seed_recording(
+            conn,
+            kind="meeting",
+            title="Sync 2",
+            analysis=m2,
+            segments=[(0, 5000, None, "Intro 2")],
+        )
+    finally:
+        conn.close()
+
+    registry = SourceRegistry()
+    r1 = registry.add_recording({"recording_id": rec1, "title": "Sync 1", "start_ms": 0})
+    r2 = registry.add_recording({"recording_id": rec2, "title": "Sync 2", "start_ms": 0})
+
+    # The merge model synthesizes a decision citing the first decision's passage label [P1]
+    merged_summary = ChatSummary(
+        overview="Merged release syncs",
+        decisions=[
+            ChatSummaryItem(text="Merged Deploy on Friday", sources=["P1"]),
+        ],
+        action_items=[],
+        open_questions=[],
+    )
+
+    scripted_model = ScriptedChatModel(
+        messages=iter(
+            [
+                AIMessage(
+                    content="",
+                    tool_calls=[{"name": "ChatSummary", "args": merged_summary.model_dump(), "id": "call_merge"}],
+                )
+            ]
+        )
+    )
+
+    def fake_role_models(_reg: object, _role: object) -> list[ScriptedChatModel]:
+        return [scripted_model]
+
+    monkeypatch.setattr("app.llm.factory.role_models", fake_role_models)
+
+    steps: list[str] = []
+    ctx = ChatContext(
+        db_path=container.db_path,
+        embedder=container.embedder,
+        settings=container.settings,
+        models=container.models,
+        scope="both",
+        tag_ids=[],
+        today=date(2026, 10, 17),
+        sources=registry,
+    )
+    runtime: ToolRuntime[ChatContext, dict[str, Any]] = ToolRuntime(
+        state={"messages": []},
+        context=ctx,
+        config={},
+        stream_writer=steps.append,
+        tool_call_id="call_test",
+        store=None,
+    )
+
+    summarize_coro = cast(Any, summarize).coroutine
+    result = str(asyncio.run(summarize_coro(sources=[r1, r2], runtime=runtime)))
+
+    assert "[P1] Merged Deploy on Friday" in result
+    resolved = registry.resolve("P1")
+    assert resolved is not None
+    assert resolved.recording_id == rec1
+    assert resolved.segment_id == "seg_rec1_dec"
+    assert resolved.start_ms == 45000
 
 
 def test_find_recordings_filters_and_formats(container: Container) -> None:
@@ -550,8 +653,8 @@ def test_summarize_unknown_source_label_returns_unknown_error(container: Contain
         store=None,
     )
 
-    summarize_fn = cast(Any, summarize).func
-    result = str(summarize_fn(sources=["P99"], runtime=runtime))
+    summarize_coro = cast(Any, summarize).coroutine
+    result = str(asyncio.run(summarize_coro(sources=["P99"], runtime=runtime)))
     assert result == "Unknown source label P99."
 
 

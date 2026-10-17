@@ -173,10 +173,13 @@ def format_merge_recording_block(
     row: Any,
     label: str,
     conn: sqlite3.Connection,
+    sources: SourceRegistry,
 ) -> str:
     """Format a single recording's analysis block for multi-recording merge prompt."""
     rec_id = str(row["id"])
     title = str(row["title"])
+    created_at = str(row["created_at"])
+    default_seg_id = str(row["first_segment_id"]) if row["first_segment_id"] is not None else ""
     id_to_display = get_speaker_display_map(conn, rec_id)
     raw_analysis = str(row["analysis"])
 
@@ -185,15 +188,70 @@ def format_merge_recording_block(
         ms = render_analysis(MeetingSummary.model_validate_json(raw_analysis), id_to_display)
         rec_block_lines.append(f"Overview: {ms.overview}")
         if ms.decisions:
-            rec_block_lines.append("Decisions: " + "; ".join(d.text for d in ms.decisions))
+            rec_block_lines.append("Decisions:")
+            for item in ms.decisions:
+                rec_block_lines.append(
+                    format_item_passage(
+                        sources,
+                        item,
+                        recording_id=rec_id,
+                        recording_title=title,
+                        kind="meeting",
+                        created_at=created_at,
+                        default_segment_id=default_seg_id,
+                    )
+                )
         if ms.action_items:
-            rec_block_lines.append("Action items: " + "; ".join(a.text for a in ms.action_items))
+            rec_block_lines.append("Action items:")
+            for a_item in ms.action_items:
+                owner_info = (
+                    f" (Owner: {id_to_display.get(a_item.owner_speaker_id, a_item.owner_speaker_id)})"
+                    if a_item.owner_speaker_id
+                    else ""
+                )
+                due_info = f" (Due: {a_item.due})" if a_item.due else ""
+                rec_block_lines.append(
+                    format_item_passage(
+                        sources,
+                        a_item,
+                        recording_id=rec_id,
+                        recording_title=title,
+                        kind="meeting",
+                        created_at=created_at,
+                        default_segment_id=default_seg_id,
+                        suffix=f"{owner_info}{due_info}",
+                    )
+                )
         if ms.open_questions:
-            rec_block_lines.append("Open questions: " + "; ".join(q.text for q in ms.open_questions))
+            rec_block_lines.append("Open questions:")
+            for q_item in ms.open_questions:
+                rec_block_lines.append(
+                    format_item_passage(
+                        sources,
+                        q_item,
+                        recording_id=rec_id,
+                        recording_title=title,
+                        kind="meeting",
+                        created_at=created_at,
+                        default_segment_id=default_seg_id,
+                    )
+                )
     else:
         nc = render_analysis(NoteContent.model_validate_json(raw_analysis), id_to_display)
         if nc.key_points:
-            rec_block_lines.append("Key points: " + "; ".join(k.text for k in nc.key_points))
+            rec_block_lines.append("Key points:")
+            for k_item in nc.key_points:
+                rec_block_lines.append(
+                    format_item_passage(
+                        sources,
+                        k_item,
+                        recording_id=rec_id,
+                        recording_title=title,
+                        kind="note",
+                        created_at=created_at,
+                        default_segment_id=default_seg_id,
+                    )
+                )
         if nc.clean_text:
             rec_block_lines.append(f"Clean text: {nc.clean_text}")
 
