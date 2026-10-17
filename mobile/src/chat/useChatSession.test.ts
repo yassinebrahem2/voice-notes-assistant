@@ -329,9 +329,46 @@ test('retry with no chat id creates the chat and asks', async () => {
   expect(count('chats/chat_1')).toBe(0);
 });
 
-test('retry after a server error response asks again without looking in the chat', async () => {
+test('retry after a 500 internal_error whose question is stored adopts the message id and polls it', async () => {
   lostRunServer({
     askError: new ApiError(500, 'internal_error', 'boom'),
+    stored: [{ id: 'msg_u1', text: 'Q' }],
+  });
+  const { result } = await renderHook(() => useChatSession());
+  await act(async () => {
+    await result.current.ask('Q');
+  });
+  expect(result.current.turns[0]?.run.phase).toBe('failed');
+  await act(async () => {
+    await result.current.retry(0);
+  });
+  expect(count('chats/chat_1/messages')).toBe(1);
+  await act(() => jest.advanceTimersByTimeAsync(500));
+  expect(paths()).toContain('chats/chat_1/runs/msg_u1');
+  expect(result.current.turns[0]?.run.phase).toBe('done');
+});
+
+test('retry after a 500 internal_error whose question is not stored calls getChat then asks once', async () => {
+  lostRunServer({
+    askError: new ApiError(500, 'internal_error', 'boom'),
+    stored: [],
+  });
+  const { result } = await renderHook(() => useChatSession());
+  await act(async () => {
+    await result.current.ask('Q');
+  });
+  await act(async () => {
+    await result.current.retry(0);
+  });
+  expect(count('chats/chat_1')).toBe(1);
+  expect(count('chats/chat_1/messages')).toBe(2);
+  await act(() => jest.advanceTimersByTimeAsync(500));
+  expect(result.current.turns[0]?.run.phase).toBe('done');
+});
+
+test('retry after a 422 validation_error asks again without calling getChat', async () => {
+  lostRunServer({
+    askError: new ApiError(422, 'validation_error', 'invalid query'),
     stored: [{ id: 'msg_u1', text: 'Q' }],
   });
   const { result } = await renderHook(() => useChatSession());

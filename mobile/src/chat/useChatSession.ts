@@ -115,14 +115,15 @@ async function ensureChat(): Promise<string> {
   return id;
 }
 
-// Only a lost answer (or a 2xx whose body was unreadable) leaves the question possibly
-// stored; an error response from the server means it was not.
+// A network drop, timeout, 5xx or unreadable 2xx leaves the question possibly stored
+// (the backend stores the user message before starting the run); only a 4xx means the
+// server rejected it without storing.
 function unsentKind(error: unknown): Unsent {
   if (!(error instanceof ApiError)) return 'rejected';
   const lost = error.code === 'network_error' || error.code === 'timeout';
-  return lost || (error.status >= 200 && error.status < 300)
-    ? 'uncertain'
-    : 'rejected';
+  const is5xx = error.status >= 500 && error.status < 600;
+  const is2xx = error.status >= 200 && error.status < 300;
+  return lost || is5xx || is2xx ? 'uncertain' : 'rejected';
 }
 
 async function send(index: number, question: string): Promise<void> {
