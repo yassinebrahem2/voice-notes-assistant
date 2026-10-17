@@ -3,12 +3,8 @@
 import logging
 from typing import Any, TypeVar, cast
 
-from langchain.agents import create_agent  # pyright: ignore[reportUnknownVariableType]
-from langchain.agents.middleware import ModelCallLimitMiddleware
-from langchain.agents.structured_output import ToolStrategy
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import HumanMessage
-from langgraph.graph.state import CompiledStateGraph  # pyright: ignore[reportMissingTypeStubs]
 from pydantic import BaseModel
 
 from app.agents.prompts import load_prompt
@@ -20,8 +16,7 @@ from app.agents.schemas import (
 )
 from app.agents.transcript_input import escape_untrusted, render_transcript
 from app.config.models_registry import LlmEntry, ModelsRegistry
-from app.llm.factory import chat_model
-from app.llm.force_output import ForceOutputToolMiddleware
+from app.llm.factory import build_entry_agent, chat_model
 from app.processing.protocols import AnalysisRequest, TranscriptLine
 
 logger = logging.getLogger(__name__)
@@ -50,28 +45,6 @@ class SummarizerAnalyzer:
         """Build the chat model for an entry. Hook for test injection."""
         return chat_model(entry, self.registry)
 
-    def _build_entry_agent(
-        self,
-        entry: LlmEntry,
-        *,
-        name: str,
-        system_prompt: str,
-        schema: type[BaseModel],
-    ) -> CompiledStateGraph[Any, Any, Any, Any]:
-        model = self.models_for_entry(entry)
-        middleware = [
-            ForceOutputToolMiddleware(from_turn=1),
-            ModelCallLimitMiddleware(run_limit=2, exit_behavior="end"),
-        ]
-        return create_agent(
-            model=model,
-            tools=[],
-            system_prompt=system_prompt,
-            response_format=ToolStrategy(schema),
-            name=name,
-            middleware=middleware,
-        )
-
     def _run_entry_agent(
         self,
         entry: LlmEntry,
@@ -81,8 +54,8 @@ class SummarizerAnalyzer:
         schema: type[T],
         user_content: str,
     ) -> T:
-        agent = self._build_entry_agent(
-            entry,
+        agent = build_entry_agent(
+            self.models_for_entry(entry),
             name=name,
             system_prompt=system_prompt,
             schema=schema,

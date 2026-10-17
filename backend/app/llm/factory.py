@@ -116,19 +116,17 @@ def build_agent(
 
 
 def build_entry_agent(
-    entry: LlmEntry,
-    registry: ModelsRegistry,
+    model: BaseChatModel,
     *,
     name: str,
     system_prompt: str,
     schema: type[BaseModel],
 ) -> CompiledStateGraph[Any, Any, Any, Any]:
-    """Build a single-model agent without fallback for a specific entry.
+    """Build a single-model agent without fallback for a provided chat model.
 
-    Used by the Summarizer's failover walk. Uses ForceOutputToolMiddleware(from_turn=1)
+    Used by the Summarizer's failover walk and the smoke test. Uses ForceOutputToolMiddleware(from_turn=1)
     and ModelCallLimitMiddleware(run_limit=2, exit_behavior="end").
     """
-    model = chat_model(entry, registry)
     middleware = [
         ForceOutputToolMiddleware(from_turn=1),
         ModelCallLimitMiddleware(run_limit=2, exit_behavior="end"),

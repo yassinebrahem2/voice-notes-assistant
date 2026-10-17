@@ -383,8 +383,7 @@ def test_force_output_counts_from_state_not_instance(monkeypatch: pytest.MonkeyP
     assert scripted.bindings[3]["tool_names"] == ["ChatReply"]
 
 
-def test_build_entry_agent(monkeypatch: pytest.MonkeyPatch) -> None:
-    registry = make_test_registry()
+def test_build_entry_agent() -> None:
     scripted = ScriptedChatModel(
         messages=iter(
             [
@@ -402,14 +401,8 @@ def test_build_entry_agent(monkeypatch: pytest.MonkeyPatch) -> None:
         )
     )
 
-    def mock_chat_model(_entry: LlmEntry, _reg: ModelsRegistry) -> BaseChatModel:
-        return scripted
-
-    monkeypatch.setattr("app.llm.factory.chat_model", mock_chat_model)
-
     entry_agent = build_entry_agent(
-        registry.roles.llm[0],
-        registry,
+        scripted,
         name="entry_agent",
         system_prompt="Entry prompt",
         schema=ChatReply,

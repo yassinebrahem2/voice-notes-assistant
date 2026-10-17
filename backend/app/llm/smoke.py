@@ -303,7 +303,12 @@ def _check_analysis_entry(
     user_content = f"{render_transcript(SAMPLE_TRANSCRIPT_LINES)}\n\nExisting tags: none"
 
     try:
-        agent = build_entry_agent(entry, registry, name="summarizer_note", system_prompt=prompt, schema=NoteAnalysis)
+        agent = build_entry_agent(
+            chat_model(entry, registry),
+            name="smoke_summarizer",
+            system_prompt=prompt,
+            schema=NoteAnalysis,
+        )
         raw_output = cast(
             dict[str, Any],
             agent.invoke({"messages": [HumanMessage(content=user_content)]}),  # pyright: ignore[reportUnknownMemberType]
