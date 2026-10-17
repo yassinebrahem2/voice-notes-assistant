@@ -107,10 +107,12 @@ uv run python -m app.cli smoke-llm
 ```
 
 This verifies that:
-1. Configured models exist on each provider's `GET /models` endpoint.
-2. The orchestrator can invoke tool calls for role `llm`.
-3. The forced final turn succeeds with tool history and `tool_choice="required"`.
-4. The summarizer produces valid analysis for role `llm_analysis`.
+1. Configured models exist on each provider (via `GET /models` for OpenAI/Groq, or `genai_client.models.list()` for Google GenAI).
+2. For every distinct configured model across all roles:
+   - The orchestrator can invoke tool calls.
+   - The forced final turn succeeds with tool history and `tool_choice="required"`.
+   - The summarizer produces valid analysis.
+3. Cross-provider failover: for every ordered pair `(A, B)` of distinct configured models whose providers differ, an earlier tool call from model A's orchestrator turn can be passed in history to model B and returns without error.
 
 To calibrate the retrieval distance cutoff (`retrieval_max_distance` in `backend/app/config/settings.py`)
 against seeded demo recordings:

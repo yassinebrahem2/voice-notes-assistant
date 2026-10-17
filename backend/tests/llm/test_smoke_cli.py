@@ -35,11 +35,12 @@ def make_test_registry(
     return ModelsRegistry(
         providers={
             "groq": Provider(
+                client="openai",
                 base_url=url_adapter.validate_python("https://api.groq.com/openai/v1"),
                 key_env="GROQ_API_KEY",
             ),
             "gemini": Provider(
-                base_url=url_adapter.validate_python("https://generativelanguage.googleapis.com/v1beta/openai/"),
+                client="google_genai",
                 key_env="GEMINI_API_KEY",
             ),
         },
@@ -115,13 +116,15 @@ def test_smoke_provider_models_check_success_and_failure(container: Container, m
         req = httpx.Request("GET", url, headers=headers)
         if "groq" in url:
             return httpx.Response(200, request=req, json={"data": [{"id": "openai/gpt-oss-20b"}]})
-        if "generativelanguage" in url:
-            # Missing the configured gemini-flash-latest model
-            return httpx.Response(200, request=req, json={"data": [{"id": "other-model"}]})
         return httpx.Response(404, request=req)
 
     mock_client = MagicMock()
     mock_client.get.side_effect = fake_get
+
+    mock_genai_item = MagicMock()
+    mock_genai_item.name = "models/other-model"
+    mock_genai_client = MagicMock()
+    mock_genai_client.models.list.return_value = [mock_genai_item]
 
     out = io.StringIO()
 
@@ -136,7 +139,7 @@ def test_smoke_provider_models_check_success_and_failure(container: Container, m
     monkeypatch.setattr("app.llm.smoke._check_analysis_entry", mock_analysis_entry)
 
     test_container = dataclasses.replace(container, models=registry)
-    exit_code = run_smoke_tests(test_container, client=mock_client, out_stream=out)
+    exit_code = run_smoke_tests(test_container, client=mock_client, genai_client=mock_genai_client, out_stream=out)
     output = out.getvalue()
 
     assert exit_code == 1
@@ -233,14 +236,31 @@ def test_smoke_llm_entry_checks(container: Container, monkeypatch: pytest.Monkey
 
     orch_messages = [orch_tool_msg, orch_reply_msg]
     groq_call = 0
+    gemini_call = 0
+
+    mock_genai_item = MagicMock()
+    mock_genai_item.name = "models/gemini-flash-latest"
+    mock_genai_client = MagicMock()
+    mock_genai_client.models.list.return_value = [mock_genai_item]
 
     def fake_chat_model(entry: LlmEntry, reg: ModelsRegistry) -> ScriptedChatModel:
-        nonlocal groq_call
+        nonlocal groq_call, gemini_call
         if entry.provider == "gemini":
-            return ScriptedChatModel(messages=iter([analysis_msg]))
+            gemini_call += 1
+            if gemini_call == 1:
+                return ScriptedChatModel(messages=iter(orch_messages))
+            if gemini_call == 2:
+                return ScriptedChatModel(messages=iter([final_turn_msg]))
+            if gemini_call == 3:
+                return ScriptedChatModel(messages=iter([analysis_msg]))
+            return ScriptedChatModel(messages=iter([final_turn_msg]))
         groq_call += 1
         if groq_call == 1:
             return ScriptedChatModel(messages=iter(orch_messages))
+        if groq_call == 2:
+            return ScriptedChatModel(messages=iter([final_turn_msg]))
+        if groq_call == 3:
+            return ScriptedChatModel(messages=iter([analysis_msg]))
         return ScriptedChatModel(messages=iter([final_turn_msg]))
 
     monkeypatch.setattr("app.llm.smoke.chat_model", fake_chat_model)
@@ -248,7 +268,7 @@ def test_smoke_llm_entry_checks(container: Container, monkeypatch: pytest.Monkey
 
     out = io.StringIO()
     test_container = dataclasses.replace(container, models=registry)
-    exit_code = run_smoke_tests(test_container, client=mock_client, out_stream=out)
+    exit_code = run_smoke_tests(test_container, client=mock_client, genai_client=mock_genai_client, out_stream=out)
     output = out.getvalue()
 
     assert exit_code == 0
@@ -317,14 +337,31 @@ def test_smoke_orchestrator_check_passes_when_tool_called_then_reply(
 
     orch_messages = [orch_tool_msg, orch_reply_msg]
     groq_call = 0
+    gemini_call = 0
+
+    mock_genai_item = MagicMock()
+    mock_genai_item.name = "models/gemini-flash-latest"
+    mock_genai_client = MagicMock()
+    mock_genai_client.models.list.return_value = [mock_genai_item]
 
     def fake_chat_model(entry: LlmEntry, reg: ModelsRegistry) -> ScriptedChatModel:
-        nonlocal groq_call
+        nonlocal groq_call, gemini_call
         if entry.provider == "gemini":
-            return ScriptedChatModel(messages=iter([analysis_msg]))
+            gemini_call += 1
+            if gemini_call == 1:
+                return ScriptedChatModel(messages=iter(orch_messages))
+            if gemini_call == 2:
+                return ScriptedChatModel(messages=iter([final_turn_msg]))
+            if gemini_call == 3:
+                return ScriptedChatModel(messages=iter([analysis_msg]))
+            return ScriptedChatModel(messages=iter([final_turn_msg]))
         groq_call += 1
         if groq_call == 1:
             return ScriptedChatModel(messages=iter(orch_messages))
+        if groq_call == 2:
+            return ScriptedChatModel(messages=iter([final_turn_msg]))
+        if groq_call == 3:
+            return ScriptedChatModel(messages=iter([analysis_msg]))
         return ScriptedChatModel(messages=iter([final_turn_msg]))
 
     monkeypatch.setattr("app.llm.smoke.chat_model", fake_chat_model)
@@ -332,7 +369,7 @@ def test_smoke_orchestrator_check_passes_when_tool_called_then_reply(
 
     out = io.StringIO()
     test_container = dataclasses.replace(container, models=registry)
-    exit_code = run_smoke_tests(test_container, client=mock_client, out_stream=out)
+    exit_code = run_smoke_tests(test_container, client=mock_client, genai_client=mock_genai_client, out_stream=out)
     output = out.getvalue()
 
     assert exit_code == 0
@@ -401,12 +438,17 @@ def test_smoke_orchestrator_check_fails_when_no_tool_called(
             return ScriptedChatModel(messages=iter([direct_reply_msg]))
         return ScriptedChatModel(messages=iter([final_turn_msg]))
 
+    mock_genai_item = MagicMock()
+    mock_genai_item.name = "models/gemini-flash-latest"
+    mock_genai_client = MagicMock()
+    mock_genai_client.models.list.return_value = [mock_genai_item]
+
     monkeypatch.setattr("app.llm.smoke.chat_model", fake_chat_model)
     monkeypatch.setattr("app.llm.factory.chat_model", fake_chat_model)
 
     out = io.StringIO()
     test_container = dataclasses.replace(container, models=registry)
-    exit_code = run_smoke_tests(test_container, client=mock_client, out_stream=out)
+    exit_code = run_smoke_tests(test_container, client=mock_client, genai_client=mock_genai_client, out_stream=out)
     output = out.getvalue()
 
     assert exit_code == 1
@@ -425,6 +467,11 @@ def test_smoke_error_reporting_prints_status_and_message(container: Container, m
         json={"data": [{"id": "openai/gpt-oss-20b"}, {"id": "gemini-flash-latest"}]},
     )
 
+    mock_genai_item = MagicMock()
+    mock_genai_item.name = "models/gemini-flash-latest"
+    mock_genai_client = MagicMock()
+    mock_genai_client.models.list.return_value = [mock_genai_item]
+
     req = httpx.Request("POST", "https://api.groq.com/openai/v1/chat/completions")
     resp = httpx.Response(400, request=req, json={"error": {"message": "Invalid model specified"}})
     err = openai.BadRequestError(
@@ -441,7 +488,7 @@ def test_smoke_error_reporting_prints_status_and_message(container: Container, m
 
     out = io.StringIO()
     test_container = dataclasses.replace(container, models=registry)
-    exit_code = run_smoke_tests(test_container, client=mock_client, out_stream=out)
+    exit_code = run_smoke_tests(test_container, client=mock_client, genai_client=mock_genai_client, out_stream=out)
     output = out.getvalue()
 
     assert exit_code == 1
@@ -459,6 +506,9 @@ def test_smoke_llm_never_prints_keys(container: Container, monkeypatch: pytest.M
     mock_client = MagicMock()
     mock_client.get.side_effect = RuntimeError(f"Failed connection with key leak attempt: {sentinel}")
 
+    mock_genai_client = MagicMock()
+    mock_genai_client.models.list.side_effect = RuntimeError(f"Failed connection with key leak attempt: {sentinel}")
+
     req = httpx.Request("POST", "https://api.groq.com/openai/v1/chat/completions")
     resp = httpx.Response(400, request=req, json={"error": {"message": f"Bad key: {sentinel}"}})
     err = openai.BadRequestError(f"Bad key: {sentinel}", response=resp, body={"error": f"Bad key: {sentinel}"})
@@ -471,10 +521,254 @@ def test_smoke_llm_never_prints_keys(container: Container, monkeypatch: pytest.M
 
     out = io.StringIO()
     test_container = dataclasses.replace(container, models=registry)
-    run_smoke_tests(test_container, client=mock_client, out_stream=out)
+    run_smoke_tests(test_container, client=mock_client, genai_client=mock_genai_client, out_stream=out)
     output = out.getvalue()
 
     assert sentinel not in output
+
+
+def test_smoke_google_genai_fake_client_model_check(container: Container, monkeypatch: pytest.MonkeyPatch) -> None:
+    registry = make_test_registry()
+    monkeypatch.setenv("GROQ_API_KEY", "dummy-groq-key")
+    monkeypatch.setenv("GEMINI_API_KEY", "dummy-gemini-key")
+
+    mock_client = MagicMock()
+    mock_client.get.return_value = httpx.Response(
+        200,
+        request=httpx.Request("GET", "https://api.openai.com/v1/models"),
+        json={"data": [{"id": "openai/gpt-oss-20b"}]},
+    )
+
+    fake_item = MagicMock()
+    fake_item.name = "models/gemini-flash-latest"
+    mock_genai_client = MagicMock()
+    mock_genai_client.models.list.return_value = [fake_item]
+
+    def _mock_check(*_args: object, **_kwargs: object) -> tuple[bool, str, dict[str, int]]:
+        return (True, "mocked", {})
+
+    monkeypatch.setattr("app.llm.smoke._check_llm_entry", _mock_check)
+    monkeypatch.setattr("app.llm.smoke._check_analysis_entry", _mock_check)
+    monkeypatch.setattr("app.llm.smoke._check_cross_provider", _mock_check)
+
+    out = io.StringIO()
+    test_container = dataclasses.replace(container, models=registry)
+    exit_code = run_smoke_tests(test_container, client=mock_client, genai_client=mock_genai_client, out_stream=out)
+    output = out.getvalue()
+
+    assert exit_code == 0
+    assert "[PASS] gemini: model 'gemini-flash-latest' exists" in output
+
+
+def test_smoke_cross_provider_check_passes_in_both_directions(
+    container: Container, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    registry = make_test_registry()
+    monkeypatch.setenv("GROQ_API_KEY", "dummy-groq-key")
+    monkeypatch.setenv("GEMINI_API_KEY", "dummy-gemini-key")
+
+    mock_client = MagicMock()
+    mock_client.get.return_value = httpx.Response(
+        200,
+        request=httpx.Request("GET", "https://api.openai.com/v1/models"),
+        json={"data": [{"id": "openai/gpt-oss-20b"}]},
+    )
+
+    mock_genai_item = MagicMock()
+    mock_genai_item.name = "models/gemini-flash-latest"
+    mock_genai_client = MagicMock()
+    mock_genai_client.models.list.return_value = [mock_genai_item]
+
+    groq_tool_msg = AIMessage(
+        content="",
+        tool_calls=[{"name": "search_transcripts", "args": {"query": "groq query"}, "id": "call_groq"}],
+    )
+    groq_reply_msg = AIMessage(
+        content="",
+        tool_calls=[
+            {
+                "name": "ChatReply",
+                "args": ChatReply(reply_type="answer", text="Groq answered").model_dump(),
+                "id": "reply_groq",
+            }
+        ],
+    )
+    gemini_tool_msg = AIMessage(
+        content="",
+        tool_calls=[{"name": "find_recordings", "args": {"query": "gemini query"}, "id": "call_gemini"}],
+    )
+    gemini_reply_msg = AIMessage(
+        content="",
+        tool_calls=[
+            {
+                "name": "ChatReply",
+                "args": ChatReply(reply_type="answer", text="Gemini answered").model_dump(),
+                "id": "reply_gemini",
+            }
+        ],
+    )
+    final_turn_msg = AIMessage(
+        content="",
+        tool_calls=[
+            {
+                "name": "ChatReply",
+                "args": ChatReply(reply_type="answer", text="Final").model_dump(),
+                "id": "final_call",
+            }
+        ],
+    )
+    analysis_msg = AIMessage(
+        content="",
+        tool_calls=[
+            {
+                "name": "NoteAnalysis",
+                "args": NoteAnalysis(
+                    title="Summary",
+                    tags=["test"],
+                    key_points=[Item(text="Point", sources=[1])],
+                    clean_text="Clean",
+                ).model_dump(),
+                "id": "analysis_call",
+            }
+        ],
+    )
+
+    groq_call = 0
+    gemini_call = 0
+
+    def fake_chat_model(entry: LlmEntry, reg: ModelsRegistry) -> ScriptedChatModel:
+        nonlocal groq_call, gemini_call
+        if entry.provider == "gemini":
+            gemini_call += 1
+            if gemini_call == 1:
+                return ScriptedChatModel(messages=iter([gemini_tool_msg, gemini_reply_msg]))
+            if gemini_call == 2:
+                return ScriptedChatModel(messages=iter([final_turn_msg]))
+            if gemini_call == 3:
+                return ScriptedChatModel(messages=iter([analysis_msg]))
+            # Cross-provider groq -> gemini: gemini is B
+            return ScriptedChatModel(messages=iter([gemini_reply_msg]))
+
+        groq_call += 1
+        if groq_call == 1:
+            return ScriptedChatModel(messages=iter([groq_tool_msg, groq_reply_msg]))
+        if groq_call == 2:
+            return ScriptedChatModel(messages=iter([final_turn_msg]))
+        if groq_call == 3:
+            return ScriptedChatModel(messages=iter([analysis_msg]))
+        # Cross-provider gemini -> groq: groq is B
+        return ScriptedChatModel(messages=iter([groq_reply_msg]))
+
+    monkeypatch.setattr("app.llm.smoke.chat_model", fake_chat_model)
+    monkeypatch.setattr("app.llm.factory.chat_model", fake_chat_model)
+
+    out = io.StringIO()
+    test_container = dataclasses.replace(container, models=registry)
+    exit_code = run_smoke_tests(test_container, client=mock_client, genai_client=mock_genai_client, out_stream=out)
+    output = out.getvalue()
+
+    assert exit_code == 0
+    assert "[PASS] groq/openai/openai/gpt-oss-20b -> gemini/google_genai/gemini-flash-latest history:" in output
+    assert "[PASS] gemini/google_genai/gemini-flash-latest -> groq/openai/openai/gpt-oss-20b history:" in output
+
+
+def test_smoke_cross_provider_check_fails_when_b_raises(container: Container, monkeypatch: pytest.MonkeyPatch) -> None:
+    registry = make_test_registry()
+    monkeypatch.setenv("GROQ_API_KEY", "dummy-groq-key")
+    monkeypatch.setenv("GEMINI_API_KEY", "dummy-gemini-key")
+
+    mock_client = MagicMock()
+    mock_client.get.return_value = httpx.Response(
+        200,
+        request=httpx.Request("GET", "https://api.openai.com/v1/models"),
+        json={"data": [{"id": "openai/gpt-oss-20b"}]},
+    )
+
+    mock_genai_item = MagicMock()
+    mock_genai_item.name = "models/gemini-flash-latest"
+    mock_genai_client = MagicMock()
+    mock_genai_client.models.list.return_value = [mock_genai_item]
+
+    groq_tool_msg = AIMessage(
+        content="",
+        tool_calls=[{"name": "search_transcripts", "args": {"query": "groq query"}, "id": "call_groq"}],
+    )
+    groq_reply_msg = AIMessage(
+        content="",
+        tool_calls=[
+            {
+                "name": "ChatReply",
+                "args": ChatReply(reply_type="answer", text="Groq answered").model_dump(),
+                "id": "reply_groq",
+            }
+        ],
+    )
+    final_turn_msg = AIMessage(
+        content="",
+        tool_calls=[
+            {
+                "name": "ChatReply",
+                "args": ChatReply(reply_type="answer", text="Final").model_dump(),
+                "id": "final_call",
+            }
+        ],
+    )
+    analysis_msg = AIMessage(
+        content="",
+        tool_calls=[
+            {
+                "name": "NoteAnalysis",
+                "args": NoteAnalysis(
+                    title="Summary",
+                    tags=["test"],
+                    key_points=[Item(text="Point", sources=[1])],
+                    clean_text="Clean",
+                ).model_dump(),
+                "id": "analysis_call",
+            }
+        ],
+    )
+
+    groq_call = 0
+    gemini_call = 0
+
+    req = httpx.Request("POST", "https://generativelanguage.googleapis.com/v1beta/models/gemini")
+    resp = httpx.Response(400, request=req, json={"error": {"message": "Function call missing thought_signature"}})
+    err = openai.BadRequestError("Function call missing thought_signature", response=resp, body=None)
+
+    def fake_chat_model(entry: LlmEntry, reg: ModelsRegistry) -> Any:
+        nonlocal groq_call, gemini_call
+        if entry.provider == "gemini":
+            gemini_call += 1
+            if gemini_call == 1:
+                return ScriptedChatModel(messages=iter([groq_tool_msg, groq_reply_msg]))
+            if gemini_call == 2:
+                return ScriptedChatModel(messages=iter([final_turn_msg]))
+            if gemini_call == 3:
+                return ScriptedChatModel(messages=iter([analysis_msg]))
+            # B raises during cross-provider invocation!
+            return FailingChatModel(error=err)
+
+        groq_call += 1
+        if groq_call == 1:
+            return ScriptedChatModel(messages=iter([groq_tool_msg, groq_reply_msg]))
+        if groq_call == 2:
+            return ScriptedChatModel(messages=iter([final_turn_msg]))
+        if groq_call == 3:
+            return ScriptedChatModel(messages=iter([analysis_msg]))
+        return ScriptedChatModel(messages=iter([groq_reply_msg]))
+
+    monkeypatch.setattr("app.llm.smoke.chat_model", fake_chat_model)
+    monkeypatch.setattr("app.llm.factory.chat_model", fake_chat_model)
+
+    out = io.StringIO()
+    test_container = dataclasses.replace(container, models=registry)
+    exit_code = run_smoke_tests(test_container, client=mock_client, genai_client=mock_genai_client, out_stream=out)
+    output = out.getvalue()
+
+    assert exit_code == 1
+    assert "[FAIL] groq/openai/openai/gpt-oss-20b -> gemini/google_genai/gemini-flash-latest history:" in output
+    assert "Function call missing thought_signature" in output or "400" in output
 
 
 def test_calibrate_retrieval_clean_margin(tmp_path: Path) -> None:

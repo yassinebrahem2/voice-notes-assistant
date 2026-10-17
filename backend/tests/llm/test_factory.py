@@ -35,11 +35,12 @@ def make_test_registry() -> ModelsRegistry:
     return ModelsRegistry(
         providers={
             "groq": Provider(
+                client="openai",
                 base_url=url_adapter.validate_python("https://api.groq.com/openai/v1"),
                 key_env="GROQ_API_KEY",
             ),
             "gemini": Provider(
-                base_url=url_adapter.validate_python("https://generativelanguage.googleapis.com/v1beta/openai/"),
+                client="google_genai",
                 key_env="GEMINI_API_KEY",
             ),
         },
@@ -75,11 +76,14 @@ def make_test_registry() -> ModelsRegistry:
 
 
 def test_chat_model_reads_key_via_key_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    from langchain_openai import ChatOpenAI
+
     registry = make_test_registry()
     monkeypatch.setenv("GROQ_API_KEY", "sk-test-groq-key")
     entry = registry.roles.llm[0]
     model = chat_model(entry, registry)
 
+    assert isinstance(model, ChatOpenAI)
     assert model.model_name == "openai/gpt-oss-20b"
     assert isinstance(model.openai_api_key, SecretStr)
     assert model.openai_api_key.get_secret_value() == "sk-test-groq-key"
@@ -96,6 +100,66 @@ def test_missing_key_config_error_names_env_var(monkeypatch: pytest.MonkeyPatch)
     with pytest.raises(ConfigError) as exc_info:
         chat_model(entry, registry)
     assert "GROQ_API_KEY" in str(exc_info.value)
+
+
+def test_chat_model_builds_google_genai(monkeypatch: pytest.MonkeyPatch) -> None:
+    from langchain_google_genai import ChatGoogleGenerativeAI
+
+    registry = make_test_registry()
+    monkeypatch.setenv("GEMINI_API_KEY", "test-gemini-key")
+    entry = registry.roles.llm[1]
+    model = chat_model(entry, registry)
+
+    assert isinstance(model, ChatGoogleGenerativeAI)
+    assert model.model == "gemini-flash-latest"
+    assert model.max_retries == 1
+    assert model.timeout == 30.0
+    assert isinstance(model.google_api_key, SecretStr)
+    assert model.google_api_key.get_secret_value() == "test-gemini-key"
+
+
+def test_missing_gemini_key_config_error_names_env_var(monkeypatch: pytest.MonkeyPatch) -> None:
+    registry = make_test_registry()
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+    monkeypatch.delenv("GOOGLE_API_KEY", raising=False)
+    entry = registry.roles.llm[1]
+
+    with pytest.raises(ConfigError) as exc_info:
+        chat_model(entry, registry)
+    assert "GEMINI_API_KEY" in str(exc_info.value)
+
+
+def test_gemini_request_conversion_thought_signature_and_any_tool_choice() -> None:
+    from google.genai.types import FunctionCallingConfigMode
+    from langchain_core.messages import ToolMessage
+    from langchain_google_genai import ChatGoogleGenerativeAI
+
+    model = ChatGoogleGenerativeAI(model="gemini-3.1-flash-lite", api_key="dummy-key")
+    messages = [
+        HumanMessage(content="What's the weather?"),
+        AIMessage(
+            content="",
+            tool_calls=[{"name": "dummy_tool", "args": {"query": "weather"}, "id": "call_1"}],
+        ),
+        ToolMessage(content="Sunny 22C", tool_call_id="call_1"),
+    ]
+
+    model_any: Any = model
+    req = cast(dict[str, Any], model_any._prepare_request(messages, tools=[dummy_tool], tool_choice="any"))
+
+    contents = req["contents"]
+    ai_content = contents[1]
+    assert ai_content.role == "model"
+    part = ai_content.parts[0]
+    assert part.function_call is not None
+    assert part.function_call.name == "dummy_tool"
+    assert part.thought_signature is not None
+    assert len(part.thought_signature) > 0
+
+    tool_config = req["config"].tool_config
+    assert tool_config is not None
+    assert tool_config.function_calling_config is not None
+    assert tool_config.function_calling_config.mode == FunctionCallingConfigMode.ANY
 
 
 def test_tool_strategy_is_pinned(monkeypatch: pytest.MonkeyPatch) -> None:

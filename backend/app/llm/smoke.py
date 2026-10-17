@@ -10,7 +10,9 @@ from datetime import date
 from pathlib import Path
 from typing import Any, TextIO, cast
 
-import httpx2 as httpx
+import google.genai
+import google.genai.errors
+import httpx
 import openai
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, ToolMessage
 
@@ -19,6 +21,7 @@ from app.agents.chat_graph import build_chat_graph
 from app.agents.prompts import load_prompt
 from app.agents.schemas import ChatReply, NoteAnalysis
 from app.agents.sources import SourceRegistry
+from app.agents.tools import find_recordings, search_transcripts, summarize
 from app.agents.transcript_input import render_transcript
 from app.config.models_registry import LlmEntry, ModelsRegistry, Provider
 from app.config.settings import provider_key
@@ -28,6 +31,8 @@ from app.db.migrate import apply_migrations
 from app.llm.factory import build_entry_agent, chat_model
 from app.processing.protocols import TranscriptLine
 from app.rag.fakes import FakeEmbedder
+
+_last_orchestrator_turn: dict[tuple[str, str], AIMessage] = {}
 
 SAMPLE_TRANSCRIPT_LINES: list[TranscriptLine] = [
     TranscriptLine(
@@ -58,10 +63,17 @@ def _format_error(err: Exception, registry: ModelsRegistry | None = None) -> str
     target: Exception = err
     if not isinstance(target, openai.APIStatusError) and isinstance(target.__cause__, openai.APIStatusError):
         target = target.__cause__
+    if not isinstance(target, google.genai.errors.APIError) and isinstance(
+        target.__cause__, google.genai.errors.APIError
+    ):
+        target = target.__cause__
 
     if isinstance(target, openai.APIStatusError):
         msg = target.message or (str(target.body) if target.body is not None else str(target))
         detail = f"HTTP {target.status_code}: {msg}"
+    elif isinstance(target, google.genai.errors.APIError):
+        msg = target.message or str(target)
+        detail = f"HTTP {target.code}: {msg}"
     else:
         err_str = str(target)
         detail = f"{type(target).__name__}: {err_str}" if err_str else type(target).__name__
@@ -123,6 +135,7 @@ def _check_provider_models(
     provider: Provider,
     registry: ModelsRegistry,
     client: httpx.Client,
+    genai_client: google.genai.Client | None = None,
 ) -> list[tuple[bool, str]]:
     key = provider_key(registry, provider_name)
     if key is None:
@@ -134,6 +147,28 @@ def _check_provider_models(
         for entry in getattr(registry.roles, role_name)
         if entry.provider == provider_name
     }
+
+    if provider.client == "google_genai":
+        try:
+            g_client = genai_client if genai_client is not None else google.genai.Client(api_key=key.get_secret_value())
+            raw_items = list(g_client.models.list())
+            available_ids: set[str] = set()
+            for item in raw_items:
+                raw_mid: Any = getattr(item, "name", None) or getattr(item, "id", None)
+                if isinstance(raw_mid, str):
+                    available_ids.add(raw_mid)
+                    if raw_mid.startswith("models/"):
+                        available_ids.add(raw_mid.removeprefix("models/"))
+
+            results: list[tuple[bool, str]] = []
+            for model in sorted(configured_models):
+                if model in available_ids:
+                    results.append((True, f"model '{model}' exists"))
+                else:
+                    results.append((False, f"model '{model}' not found in provider models"))
+            return results
+        except Exception as err:
+            return [(False, f"models.list() failed ({_format_error(err, registry)})")]
 
     url = f"{str(provider.base_url).rstrip('/')}/models"
     headers = {"Authorization": f"Bearer {key.get_secret_value()}"}
@@ -179,7 +214,7 @@ def _check_provider_models(
 def _check_llm_orchestrator(
     entry: LlmEntry,
     container: Container,
-) -> tuple[bool, str, dict[str, int]]:
+) -> tuple[bool, str, dict[str, int], AIMessage | None]:
     try:
         with tempfile.TemporaryDirectory() as tmp_dir:
             temp_db_path = Path(tmp_dir) / "smoke.sqlite3"
@@ -229,22 +264,24 @@ def _check_llm_orchestrator(
                     usage[k] = usage.get(k, 0) + v
 
         tool_call_name: str | None = None
+        first_ai_msg: AIMessage | None = None
         for msg in messages:
             if isinstance(msg, AIMessage) and msg.tool_calls:
                 for tc in msg.tool_calls:
                     tc_name = tc.get("name")
                     if tc_name and tc_name != "ChatReply" and tool_call_name is None:
                         tool_call_name = str(tc_name)
+                        first_ai_msg = msg
 
-        if not tool_call_name:
-            return (False, "no tool call returned", usage)
+        if not tool_call_name or first_ai_msg is None:
+            return (False, "no tool call returned", usage, None)
 
         if res.get("structured_response") is None:
-            return (False, "no structured response returned", usage)
+            return (False, "no structured response returned", usage, None)
 
-        return (True, f"called '{tool_call_name}'", usage)
+        return (True, f"called '{tool_call_name}'", usage, first_ai_msg)
     except Exception as err:
-        return (False, f"tool call failed ({_format_error(err, container.models)})", {})
+        return (False, f"tool call failed ({_format_error(err, container.models)})", {}, None)
 
 
 def _check_llm_entry(
@@ -254,7 +291,10 @@ def _check_llm_entry(
     check_type: str,
 ) -> tuple[bool, str, dict[str, int]]:
     if check_type == "tool_call":
-        return _check_llm_orchestrator(entry, container)
+        ok, desc, usage, first_ai_msg = _check_llm_orchestrator(entry, container)
+        if first_ai_msg is not None:
+            _last_orchestrator_turn[(entry.provider, entry.model)] = first_ai_msg
+        return (ok, desc, usage)
 
     if check_type == "forced_final":
         registry = container.models
@@ -293,6 +333,54 @@ def _check_llm_entry(
             return (False, f"forced final turn failed ({_format_error(err, registry)})", {})
 
     return (False, f"unknown check type {check_type}", {})
+
+
+def _check_cross_provider(
+    entry_a: LlmEntry,
+    entry_b: LlmEntry,
+    container: Container,
+    first_ai_msg_a: AIMessage | None,
+) -> tuple[bool, str, dict[str, int]]:
+    registry = container.models
+    provider_a = registry.providers.get(entry_a.provider)
+    provider_b = registry.providers.get(entry_b.provider)
+    if provider_a is None or provider_b is None:
+        return (False, "unknown provider in registry", {})
+
+    if first_ai_msg_a is None or not first_ai_msg_a.tool_calls:
+        return (False, "model A did not produce a tool call", {})
+
+    try:
+        model_b = chat_model(entry_b, registry)
+    except Exception as err:
+        return (False, f"model construction failed ({_format_error(err, registry)})", {})
+
+    try:
+        bound_b: Any = model_b.bind_tools(
+            [search_transcripts, find_recordings, summarize, ChatReply],
+        )  # pyright: ignore[reportUnknownMemberType]
+        tool_call = first_ai_msg_a.tool_calls[0]
+        call_id = tool_call.get("id") or "call_1"
+        messages: list[BaseMessage] = [
+            HumanMessage(content="Search notes about budget"),
+            first_ai_msg_a,
+            ToolMessage(
+                content="<sources>[P1] (Note: Architecture): Vector search is configured.</sources>",
+                tool_call_id=str(call_id),
+            ),
+        ]
+        res: Any = bound_b.invoke(messages)
+        usage = _extract_token_usage(res)
+        raw_tool_calls: object = getattr(res, "tool_calls", None)
+        if isinstance(raw_tool_calls, list) and raw_tool_calls:
+            first_tc = cast(list[object], raw_tool_calls)[0]
+            if isinstance(first_tc, dict):
+                first_tc_dict = cast(dict[str, Any], first_tc)
+                call_name = str(first_tc_dict.get("name", "tool"))
+                return (True, f"called '{call_name}'", usage)
+        return (True, "returned reply", usage)
+    except Exception as err:
+        return (False, f"failover call failed ({_format_error(err, registry)})", {})
 
 
 def _check_analysis_entry(
@@ -337,9 +425,10 @@ def run_smoke_tests(
     container: Container,
     *,
     client: httpx.Client | None = None,
+    genai_client: google.genai.Client | None = None,
     out_stream: TextIO | None = None,
 ) -> int:
-    """Run provider model existence, tool-calling, forced turn, and summarizer smoke tests.
+    """Run provider model existence, tool-calling, forced turn, summarizer, and failover smoke tests.
 
     Returns 0 if all checks pass, 1 if any check fails. Never logs or prints secrets.
     """
@@ -351,12 +440,14 @@ def run_smoke_tests(
     total_checks = 0
     passed_checks = 0
 
+    _last_orchestrator_turn.clear()
+
     out.write("=== Provider Models Check ===\n")
     owns_client = client is None
     http_client = client if client is not None else httpx.Client()
     try:
         for p_name, provider in registry.providers.items():
-            results = _check_provider_models(p_name, provider, registry, http_client)
+            results = _check_provider_models(p_name, provider, registry, http_client, genai_client=genai_client)
             for success, detail in results:
                 total_checks += 1
                 if success:
@@ -369,8 +460,18 @@ def run_smoke_tests(
         if owns_client:
             http_client.close()
 
-    out.write("\n=== Role 'llm' Check ===\n")
-    for entry in registry.roles.llm:
+    # Collect distinct configured models across all roles (preserving order)
+    distinct_entries: list[LlmEntry] = []
+    seen: set[tuple[str, str]] = set()
+    for role_name in ("llm", "llm_analysis"):
+        for entry in getattr(registry.roles, role_name):
+            key = (entry.provider, entry.model)
+            if key not in seen:
+                seen.add(key)
+                distinct_entries.append(entry)
+
+    out.write("\n=== Model Capabilities Check ===\n")
+    for entry in distinct_entries:
         # 1. Tool call turn
         total_checks += 1
         ok_tool, desc_tool, usage_tool = _check_llm_entry(entry, container, check_type="tool_call")
@@ -393,8 +494,7 @@ def run_smoke_tests(
             all_passed = False
             out.write(f"[FAIL] {entry.provider} ({entry.model}) forced final turn: {desc_final}\n")
 
-    out.write("\n=== Role 'llm_analysis' Check ===\n")
-    for entry in registry.roles.llm_analysis:
+        # 3. Summarizer turn
         total_checks += 1
         ok_analysis, desc_analysis, usage_analysis = _check_analysis_entry(entry, registry)
         tokens_analysis = _format_tokens(usage_analysis)
@@ -404,6 +504,30 @@ def run_smoke_tests(
         else:
             all_passed = False
             out.write(f"[FAIL] {entry.provider} ({entry.model}) summarizer: {desc_analysis}\n")
+
+    out.write("\n=== Cross-Provider Failover Check ===\n")
+    for entry_a in distinct_entries:
+        for entry_b in distinct_entries:
+            if entry_a.provider == entry_b.provider:
+                continue
+            total_checks += 1
+            prov_a = registry.providers.get(entry_a.provider)
+            prov_b = registry.providers.get(entry_b.provider)
+            client_a = prov_a.client if prov_a else "unknown"
+            client_b = prov_b.client if prov_b else "unknown"
+            label_a = f"{entry_a.provider}/{client_a}/{entry_a.model}"
+            label_b = f"{entry_b.provider}/{client_b}/{entry_b.model}"
+            pair_label = f"{label_a} -> {label_b}"
+
+            msg_a = _last_orchestrator_turn.get((entry_a.provider, entry_a.model))
+            ok_cross, desc_cross, usage_cross = _check_cross_provider(entry_a, entry_b, container, msg_a)
+            tokens_cross = _format_tokens(usage_cross)
+            if ok_cross:
+                passed_checks += 1
+                out.write(f"[PASS] {pair_label} history: {desc_cross} ({tokens_cross})\n")
+            else:
+                all_passed = False
+                out.write(f"[FAIL] {pair_label} history: {desc_cross}\n")
 
     out.write("\n=== Smoke Test Summary ===\n")
     if all_passed:

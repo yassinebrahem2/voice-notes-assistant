@@ -8,7 +8,9 @@ from dataclasses import dataclass, field
 from datetime import date, datetime
 from typing import TYPE_CHECKING, Any, Literal, cast
 
+import httpx
 import openai
+from langchain_core.exceptions import ModelError
 from langchain_core.messages import HumanMessage
 from langgraph.graph.state import CompiledStateGraph  # pyright: ignore[reportMissingTypeStubs]
 
@@ -29,7 +31,7 @@ logger = logging.getLogger(__name__)
 
 def _is_ai_unavailable(exc: BaseException) -> bool:
     """Return True if the exception was caused by an AI provider or config failure."""
-    if isinstance(exc, (openai.OpenAIError, ConfigError)):
+    if isinstance(exc, (ModelError, httpx.TimeoutException, httpx.TransportError, openai.OpenAIError, ConfigError)):
         return True
     if exc.__cause__ is not None and _is_ai_unavailable(exc.__cause__):
         return True

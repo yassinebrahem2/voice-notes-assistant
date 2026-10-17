@@ -32,6 +32,7 @@ def isolate_provider_keys(monkeypatch: pytest.MonkeyPatch) -> None:
     for provider in registry["providers"].values():
         monkeypatch.delenv(provider["key_env"], raising=False)
     monkeypatch.delenv("HF_TOKEN", raising=False)
+    monkeypatch.delenv("GOOGLE_API_KEY", raising=False)
 
 
 @pytest.fixture

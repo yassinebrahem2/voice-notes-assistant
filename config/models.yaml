@@ -1,9 +1,10 @@
 providers:
   groq:
+    client: openai
     base_url: https://api.groq.com/openai/v1
     key_env: GROQ_API_KEY
   gemini:
-    base_url: https://generativelanguage.googleapis.com/v1beta/openai/
+    client: google_genai
     key_env: GEMINI_API_KEY
 roles:
   llm:

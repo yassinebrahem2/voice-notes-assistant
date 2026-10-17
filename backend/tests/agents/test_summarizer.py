@@ -39,11 +39,12 @@ def make_test_registry(entries: list[LlmEntry] | None = None) -> ModelsRegistry:
     return ModelsRegistry(
         providers={
             "groq": Provider(
+                client="openai",
                 base_url=url_adapter.validate_python("https://api.groq.com/openai/v1"),
                 key_env="GROQ_API_KEY",
             ),
             "gemini": Provider(
-                base_url=url_adapter.validate_python("https://generativelanguage.googleapis.com/v1beta/openai/"),
+                client="google_genai",
                 key_env="GEMINI_API_KEY",
             ),
         },

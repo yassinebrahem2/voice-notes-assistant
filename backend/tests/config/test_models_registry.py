@@ -70,3 +70,37 @@ def test_invalid_provider_url_never_appears_in_error(tmp_path: Path, url: str) -
         load_models_registry(path, Settings())
     assert "groq" in str(caught.value)
     assert url not in str(caught.value)
+
+
+def test_openai_without_base_url_raises_config_error(tmp_path: Path) -> None:
+    path = tmp_path / "models.yaml"
+    content = (CONFIG_DIR / "models.yaml").read_text(encoding="utf-8")
+    content = content.replace("    base_url: https://api.groq.com/openai/v1\n", "")
+    path.write_text(content, encoding="utf-8")
+    with pytest.raises(ConfigError, match="groq"):
+        load_models_registry(path, Settings())
+
+
+def test_google_genai_with_base_url_raises_config_error(tmp_path: Path) -> None:
+    path = tmp_path / "models.yaml"
+    path.write_text(
+        (CONFIG_DIR / "models.yaml")
+        .read_text(encoding="utf-8")
+        .replace(
+            "    client: google_genai\n",
+            "    client: google_genai\n    base_url: https://example.com/v1\n",
+        ),
+        encoding="utf-8",
+    )
+    with pytest.raises(ConfigError, match="gemini"):
+        load_models_registry(path, Settings())
+
+
+def test_unknown_client_raises_config_error(tmp_path: Path) -> None:
+    path = tmp_path / "models.yaml"
+    path.write_text(
+        (CONFIG_DIR / "models.yaml").read_text(encoding="utf-8").replace("client: openai", "client: unknown"),
+        encoding="utf-8",
+    )
+    with pytest.raises(ConfigError):
+        load_models_registry(path, Settings())

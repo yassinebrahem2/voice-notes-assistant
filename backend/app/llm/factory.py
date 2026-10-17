@@ -13,6 +13,7 @@ from langchain.agents.middleware import (
 from langchain.agents.structured_output import ToolStrategy
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.tools import BaseTool
+from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_openai import ChatOpenAI
 from langgraph.graph.state import CompiledStateGraph  # pyright: ignore[reportMissingTypeStubs]
 from pydantic import BaseModel
@@ -24,12 +25,12 @@ from app.llm.force_output import ForceOutputToolMiddleware
 from app.llm.retry import should_retry
 
 
-def chat_model(entry: LlmEntry, registry: ModelsRegistry) -> ChatOpenAI:
-    """Build a ChatOpenAI model instance for a configured LLM entry.
+def chat_model(entry: LlmEntry, registry: ModelsRegistry) -> BaseChatModel:
+    """Build a chat model instance for a configured LLM entry.
 
-    Reads base_url and key from the entry's provider using provider_key.
-    Sets model, timeout, max_retries=0 (our middleware manages retries),
-    and passes through any entry.reasoning options.
+    Dispatches on provider.client:
+    - 'openai': ChatOpenAI with base_url, api_key, timeout, max_retries=0
+    - 'google_genai': ChatGoogleGenerativeAI with api_key, timeout, max_retries=1
 
     Raises:
         ConfigError: If the provider is unknown or its API key is missing.
@@ -43,14 +44,24 @@ def chat_model(entry: LlmEntry, registry: ModelsRegistry) -> ChatOpenAI:
         raise ConfigError(f"Missing API key environment variable {provider.key_env}")
 
     reasoning_kwargs: dict[str, Any] = dict(entry.reasoning)
-    return ChatOpenAI(
-        model=entry.model,
-        base_url=str(provider.base_url),
-        api_key=key,
-        timeout=entry.timeout_s,
-        max_retries=0,
-        **reasoning_kwargs,
-    )
+    if provider.client == "openai":
+        return ChatOpenAI(
+            model=entry.model,
+            base_url=str(provider.base_url),
+            api_key=key,
+            timeout=entry.timeout_s,
+            max_retries=0,
+            **reasoning_kwargs,
+        )
+    if provider.client == "google_genai":
+        return ChatGoogleGenerativeAI(
+            model=entry.model,
+            api_key=key,
+            timeout=entry.timeout_s,
+            max_retries=1,
+            **reasoning_kwargs,
+        )
+    raise ConfigError(f"Unsupported client '{provider.client}' for provider '{entry.provider}'")
 
 
 def role_models(registry: ModelsRegistry, role: Literal["llm"]) -> list[BaseChatModel]:

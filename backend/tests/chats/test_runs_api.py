@@ -242,6 +242,82 @@ def test_all_models_fail_run_failed_ai_unavailable(container: Container, monkeyp
         }
 
 
+def test_model_error_run_failed_ai_unavailable(container: Container, monkeypatch: pytest.MonkeyPatch) -> None:
+    from langchain_core.exceptions import ModelRateLimitError
+
+    failing = FailingChatModel(error=ModelRateLimitError("429 Resource exhausted"))
+
+    def fake_role_models(_reg: object, _role: object) -> list[BaseChatModel]:
+        return [failing]
+
+    monkeypatch.setattr("app.llm.factory.role_models", fake_role_models)
+
+    with TestClient(create_app(container)) as client:
+        create_res = client.post("/api/v1/chats")
+        chat_id = create_res.json()["id"]
+
+        ask_res = client.post(
+            f"/api/v1/chats/{chat_id}/messages",
+            json={"text": "Hello?", "scope": "both"},
+        )
+        run_id = ask_res.json()["run_id"]
+
+        run_data: dict[str, Any] | None = None
+        for _ in range(100):
+            res = client.get(f"/api/v1/chats/{chat_id}/runs/{run_id}")
+            assert res.status_code == 200
+            data: dict[str, Any] = res.json()
+            if data["status"] == "failed":
+                run_data = data
+                break
+            time.sleep(0.05)
+
+        assert isinstance(run_data, dict)
+        assert run_data["status"] == "failed"
+        assert run_data["error"] == {
+            "code": "ai_unavailable",
+            "message": "Couldn't reach the AI right now.",
+        }
+
+
+def test_httpx_timeout_run_failed_ai_unavailable(container: Container, monkeypatch: pytest.MonkeyPatch) -> None:
+    import httpx as real_httpx
+
+    failing = FailingChatModel(error=real_httpx.ReadTimeout("Read timed out"))
+
+    def fake_role_models(_reg: object, _role: object) -> list[BaseChatModel]:
+        return [failing]
+
+    monkeypatch.setattr("app.llm.factory.role_models", fake_role_models)
+
+    with TestClient(create_app(container)) as client:
+        create_res = client.post("/api/v1/chats")
+        chat_id = create_res.json()["id"]
+
+        ask_res = client.post(
+            f"/api/v1/chats/{chat_id}/messages",
+            json={"text": "Hello?", "scope": "both"},
+        )
+        run_id = ask_res.json()["run_id"]
+
+        run_data: dict[str, Any] | None = None
+        for _ in range(100):
+            res = client.get(f"/api/v1/chats/{chat_id}/runs/{run_id}")
+            assert res.status_code == 200
+            data: dict[str, Any] = res.json()
+            if data["status"] == "failed":
+                run_data = data
+                break
+            time.sleep(0.05)
+
+        assert isinstance(run_data, dict)
+        assert run_data["status"] == "failed"
+        assert run_data["error"] == {
+            "code": "ai_unavailable",
+            "message": "Couldn't reach the AI right now.",
+        }
+
+
 def test_tool_bug_is_internal_error_not_ai_unavailable(container: Container, monkeypatch: pytest.MonkeyPatch) -> None:
     def buggy_search(*args: Any, **kwargs: Any) -> Any:
         raise RuntimeError("Disk corruption error")

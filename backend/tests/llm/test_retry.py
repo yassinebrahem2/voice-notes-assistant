@@ -1,14 +1,55 @@
 from collections.abc import Callable
 
+import httpx as real_httpx
 import httpx2 as httpx
 import openai
 import pytest
+from langchain_core.exceptions import (
+    ModelAPIError,
+    ModelAuthenticationError,
+    ModelConnectionError,
+    ModelInvalidRequestError,
+    ModelRateLimitError,
+    ModelTimeoutError,
+)
 
 from app.llm.retry import should_retry
 
 CaseFactory = Callable[[httpx.Request], BaseException]
 
 TEST_CASES: list[tuple[CaseFactory, bool]] = [
+    (
+        lambda _req: ModelAPIError("API error"),
+        True,
+    ),
+    (
+        lambda _req: ModelConnectionError("Connection error"),
+        True,
+    ),
+    (
+        lambda _req: ModelTimeoutError("Timeout error"),
+        True,
+    ),
+    (
+        lambda _req: real_httpx.ReadTimeout("Read timeout"),
+        True,
+    ),
+    (
+        lambda _req: real_httpx.ConnectError("Connect error"),
+        True,
+    ),
+    (
+        lambda _req: ModelRateLimitError("Rate limit"),
+        False,
+    ),
+    (
+        lambda _req: ModelAuthenticationError("Auth failed"),
+        False,
+    ),
+    (
+        lambda _req: ModelInvalidRequestError("Invalid request"),
+        False,
+    ),
     (
         lambda req: openai.InternalServerError(
             message="500 Internal Server Error",
