@@ -1,3 +1,4 @@
+import logging
 from pathlib import Path
 
 import httpx2 as httpx
@@ -306,6 +307,91 @@ def test_all_entries_fail_raises_analysis_failed() -> None:
 
     with pytest.raises(AnalysisFailed):
         analyzer.analyze(req)
+
+
+def test_all_entries_fail_propagates_cause_and_logs(caplog: pytest.LogCaptureFixture) -> None:
+    caplog.set_level(logging.WARNING)
+    err1 = RuntimeError("Groq API crashed")
+    err2 = RuntimeError("Gemini API crashed")
+    model1 = FailingChatModel(error=err1)
+    model2 = FailingChatModel(error=err2)
+    entry1 = LlmEntry(provider="groq", model="entry-1", max_request_tokens=10000, timeout_s=30.0)
+    entry2 = LlmEntry(provider="gemini", model="entry-2", max_request_tokens=10000, timeout_s=30.0)
+    registry = make_test_registry([entry1, entry2])
+
+    analyzer = SummarizerAnalyzer(registry)
+
+    def mock_models(entry: LlmEntry) -> BaseChatModel:
+        if entry.model == "entry-1":
+            return model1
+        return model2
+
+    analyzer.models_for_entry = mock_models  # type: ignore[assignment]
+
+    req = AnalysisRequest(
+        kind="meeting",
+        lines=[TranscriptLine(s=1, speaker_label="A", text="Meeting segment.")],
+        tag_vocabulary=[],
+    )
+
+    with pytest.raises(AnalysisFailed) as exc_info:
+        analyzer.analyze(req)
+
+    assert exc_info.value.__cause__ is err2
+    assert "groq" in caplog.text
+    assert "entry-1" in caplog.text
+    assert "Groq API crashed" in caplog.text
+    assert "gemini" in caplog.text
+    assert "entry-2" in caplog.text
+    assert "Gemini API crashed" in caplog.text
+
+
+def test_all_entries_missing_structured_response_raises_analysis_failed_and_logs(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    caplog.set_level(logging.WARNING)
+    model1 = ScriptedChatModel(
+        messages=iter(
+            [
+                AIMessage(content="No tool calls here 1"),
+                AIMessage(content="Still no tool calls 1"),
+            ]
+        )
+    )
+    model2 = ScriptedChatModel(
+        messages=iter(
+            [
+                AIMessage(content="No tool calls here 2"),
+                AIMessage(content="Still no tool calls 2"),
+            ]
+        )
+    )
+    entry1 = LlmEntry(provider="groq", model="entry-1", max_request_tokens=10000, timeout_s=30.0)
+    entry2 = LlmEntry(provider="gemini", model="entry-2", max_request_tokens=10000, timeout_s=30.0)
+    registry = make_test_registry([entry1, entry2])
+
+    analyzer = SummarizerAnalyzer(registry)
+
+    def mock_models(entry: LlmEntry) -> BaseChatModel:
+        if entry.model == "entry-1":
+            return model1
+        return model2
+
+    analyzer.models_for_entry = mock_models  # type: ignore[assignment]
+
+    req = AnalysisRequest(
+        kind="meeting",
+        lines=[TranscriptLine(s=1, speaker_label="A", text="Meeting segment.")],
+        tag_vocabulary=[],
+    )
+
+    with pytest.raises(AnalysisFailed):
+        analyzer.analyze(req)
+
+    assert "groq" in caplog.text
+    assert "entry-1" in caplog.text
+    assert "gemini" in caplog.text
+    assert "entry-2" in caplog.text
 
 
 def test_second_entry_replans_with_its_own_budget() -> None:

@@ -1,5 +1,6 @@
 """Summarizer agent and analyzer implementation with failover and map-reduce."""
 
+import logging
 from typing import Any, TypeVar, cast
 
 from langchain.agents import create_agent  # pyright: ignore[reportUnknownVariableType]
@@ -22,6 +23,8 @@ from app.config.models_registry import LlmEntry, ModelsRegistry
 from app.llm.factory import chat_model
 from app.llm.force_output import ForceOutputToolMiddleware
 from app.processing.protocols import AnalysisRequest, TranscriptLine
+
+logger = logging.getLogger(__name__)
 
 OUTPUT_ALLOWANCE: int = 2000
 
@@ -77,24 +80,21 @@ class SummarizerAnalyzer:
         system_prompt: str,
         schema: type[T],
         user_content: str,
-    ) -> T | None:
-        try:
-            agent = self._build_entry_agent(
-                entry,
-                name=name,
-                system_prompt=system_prompt,
-                schema=schema,
-            )
-            raw_output = agent.invoke(  # pyright: ignore[reportUnknownMemberType] - langgraph CompiledStateGraph.invoke has partially unknown overload signature
-                {"messages": [HumanMessage(content=user_content)]}
-            )
-            output = cast(dict[str, Any], raw_output)
-            response = output.get("structured_response")
-            if isinstance(response, schema):
-                return response
-            return None
-        except Exception:
-            return None
+    ) -> T:
+        agent = self._build_entry_agent(
+            entry,
+            name=name,
+            system_prompt=system_prompt,
+            schema=schema,
+        )
+        raw_output = agent.invoke(  # pyright: ignore[reportUnknownMemberType] - langgraph CompiledStateGraph.invoke has partially unknown overload signature
+            {"messages": [HumanMessage(content=user_content)]}
+        )
+        output = cast(dict[str, Any], raw_output)
+        response = output.get("structured_response")
+        if isinstance(response, schema):
+            return response
+        raise ValueError(f"Model {entry.provider}/{entry.model} returned invalid or missing structured response")
 
     def _format_tags_text(self, vocabulary: list[str]) -> str:
         if vocabulary:
@@ -189,75 +189,61 @@ class SummarizerAnalyzer:
         full_transcript = render_transcript(request.lines)
         single_user_content = f"{full_transcript}\n\n{tags_text}"
 
+        last_error: Exception | None = None
         for entry in entries:
-            single_tokens_needed = estimate_tokens(single_prompt + single_user_content) + OUTPUT_ALLOWANCE
+            try:
+                single_tokens_needed = estimate_tokens(single_prompt + single_user_content) + OUTPUT_ALLOWANCE
 
-            # Check if single call fits
-            if single_tokens_needed <= entry.max_request_tokens:
-                if request.kind == "meeting":
-                    res_m = self._run_entry_agent(
-                        entry,
-                        name="summarizer_meeting",
-                        system_prompt=single_prompt,
-                        schema=MeetingAnalysis,
-                        user_content=single_user_content,
-                    )
-                    if res_m is not None:
-                        return res_m
-                else:
-                    res_n = self._run_entry_agent(
+                # Check if single call fits
+                if single_tokens_needed <= entry.max_request_tokens:
+                    if request.kind == "meeting":
+                        return self._run_entry_agent(
+                            entry,
+                            name="summarizer_meeting",
+                            system_prompt=single_prompt,
+                            schema=MeetingAnalysis,
+                            user_content=single_user_content,
+                        )
+                    return self._run_entry_agent(
                         entry,
                         name="summarizer_note",
                         system_prompt=single_prompt,
                         schema=NoteAnalysis,
                         user_content=single_user_content,
                     )
-                    if res_n is not None:
-                        return res_n
-                # Single call failed, move to next entry
-                continue
 
-            # Otherwise, map-reduce
-            map_prompt_name = "summarizer_meeting_map" if request.kind == "meeting" else "summarizer_note_map"
-            map_prompt = load_prompt(map_prompt_name)
-            sections = self._split_lines_into_sections(request.lines, map_prompt, tags_text, entry.max_request_tokens)
-
-            if request.kind == "meeting":
-                meeting_sections: list[MeetingSectionNotes] = []
-                section_failed = False
-                for section in sections:
-                    sec_transcript = render_transcript(section)
-                    sec_content = f"{sec_transcript}\n\n{tags_text}"
-                    sec_res = self._run_entry_agent(
-                        entry,
-                        name="summarizer_meeting_map",
-                        system_prompt=map_prompt,
-                        schema=MeetingSectionNotes,
-                        user_content=sec_content,
-                    )
-                    if sec_res is None:
-                        section_failed = True
-                        break
-                    meeting_sections.append(sec_res)
-
-                if section_failed:
-                    continue
-
-                reduce_prompt = load_prompt("summarizer_reduce")
-                reduce_content = self._format_meeting_reduce_content(meeting_sections, tags_text)
-                reduced_meeting = self._run_entry_agent(
-                    entry,
-                    name="summarizer_reduce",
-                    system_prompt=reduce_prompt,
-                    schema=MeetingAnalysis,
-                    user_content=reduce_content,
+                # Otherwise, map-reduce
+                map_prompt_name = "summarizer_meeting_map" if request.kind == "meeting" else "summarizer_note_map"
+                map_prompt = load_prompt(map_prompt_name)
+                sections = self._split_lines_into_sections(
+                    request.lines, map_prompt, tags_text, entry.max_request_tokens
                 )
-                if reduced_meeting is not None:
-                    return reduced_meeting
 
-            else:
+                if request.kind == "meeting":
+                    meeting_sections: list[MeetingSectionNotes] = []
+                    for section in sections:
+                        sec_transcript = render_transcript(section)
+                        sec_content = f"{sec_transcript}\n\n{tags_text}"
+                        sec_res = self._run_entry_agent(
+                            entry,
+                            name="summarizer_meeting_map",
+                            system_prompt=map_prompt,
+                            schema=MeetingSectionNotes,
+                            user_content=sec_content,
+                        )
+                        meeting_sections.append(sec_res)
+
+                    reduce_prompt = load_prompt("summarizer_reduce")
+                    reduce_content = self._format_meeting_reduce_content(meeting_sections, tags_text)
+                    return self._run_entry_agent(
+                        entry,
+                        name="summarizer_reduce",
+                        system_prompt=reduce_prompt,
+                        schema=MeetingAnalysis,
+                        user_content=reduce_content,
+                    )
+
                 note_sections: list[NoteSectionNotes] = []
-                section_failed = False
                 for section in sections:
                     sec_transcript = render_transcript(section)
                     sec_content = f"{sec_transcript}\n\n{tags_text}"
@@ -268,13 +254,7 @@ class SummarizerAnalyzer:
                         schema=NoteSectionNotes,
                         user_content=sec_content,
                     )
-                    if sec_res is None:
-                        section_failed = True
-                        break
                     note_sections.append(sec_res)
-
-                if section_failed:
-                    continue
 
                 reduce_prompt = load_prompt("summarizer_reduce")
                 reduce_content = self._format_note_reduce_content(note_sections, tags_text)
@@ -285,9 +265,24 @@ class SummarizerAnalyzer:
                     schema=NoteAnalysis,
                     user_content=reduce_content,
                 )
-                if reduced_note is not None:
-                    clean_parts = [s.clean_text for s in note_sections]
-                    joined_clean = "\n\n".join(part for part in clean_parts if part)
-                    return reduced_note.model_copy(update={"clean_text": joined_clean})
+                clean_parts = [s.clean_text for s in note_sections]
+                joined_clean = "\n\n".join(part for part in clean_parts if part)
+                return reduced_note.model_copy(update={"clean_text": joined_clean})
 
-        raise AnalysisFailed("All analysis models failed")
+            except Exception as exc:
+                last_error = exc
+                if isinstance(exc, ValueError) and "invalid or missing structured response" in str(exc):
+                    logger.warning(
+                        "Analysis model %s/%s returned invalid or missing structured response",
+                        entry.provider,
+                        entry.model,
+                    )
+                else:
+                    logger.warning(
+                        "Analysis failed for provider=%s model=%s: %s",
+                        entry.provider,
+                        entry.model,
+                        exc,
+                    )
+
+        raise AnalysisFailed("All analysis models failed") from last_error

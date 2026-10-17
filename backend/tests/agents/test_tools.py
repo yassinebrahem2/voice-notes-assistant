@@ -1,4 +1,5 @@
 import asyncio
+import logging
 from datetime import date
 from typing import Any, cast
 
@@ -430,3 +431,98 @@ def test_find_recordings_filters_and_formats(container: Container) -> None:
     assert "devops, infra" in result
     assert "Discussion on infra." in result
     assert registry.resolve("R1") is not None
+
+
+def test_find_recordings_unparseable_analysis_logs_warning_and_sets_empty_desc(
+    container: Container,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    caplog.set_level(logging.WARNING)
+    conn = connect(container.db_path)
+    try:
+        rec_id = seed_recording(
+            conn,
+            kind="meeting",
+            title="Corrupt Recording",
+            created_at="2026-10-17T10:00:00Z",
+        )
+        conn.execute("UPDATE recordings SET analysis = ? WHERE id = ?", ("not-valid-json", rec_id))
+        conn.commit()
+    finally:
+        conn.close()
+
+    registry = SourceRegistry()
+    steps: list[str] = []
+    ctx = ChatContext(
+        db_path=container.db_path,
+        embedder=container.embedder,
+        settings=container.settings,
+        models=container.models,
+        scope="both",
+        tag_ids=[],
+        today=date(2026, 10, 17),
+        sources=registry,
+    )
+    runtime: ToolRuntime[ChatContext, dict[str, Any]] = ToolRuntime(
+        state={"messages": []},
+        context=ctx,
+        config={},
+        stream_writer=steps.append,
+        tool_call_id="call_test",
+        store=None,
+    )
+
+    find_fn = cast(Any, find_recordings).func
+    result = str(find_fn(text="Corrupt", runtime=runtime))
+
+    assert "<sources>" in result
+    assert "[R1] Corrupt Recording · 2026-10-17 · 00:06 · none · " in result
+    assert rec_id in caplog.text
+
+
+def test_find_recordings_does_not_swallow_arbitrary_exceptions(
+    container: Container,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    conn = connect(container.db_path)
+    try:
+        rec_id = seed_recording(
+            conn,
+            kind="meeting",
+            title="Meeting with analysis",
+            created_at="2026-10-17T10:00:00Z",
+        )
+        conn.execute("UPDATE recordings SET analysis = ? WHERE id = ?", ('{"overview": "test"}', rec_id))
+        conn.commit()
+    finally:
+        conn.close()
+
+    def buggy_validate(*args: Any, **kwargs: Any) -> Any:
+        raise TypeError("Unexpected bug")
+
+    monkeypatch.setattr(MeetingSummary, "model_validate_json", buggy_validate)
+
+    registry = SourceRegistry()
+    steps: list[str] = []
+    ctx = ChatContext(
+        db_path=container.db_path,
+        embedder=container.embedder,
+        settings=container.settings,
+        models=container.models,
+        scope="both",
+        tag_ids=[],
+        today=date(2026, 10, 17),
+        sources=registry,
+    )
+    runtime: ToolRuntime[ChatContext, dict[str, Any]] = ToolRuntime(
+        state={"messages": []},
+        context=ctx,
+        config={},
+        stream_writer=steps.append,
+        tool_call_id="call_test",
+        store=None,
+    )
+
+    find_fn = cast(Any, find_recordings).func
+    with pytest.raises(TypeError, match="Unexpected bug"):
+        find_fn(text="Meeting", runtime=runtime)

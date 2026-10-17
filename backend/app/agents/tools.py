@@ -1,11 +1,13 @@
 """Tools for the orchestrator agent: search_transcripts, find_recordings, and summarize."""
 
 import json
+import logging
 import re
 from typing import Any, cast
 
 from langchain.tools import ToolRuntime, tool
 from langchain_core.messages import HumanMessage
+from pydantic import ValidationError
 
 from app.agents.chat_context import ChatContext
 from app.agents.prompts import load_prompt
@@ -18,6 +20,8 @@ from app.domain.speakers import render_speakers
 from app.llm.factory import build_agent
 from app.llm.force_output import ForceOutputToolMiddleware
 from app.rag.retrieve import Hit, search_chunks
+
+logger = logging.getLogger(__name__)
 
 FIND_RECORDINGS_SQL = """
 SELECT
@@ -213,7 +217,12 @@ def find_recordings(
                             desc = render_speakers(nc.key_points[0].text, id_to_display)
                         else:
                             desc = render_speakers(nc.clean_text, id_to_display)
-                except Exception:
+                except (ValidationError, ValueError) as exc:
+                    logger.warning(
+                        "Failed to parse analysis for recording %s: %s",
+                        row["id"],
+                        exc,
+                    )
                     desc = ""
 
             escaped_desc = escape_untrusted(desc)
