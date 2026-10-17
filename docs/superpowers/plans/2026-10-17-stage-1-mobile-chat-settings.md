@@ -13,7 +13,7 @@
 
 **Spec:** `docs/superpowers/specs/2026-10-16-stage-1-design-ui.md` (§3 Chat, Settings, Everywhere; §6), `…-design-chat.md` §6 (run states), `…-design-data-api.md` (§4 chats routes, `/health`; §5 errors).
 
-**Stage overview:** `docs/superpowers/plans/2026-10-16-stage-1-overview.md`. **Builds on:** the foundation mobile code (`apiFetch`, `ApiError`, `errorMessage` (added to foundation Task 6, pending the lead's approval), `Schemas`, `queryClient`, `normalizeServerUrl`/`getServerUrl`/`setServerUrl`/`useServerUrl`, theme, `TabBar`, `appInfo`). Uses the agents plan's chat endpoints; until they land, the stub routes answer 501 and Chat shows its error state.
+**Stage overview:** `docs/superpowers/plans/2026-10-16-stage-1-overview.md`. **Builds on:** the foundation mobile code (`apiFetch`, `ApiError`, `errorMessage` and `openFanOut` (added to foundation Task 6, pending the lead's approval), `Schemas`, `queryClient`, `normalizeServerUrl`/`getServerUrl`/`setServerUrl`/`useServerUrl`, theme, `TabBar`, `appInfo`). Uses the agents plan's chat endpoints; until they land, the stub routes answer 501 and Chat shows its error state.
 
 ## Global Constraints (this plan)
 - Everything in the overview's Global constraints and the mobile recording plan's (tokens only, 48 dp targets, reduce motion, `npx expo install`).
@@ -58,10 +58,11 @@
 - Produces:
   - `splitAnswer(text: string, citations: CitationOut[]): ({ text: string } | { citation: CitationOut })[]` (turns `[k]` markers into chip parts; unknown markers stay as text).
   - `citationLabel(c: CitationOut): string` → `"<recording title> · <mm:ss>"`.
-  - Screen: scope selector (Notes / Meetings / Both, segmented) and tag chips at the top; empty chat → 3–4 starter questions (fixed list in the file); no ready recording yet → "Chat answers from your recordings. Record something first." pointing at ●; each turn shows the question, then the live `StatusLine` (last step, animated dots, reduce-motion safe), then the answer with citation chips (`router.push("/recording/<id>?segment=<seg>")`) or the fixed reply text; failed / interrupted / too slow → message + Retry; "New chat" in the header; input with send button (disabled while a run is going), keyboard-avoiding.
+  - Screen: scope selector (Notes / Meetings / Both, segmented) and tag chips at the top; empty chat → 3–4 starter questions (fixed list in the file); no ready recording yet → "Chat answers from your recordings. Record something first." with a Record button calling `openFanOut()` (UI spec §3); each turn shows the question, then the live `StatusLine` (last step, animated dots, reduce-motion safe), then the answer with citation chips (`router.push("/recording/<id>?segment=<seg>")`) or the fixed reply text; failed / interrupted / too slow → message + Retry; "New chat" in the header; input with send button (disabled while a run is going), keyboard-avoiding.
 - [ ] **Step 1: Write the failing tests:** `splitAnswer` (markers in order, repeated marker, unknown marker kept as text); `citationLabel` formatting; screen: starters shown when empty; tapping a chip calls `router.push` with the segment; Retry visible on interrupted.
 - [ ] **Step 2: Run** → FAIL. **Step 3: Implement.** **Step 4: Run** → clean.
-- [ ] **Step 5: Commit** `feat(mobile): add the chat screen`.
+- [ ] **Step 5 (phone):** the input stays visible above the keyboard (Android edge-to-edge changes `KeyboardAvoidingView` behaviour).
+- [ ] **Step 6: Commit** `feat(mobile): add the chat screen`.
 
 ### Task 3: Settings
 
