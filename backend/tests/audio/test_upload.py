@@ -4,6 +4,7 @@ import sqlite3
 from collections.abc import Callable
 from contextlib import closing
 from pathlib import Path
+from typing import Literal
 
 import httpx2
 import pytest
@@ -123,6 +124,34 @@ def test_upload_same_client_id_returns_existing_200(
     assert len(_audio_files(container)) == 1
     assert _upload_temps(container) == []
     assert wakes == [container]
+
+
+def test_retry_with_known_client_id_writes_no_file(
+    client: TestClient, container: Container, wav_bytes: bytes, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from app.audio import upload
+
+    first = _post(client, wav_bytes)
+    stored = _audio_files(container)
+    reached: list[str] = []
+    # A new recording id comes before the temp copy and the final path after it; a retry must reach neither.
+    original_new_id = upload.new_id
+
+    def recording_new_id(prefix: Literal["rec"]) -> str:
+        reached.append(f"new_id({prefix})")
+        return original_new_id(prefix)
+
+    monkeypatch.setattr(upload, "new_id", recording_new_id)
+    _after_copy(monkeypatch, lambda rec_id: reached.append(f"audio_path({rec_id})"))
+
+    retry = _post(client, wav_bytes)
+
+    assert retry.status_code == 200
+    assert retry.json() == first.json()
+    assert reached == []
+    assert len(_rows(container)) == 1
+    assert _audio_files(container) == stored
+    assert _files(container.settings.data_dir / "tmp") == []
 
 
 def test_concurrent_duplicate_client_id_keeps_one_file(

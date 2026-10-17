@@ -41,6 +41,16 @@ def test_decode_wav_keeps_exact_length(tmp_path: Path) -> None:
     _check_peaks(decoded.peaks)
 
 
+def test_decode_resampled_wav_keeps_its_length(tmp_path: Path) -> None:
+    src = write_tone(tmp_path / "voice.wav", codec="pcm_s16le", rate=44_100, layout="mono", seconds=2.0)
+    dest = tmp_path / "audio.npy"
+
+    decode_to_npy(src, dest)
+
+    # The resampler holds back its last samples until flushed; without the flush they would be lost.
+    assert abs(np.load(dest).shape[0] - 32_000) <= 2
+
+
 def test_decode_silence_peaks_zero(tmp_path: Path) -> None:
     decoded = decode_to_npy(silent_wav(tmp_path / "silence.wav"), tmp_path / "audio.npy")
 

@@ -21,13 +21,12 @@ def write_tone(
     wave = (amplitude * np.sin(2 * np.pi * frequency * np.arange(samples) / rate)).astype(np.float32)
     channels = 2 if layout == "stereo" else 1
     with av.open(str(path), "w") as container:
-        # PyAV's stubs leave add_stream's **kwargs and Packet's stream type parameter untyped.
-        stream = container.add_stream(codec, rate=rate, layout=layout)  # pyright: ignore[reportUnknownMemberType]
+        stream = container.add_stream(codec, rate=rate, layout=layout)  # pyright: ignore[reportUnknownMemberType] -- PyAV's stubs leave add_stream's **kwargs untyped.
         frame = av.AudioFrame.from_ndarray(np.tile(wave, (channels, 1)), format="fltp", layout=layout)
         frame.sample_rate = rate
         # Encoding None flushes the frames the encoder still holds.
-        packets = [*stream.encode(frame), *stream.encode(None)]  # pyright: ignore[reportUnknownMemberType, reportUnknownVariableType]
-        container.mux(packets)  # pyright: ignore[reportUnknownMemberType]
+        packets = [*stream.encode(frame), *stream.encode(None)]  # pyright: ignore[reportUnknownMemberType, reportUnknownVariableType] -- PyAV's stubs leave Packet's stream type untyped.
+        container.mux(packets)  # pyright: ignore[reportUnknownMemberType] -- PyAV's stubs leave Packet's stream type untyped.
     return path
 
 

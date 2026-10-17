@@ -3,6 +3,8 @@ from contextlib import closing
 import pytest
 from fastapi.testclient import TestClient
 
+from app.api.routes.recordings import MEDIA_TYPES
+from app.audio.upload import ALLOWED_EXTENSIONS
 from app.container import Container
 from app.db.connection import connect
 from tests.seed import seed_recording
@@ -56,6 +58,11 @@ def test_audio_media_type_follows_extension(
 
     assert response.status_code == 200
     assert response.headers["content-type"] == media_type
+
+
+def test_every_allowed_extension_has_a_media_type() -> None:
+    # An upload format the audio route cannot label would be stored and then fail to play back.
+    assert set(MEDIA_TYPES) == ALLOWED_EXTENSIONS
 
 
 def test_audio_missing_404(client: TestClient) -> None:

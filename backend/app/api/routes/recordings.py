@@ -22,7 +22,7 @@ from app.recordings import edit, read
 
 router = APIRouter(prefix="/recordings", tags=["recordings"])
 
-_MEDIA_TYPES = {"m4a": "audio/mp4", "mp4": "audio/mp4", "aac": "audio/mp4", "wav": "audio/wav", "mp3": "audio/mpeg"}
+MEDIA_TYPES = {"m4a": "audio/mp4", "mp4": "audio/mp4", "aac": "audio/mp4", "wav": "audio/wav", "mp3": "audio/mpeg"}
 
 
 @router.post(
@@ -124,4 +124,4 @@ def get_recording_audio(
     if not path.is_file():
         raise ApiError(404, ErrorCode.not_found, "Recording audio not found.")
     # FileResponse answers a Range request with 206 and Content-Range itself.
-    return FileResponse(path, media_type=_MEDIA_TYPES[row["audio_ext"]])
+    return FileResponse(path, media_type=MEDIA_TYPES[row["audio_ext"]])
