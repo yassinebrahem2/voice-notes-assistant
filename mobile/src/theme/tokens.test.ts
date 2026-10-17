@@ -16,7 +16,7 @@ const expected = {
   light: {
     bg: '#F6F3EE',
     surface: '#FFFFFF',
-    raised: '#FFFFFF',
+    raised: '#EDE8E0',
     ink: '#161412',
     inkMuted: '#6B645B',
     line: '#E3DDD3',

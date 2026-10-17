@@ -27,8 +27,7 @@ export const tokens: Record<'light' | 'dark', ThemeColors> = {
   light: {
     bg: '#F6F3EE',
     surface: '#FFFFFF',
-    // The light palette specifies no separate raised colour; reuse its surface.
-    raised: '#FFFFFF',
+    raised: '#EDE8E0',
     ink: '#161412',
     inkMuted: '#6B645B',
     line: '#E3DDD3',
