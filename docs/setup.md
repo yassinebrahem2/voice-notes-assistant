@@ -2,8 +2,10 @@
 
 This guide covers the current foundation. The backend has a working health
 endpoint and database migrations; feature routes return HTTP 501 with error code
-`not_implemented`. Speech, embeddings and analysis use fakes even when
-`SPEECH_BACKEND=real`. Mobile screens are placeholders and Record does nothing.
+`not_implemented`. With `SPEECH_BACKEND=real` (the default) speech runs in child
+processes and needs the speech extra and downloaded models (see
+[Real speech and models](#real-speech-and-models)); `SPEECH_BACKEND=fake` binds
+canned speech for development. Analysis still uses a fake. Mobile screens are placeholders and Record does nothing.
 Successful setup does not yet mean recording, transcription or chat works.
 
 ## Prerequisites
@@ -45,9 +47,9 @@ files or logs. The file is git-ignored.
 | --- | --- |
 | `GROQ_API_KEY` | Key for the configured Groq provider. |
 | `GEMINI_API_KEY` | Key for the configured Gemini provider. |
-| `HF_TOKEN` | Reserved for real diarization; may stay empty for the foundation. |
-| `SPEECH_BACKEND` | Optional `real` or `fake`; both currently bind fakes. Leave the example override commented to use the default. |
-| `ASR_DEVICE`, `DIARIZER_DEVICE` | Optional device overrides for later real speech; leave commented for this setup. |
+| `HF_TOKEN` | Hugging Face token for the real diarizer and its model download; see [Hugging Face token](#hugging-face-token). |
+| `SPEECH_BACKEND` | Optional `real` (default) or `fake`. `fake` needs no speech extra, models or token; set it on machines that only develop the UI or API. |
+| `ASR_DEVICE`, `DIARIZER_DEVICE` | Optional device overrides; set both to `cpu` on a machine without a CUDA GPU (slower). `config/models.yaml` stays on `cuda`. |
 
 Keys can remain empty for the foundation smoke checks. Missing LLM keys appear
 in the health response as `Missing GROQ_API_KEY` or `Missing GEMINI_API_KEY`.
@@ -58,9 +60,8 @@ after changing configuration.
 
 The app name and version come from `config/app.json`; provider and model choices
 come from `config/models.yaml`. Keep secrets out of both. Real speech packages,
-Hugging Face access/token instructions and model downloads arrive with the
-processing plan. There is no `setup` CLI command or speech extra in this
-foundation. Later hosted-model demos must use demo recordings only, since free
+the Hugging Face token and model downloads are covered in
+[Real speech and models](#real-speech-and-models). Hosted-model demos must use demo recordings only, since free
 tiers may use inputs for training.
 
 The default database is `app.db` in the per-user data directory selected by
@@ -93,9 +94,69 @@ In a second terminal, check:
 curl.exe http://127.0.0.1:8000/api/v1/health
 ```
 
-Expect HTTP 200 and JSON containing `app_name`, `version`,
-`speech_backend: "fake"` and `roles`. A request to `/api/v1/recordings` currently
+Expect HTTP 200 and JSON containing `app_name`, `version`, `speech_backend`
+(`"real"` by default, `"fake"` with `SPEECH_BACKEND=fake`) and `roles`; each role
+is `ready` or the reason it is not, such as `Model not downloaded`. A request to `/api/v1/recordings` currently
 returns HTTP 501; that is expected foundation behavior.
+
+## Real speech and models
+
+The real ASR (faster-whisper) and diarizer (pyannote) need torch and run only on
+machines that install the backend's `speech` extra. Each recording's ASR and
+diarization run in their own child process, so the GPU never holds both models.
+The models used are the `asr`, `diarizer` and `embedder` roles in
+`config/models.yaml`.
+
+### Speech extra (laptop)
+
+From `backend/`, install everything including torch (the CUDA 12.8 build on
+Windows and Linux, the PyPI build on macOS):
+
+```powershell
+uv sync --extra speech
+```
+
+Always pass `--extra speech` on this machine: a plain `uv sync` removes the speech
+packages again. Run the backend with
+`uv run --extra speech python -m app.cli serve`. Without a CUDA GPU, set
+`ASR_DEVICE=cpu` and `DIARIZER_DEVICE=cpu` in `backend/.env`. Dev and CI machines
+skip the extra and set `SPEECH_BACKEND=fake`.
+
+### Hugging Face token
+
+The diarizer model (`roles.diarizer` in `config/models.yaml`) is gated on
+Hugging Face:
+
+1. Sign in at [huggingface.co](https://huggingface.co), open the page of that
+   model (`https://huggingface.co/<model id>`) and accept its user conditions.
+2. Create a read token under
+   [Settings > Access Tokens](https://huggingface.co/settings/tokens).
+3. Put it in `backend/.env` as `HF_TOKEN=...`. Never commit it or paste it
+   anywhere else.
+
+Without the token, `/health` reports the diarizer as `Missing HF_TOKEN` and setup
+skips the diarizer download.
+
+### Downloading models
+
+From `backend/`, run once (and again after a model changes in
+`config/models.yaml`):
+
+```powershell
+uv run --extra speech python -m app.cli setup
+```
+
+Setup creates the data and model cache directories, downloads the embedder and,
+when the speech extra is installed, the ASR and diarizer models into the model
+cache directory. It then prints each role's readiness and the names of missing
+environment variables (never their values). Without the speech extra it
+downloads only the embedder and says so. `serve` sets `HF_HUB_OFFLINE=1`, so
+nothing downloads while it runs: a model setup did not download makes its role
+report `Model not downloaded` in `/health` and its processing step fail at once.
+
+Keep several GB free: the model cache (`MODEL_CACHE_DIR`, by default the `models`
+folder in the data directory) holds a few GB of models, and torch with CUDA adds
+several GB more to `backend/.venv`.
 
 ## Private HTTPS from the phone
 
@@ -176,7 +237,7 @@ problems in the plan issue. Expo Go or CI passing does not verify APK installati
 With the backend running and Serve enabled, connect the Android phone to
 Tailscale and open the actual URL
 `https://<machine>.<tailnet>.ts.net/api/v1/health` in its browser. Confirm HTTP 200
-with the expected health JSON and `speech_backend: "fake"`. Record the date,
+with the expected health JSON and the `speech_backend` you configured. Record the date,
 device, URL host, result and any problem in the plan issue, without credentials.
 This proves phone-to-backend connectivity; app configuration and feature behavior
 remain separate checks. This manual result is not established by automated CI.

@@ -1,19 +1,69 @@
 import argparse
+import importlib.util
 import json
 import os
 import sys
 from pathlib import Path
 
 import uvicorn
+from fastembed import TextEmbedding
 
 from app.api.app import create_app
+from app.api.routes.health import get_health
 from app.config.app_config import load_app_config
-from app.config.settings import load_settings
-from app.container import build_container
+from app.config.settings import hf_token, load_settings
+from app.container import Container, build_container
 from app.db.connection import connect
 from app.db.migrate import apply_migrations
+from app.speech import asr_child, diarize_child
+from app.speech.real import hf_home, record_download
 
 OPENAPI_PATH = Path(__file__).resolve().parents[1] / "openapi.json"
+
+
+def speech_extra_installed() -> bool:
+    """Whether the speech packages are importable, checked without importing them (and so without torch)."""
+    names = ("faster_whisper", "pyannote", "torch")
+    return all(importlib.util.find_spec(name) is not None for name in names) and (
+        importlib.util.find_spec("pyannote.audio") is not None
+    )
+
+
+def _missing_env_names(container: Container) -> list[str]:
+    providers = container.models.providers.values()
+    names = [provider.key_env for provider in providers if not os.environ.get(provider.key_env)]
+    return [*names, *(["HF_TOKEN"] if hf_token() is None else [])]
+
+
+def run_setup(container: Container) -> None:
+    """Creates the runtime folders and downloads every model into the model cache; prints names, never values."""
+    settings = container.settings
+    settings.data_dir.mkdir(parents=True, exist_ok=True)
+    settings.model_cache_dir.mkdir(parents=True, exist_ok=True)
+    roles = container.models.roles
+    print(f"Downloading the embedder model into {settings.model_cache_dir}")
+    # fastembed's own download, so every file it loads offline is fetched, not only the weights.
+    TextEmbedding(model_name=roles.embedder.model, cache_dir=str(settings.model_cache_dir))
+    hub_dir = hf_home(settings.model_cache_dir) / "hub"
+    if not speech_extra_installed():
+        print("The speech extra is not installed: skipping the ASR and diarizer models (uv sync --extra speech).")
+    else:
+        print("Downloading the ASR model")
+        snapshot = asr_child.download(roles.asr.model, hub_dir)
+        record_download(settings.model_cache_dir, "asr", roles.asr.model, snapshot)
+        token = hf_token()
+        if token is None:
+            print("HF_TOKEN is not set: skipping the diarizer model.")
+        else:
+            print("Downloading the diarizer model")
+            snapshot = diarize_child.download(roles.diarizer.model, hub_dir, token.get_secret_value())
+            record_download(settings.model_cache_dir, "diarizer", roles.diarizer.model, snapshot)
+    health = get_health(container)
+    print(f"Speech backend: {health.speech_backend}")
+    for role, status in health.roles.items():
+        print(f"{role}: {status}")
+    missing = _missing_env_names(container)
+    print(f"Missing environment variables: {', '.join(missing) if missing else 'none'}")
 
 
 def main(argv: list[str] | None = None) -> None:
@@ -23,6 +73,7 @@ def main(argv: list[str] | None = None) -> None:
     export = commands.add_parser("export-openapi", help="Export the stable API schema.")
     export.add_argument("--check", action="store_true", help="Fail if the committed schema is stale.")
     commands.add_parser("seed-demo", help="Seed demo data for mobile development.")
+    commands.add_parser("setup", help="Create the data folders, download every model and check the environment.")
     args = parser.parse_args(argv)
     settings = load_settings(load_app_config())
     container = build_container(settings)
@@ -35,6 +86,9 @@ def main(argv: list[str] | None = None) -> None:
                 raise SystemExit(1)
         else:
             OPENAPI_PATH.write_text(schema, encoding="utf-8", newline="\n")
+        return
+    if args.command == "setup":
+        run_setup(container)
         return
     if args.command == "seed-demo":
         from app.demo_seed import DemoSeedError, seed_demo

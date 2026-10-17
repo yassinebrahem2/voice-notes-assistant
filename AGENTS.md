@@ -39,7 +39,7 @@ Run from `backend/` with Python 3.12 and uv:
 - Export API: `uv run python -m app.cli export-openapi`
 - Check API: `uv run python -m app.cli export-openapi --check`
 
-The processing plan adds the speech extra.
+Laptop install (real speech, torch included): `uv sync --extra speech`
 
 ## Mobile commands
 
