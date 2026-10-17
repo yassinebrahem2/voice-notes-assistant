@@ -20,7 +20,19 @@ The foundation binds fakes for speech, embeddings and analysis, including when t
 
 ## Mobile commands
 
-The mobile scaffold is not implemented yet. Add its commands when it is available.
+Run from `mobile/` with Node LTS and npm:
+- Install: `npm ci`
+- Run in Expo Go: `npx expo start`
+- Tests: `npx jest --ci`
+- Lint: `npx eslint .`
+- Format check: `npx prettier --check .`
+- Types: `npx tsc --noEmit`
+- Generate API types: `npm run gen:api`
+- Build a preview APK (lead's configured EAS account): `npx eas-cli build -p android --profile preview`
+
+API generation uses a private npm workspace because the generator requires TypeScript 5 while Expo SDK 58 expects TypeScript 6. `npm ci` installs both supported versions from the root lockfile; run generation through `npm run gen:api`.
+
+The foundation has placeholder screens and a no-op Record action. An Android device check, EAS project setup and preview APK installation are separate manual checks; passing CI does not verify those.
 
 ## Team workflow
 
