@@ -4,9 +4,34 @@ Instructions for every coding agent working in this repository (Claude Code, Cod
 
 These rules apply to every session, whoever runs it and whatever agent they use.
 
-## Status
+## Backend commands
 
-Design phase: no code yet, so no build, lint or test commands exist. Add them here once the code is scaffolded (one "<Area> commands" section per area: Backend commands, Mobile commands), and delete this Status section then.
+Run from `backend/` with Python 3.12 and uv:
+- Install: `uv sync --locked`
+- Run: `uv run python -m app.cli serve`
+- Tests: `uv run pytest`
+- Lint: `uv run ruff check .`
+- Format check: `uv run ruff format --check .`
+- Types: `uv run pyright`
+- Export API: `uv run python -m app.cli export-openapi`
+- Check API: `uv run python -m app.cli export-openapi --check`
+
+The processing plan adds the speech extra.
+
+## Mobile commands
+
+Run from `mobile/` with Node LTS and npm:
+- Install: `npm ci`
+- Run in Expo Go: `npx expo start`
+- Tests: `npx jest --ci`
+- Lint: `npx eslint .`
+- Format check: `npx prettier --check .`
+- Types: `npx tsc --noEmit`
+- Generate API types: `npm run gen:api`
+- Build a preview APK (lead's configured EAS account): `npx eas-cli build -p android --profile preview`
+
+API generation uses a private npm workspace because the generator requires TypeScript 5 while Expo SDK 58 expects TypeScript 6. `npm ci` installs both supported versions from the root lockfile; run generation through `npm run gen:api`.
+
 
 ## Team workflow
 
