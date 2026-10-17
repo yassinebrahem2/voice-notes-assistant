@@ -19,7 +19,9 @@ from app.audio.storage import audio_path, tmp_dir
 from app.container import Container
 from app.domain.analysis import MeetingSummary, NoteContent
 from app.ids import new_id
+from app.processing.analysis_store import build_analysis_request, store_analysis
 from app.processing.speakers import assign_speakers
+from app.rag.index import index_recording
 from app.speech.protocols import AsrSegment
 
 logger = logging.getLogger(__name__)
@@ -162,16 +164,17 @@ def _diarize(container: Container, conn: sqlite3.Connection, rec_id: str, npy: P
         conn.execute("UPDATE recordings SET status = 'analyzing' WHERE id = ?", (rec_id,))
 
 
-def _analyze(conn: sqlite3.Connection, rec_id: str) -> None:
-    """Only moves the status on: storing the analyzer's output is the next plan task, which replaces this body."""
+def _analyze(container: Container, conn: sqlite3.Connection, rec_id: str) -> None:
+    request = build_analysis_request(conn, rec_id)
+    # The model call can take seconds, so it runs before the write transaction opens.
+    analysis = container.analyzer.analyze(request)
     with conn:
+        store_analysis(conn, rec_id, analysis)
         conn.execute("UPDATE recordings SET status = 'indexing' WHERE id = ?", (rec_id,))
 
 
-def _index(conn: sqlite3.Connection, rec_id: str) -> None:
-    """Only marks the recording ready: chunking and embedding are the next plan task, which replaces this body."""
-    with conn:
-        conn.execute("UPDATE recordings SET status = 'ready', claimed = 0 WHERE id = ?", (rec_id,))
+def _index(container: Container, conn: sqlite3.Connection, rec_id: str) -> None:
+    index_recording(conn, container.embedder, rec_id, container.settings)
 
 
 def _fail(conn: sqlite3.Connection, rec_id: str, step: Step, error: Exception) -> None:
@@ -212,11 +215,11 @@ def _run_steps(container: Container, conn: sqlite3.Connection, rec_id: str) -> N
                 _diarize(container, conn, rec_id, npy)
             elif status == "analyzing":
                 step = "analyzing"
-                _analyze(conn, rec_id)
+                _analyze(container, conn, rec_id)
             else:
                 # The schema allows no other status, so this is indexing.
                 step = "indexing"
-                _index(conn, rec_id)
+                _index(container, conn, rec_id)
     except Exception as error:
         _fail(conn, rec_id, step, error)
 
