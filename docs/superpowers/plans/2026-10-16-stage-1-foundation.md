@@ -227,6 +227,55 @@
 - [ ] **Step 4 (manual, lead): phone check over Tailscale.** Laptop runs `serve` + `tailscale serve`; the phone (Expo Go) can reach `https://<machine>.<tailnet>.ts.net/api/v1/health` (browser is enough). Record the result in the plan issue.
 - [ ] **Step 5: Commit** `chore: add CI, agent commands and setup doc`.
 
+### Task 8: Shared backend helpers and demo seed (added after the plans 2–5 review)
+
+Both parallel backend plans (processing, agents) need these; written once here so neither branch writes its own copy.
+
+**Files:**
+- Create: `backend/app/rag/vectors.py`, `backend/app/domain/analysis_render.py`, `backend/app/demo_seed.py`, `backend/tests/seed.py`
+- Modify: `backend/app/db/connection.py`, `backend/app/api/deps.py`, `backend/app/cli.py` (`seed-demo`)
+- Test: `backend/tests/db/test_connection_threads.py`, `backend/tests/rag/test_vectors.py`, `backend/tests/domain/test_analysis_render.py`, `backend/tests/test_seed_helpers.py`, `backend/tests/test_demo_seed.py`
+
+**Interfaces:**
+- Consumes: Tasks 1–4.
+- Produces:
+  - `connect(db_path: Path, *, check_same_thread: bool = True) -> sqlite3.Connection` (everything else unchanged).
+  - `get_db(container: Container = Depends(get_container)) -> Iterator[sqlite3.Connection]` in `app/api/deps.py`: one connection per request with `check_same_thread=False` (FastAPI may run a sync dependency's setup and the sync handler on different threadpool threads; the request uses the connection sequentially), closed after the request.
+  - `app.rag.vectors`: `pack_embedding(vec: Sequence[float]) -> bytes` (`struct.pack(f"<{len(vec)}f", *vec)`, the float32 format sqlite-vec's `vec_distance_cosine` reads) and `unpack_embedding(blob: bytes) -> list[float]`.
+  - `app.domain.analysis_render`: `render_analysis(analysis: MeetingSummary | NoteContent, id_to_display: Mapping[str, str]) -> MeetingSummary | NoteContent` (a copy with `render_speakers` applied to every text: overview, item texts, clean text; citations and owner ids untouched).
+  - `tests/seed.py` (imported as `from tests.seed import seed_recording, seed_chunk`; `pythonpath = ["."]` makes `tests` importable):
+    - `seed_recording(conn, *, kind: RecordingKind = "meeting", status: RecordingStatus = "ready", title: str | None = "Budget sync", segments: Sequence[tuple[int, int, str | None, str]] = DEFAULT_SEGMENTS, tags: Sequence[str] = (), analysis: MeetingSummary | NoteContent | None = None, created_at: str | None = None, claimed: bool = False) -> str`: inserts the recording, one speaker per distinct label (labels in order of first appearance), the segments (`(start_ms, end_ms, speaker_label, text)`), the tags (normalised, created if missing) and the analysis JSON; returns the recording id. `DEFAULT_SEGMENTS` is a short two-speaker exchange.
+    - `seed_chunk(conn, rec_id: str, *, first_idx: int, last_idx: int, text: str, vector: Sequence[float]) -> str`: inserts a chunk spanning those segments with `pack_embedding(vector)`.
+  - `python -m app.cli seed-demo`: inserts into the configured data dir a ready meeting (two speakers, ~8 segments, a summary with one decision, one action item with an owner and one open question, each cited) and a ready note (3 key points, a clean note), with `waveform_peaks` and chunks embedded by the container's embedder; refuses with a message and exit code 1 if any recording exists. Lets the mobile plans show realistic data before processing is done.
+
+- [ ] **Step 1: Write the failing tests:**
+  - `test_get_db_connection_usable_across_threads`: a connection from `get_db` used in another thread raises nothing; the default `connect` still refuses cross-thread use.
+  - `test_pack_unpack_round_trip` and `test_packed_vector_works_with_vec_distance_cosine` (distance 0 for the same vector).
+  - `test_render_analysis_meeting_and_note` (tokens replaced in overview, items, clean text; citations unchanged; unknown ids left as is).
+  - `test_seed_recording_creates_speakers_segments_tags_analysis` (from `tests/recordings/` or another sub-folder, to prove the import path); `test_seed_chunk_packs_vector`.
+  - `test_seed_demo_inserts_two_ready_recordings` and `test_seed_demo_refuses_when_recordings_exist`.
+- [ ] **Step 2: Run** `uv run pytest -v` → FAIL. **Step 3: Implement.** **Step 4: Run** the suite, `ruff check`, `ruff format --check`, `pyright`, `export-openapi --check` → clean.
+- [ ] **Step 5: Commit** `feat(backend): add shared db, vector, rendering and seed helpers`.
+
+### Task 9: Mobile error messages and record menu store (added after the plans 2–5 review)
+
+Both mobile plans need these; written once here.
+
+**Files:**
+- Create: `mobile/src/api/errorMessages.ts`, `mobile/src/recording/fanOutStore.ts`
+- Modify: `mobile/src/recording/RecordAction.tsx` (`onPress` → `openFanOut()`)
+- Test: `mobile/src/api/errorMessages.test.ts`, `mobile/src/recording/fanOutStore.test.ts`
+
+**Interfaces:**
+- Consumes: Task 6 (`ApiError`, `ErrorCode`).
+- Produces:
+  - `errorMessage(error: unknown): string`: for an `ApiError`, a fixed message per code from a table typed `Record<ErrorCode | "network_error" | "timeout", string | null>` (so a new code fails type checking until it has an entry); `null` means "use the server's message". Messages: `network_error` "Can't reach the server.", `timeout` "The server took too long to answer.", `not_found` "Not found.", `payload_too_large` "This recording is too large to upload.", `unsupported_media_type` "This audio format isn't supported.", `recording_busy` "Available when processing finishes.", `not_ready` "Available once processing is done.", `audio_unreadable` "Couldn't read this audio.", `transcription_failed` "Couldn't transcribe this recording.", `diarization_failed` "Couldn't tell the speakers apart.", `analysis_failed` "Couldn't analyze this recording.", `indexing_failed` "Couldn't prepare this recording for search.", `ai_unavailable` "Couldn't reach the AI right now.", `timed_out` "That took too long.", `not_implemented` "Not available yet.", `internal_error` "Something went wrong on the server."; `validation_error` and `not_failed` → server message. Anything that is not an `ApiError` → "Something went wrong."
+  - `fanOutStore`: `openFanOut(): void`, `closeFanOut(): void`, `useFanOut(): boolean` (module store read with `useSyncExternalStore`). The mobile recording plan renders the menu from it at root level; until then opening it has no visible effect.
+
+- [ ] **Step 1: Write the failing tests:** every code maps to a message or to the server's message (table-driven over the enum); a non-`ApiError` gives the generic text; `openFanOut`/`closeFanOut` update `useFanOut` subscribers (render a test component); pressing `RecordAction` calls `openFanOut`.
+- [ ] **Step 2: Run** `npx jest` → FAIL. **Step 3: Implement.** **Step 4: Run** jest, `tsc --noEmit`, eslint, prettier → clean.
+- [ ] **Step 5: Commit** `feat(mobile): add error messages and record menu store`.
+
 ## Self-review notes
 - Spec coverage: schema (data-API §1) Task 2; LLM schemas Task 3; stored analysis shape (§2), routes (§4) and errors (§5) Task 4; config and registry (platform §1) Task 1; navigation and tokens (UI §1, §4) Task 5; client error mapping (UI §6, partial) Task 6; CI and testing frame (platform §4) Task 7; Tailscale setup (platform §2–§3) Task 7. Everything else belongs to plans 2–5.
 - Dependencies: Task 2 needs 1; Task 3 needs 1–2; Task 4 needs 1–3; Task 5 needs nothing; Task 6 needs 4 and 5; Task 7 needs 4 and 6. Manual lead steps: Task 5 Step 8 (APK), Task 7 Step 4 (phone over Tailscale). Backend (1→2→3→4) and mobile (5) run in parallel.
