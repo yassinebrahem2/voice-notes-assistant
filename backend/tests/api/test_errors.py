@@ -48,6 +48,29 @@ def test_unhandled_exception_is_generic(container: Container, caplog: pytest.Log
     assert "private-value" not in response.text
     assert "private-value" not in caplog.text
     assert any(record.levelno >= logging.ERROR for record in caplog.records)
+    assert "GET" in caplog.text
+    assert "/crash" in caplog.text
+    assert "RuntimeError" in caplog.text
+    assert "test_errors.py" in caplog.text
+    assert "in crash" in caplog.text
+
+
+def test_unhandled_exception_logs_route_template(container: Container, caplog: pytest.LogCaptureFixture) -> None:
+    app = create_app(container)
+
+    @app.get("/items/{item_id}")
+    def item(item_id: str) -> None:
+        raise RuntimeError("private-value")
+
+    with TestClient(app) as client:
+        client.get("/items/abc123")
+    assert "/items/{item_id}" in caplog.text
+    assert "abc123" not in caplog.text
+
+
+def test_unhandled_exception_is_handled_only_by_the_middleware(container: Container) -> None:
+    app = create_app(container)
+    assert Exception not in app.exception_handlers
 
 
 def test_streaming_exception_does_not_expose_original(container: Container, caplog: pytest.LogCaptureFixture) -> None:
@@ -66,6 +89,9 @@ def test_streaming_exception_does_not_expose_original(container: Container, capl
         client.get("/stream-crash")
     assert "private-value" not in "".join(traceback.format_exception(caught.value))
     assert "private-value" not in caplog.text
+    assert "/stream-crash" in caplog.text
+    assert "in stream" in caplog.text
+    assert len([record for record in caplog.records if record.levelno >= logging.ERROR]) == 1
 
 
 def test_error_middleware_does_not_swallow_lifespan_errors() -> None:

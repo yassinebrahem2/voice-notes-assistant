@@ -1,4 +1,5 @@
 import logging
+import traceback
 from enum import StrEnum
 from typing import NoReturn
 
@@ -10,6 +11,12 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 logger = logging.getLogger(__name__)
+
+
+def describe_frames(exc: BaseException) -> str:
+    # Only locations: source lines and locals can hold credentials, as can the exception message.
+    frames = reversed(traceback.extract_tb(exc.__traceback__))
+    return " <- ".join(f"{frame.filename}:{frame.lineno} in {frame.name}" for frame in frames)
 
 
 class ErrorCode(StrEnum):
@@ -76,7 +83,15 @@ class SafeErrorMiddleware:
             await self.app(scope, receive, track_start)
         except Exception as exc:
             # Starlette's outer error handler re-raises to Uvicorn, which logs the exception.
-            logger.error("Unhandled request error (%s)", type(exc).__name__)
+            # The route template, not the URL: ids in the URL are user data.
+            route_path = getattr(scope.get("route"), "path", None) or scope["path"]
+            logger.error(
+                "Unhandled request error: %s %r (%s) at %s",
+                scope["method"],
+                route_path,
+                type(exc).__name__,
+                describe_frames(exc),
+            )
             if response_started:
                 raise RuntimeError("Response failed.") from None
             response = error_response(500, ErrorCode.internal_error, "An internal error occurred.")
@@ -99,9 +114,3 @@ def register_error_handlers(app: FastAPI) -> None:
         code = ErrorCode.not_found if exc.status_code == 404 else ErrorCode.internal_error
         message = "Resource not found." if exc.status_code == 404 else "The request could not be completed."
         return error_response(exc.status_code, code, message)
-
-    @app.exception_handler(Exception)
-    async def handle_unhandled_error(request: Request, exc: Exception) -> JSONResponse:
-        # Exception text and tracebacks can contain provider credentials or local paths.
-        logger.error("Unhandled request error (%s)", type(exc).__name__)
-        return error_response(500, ErrorCode.internal_error, "An internal error occurred.")
