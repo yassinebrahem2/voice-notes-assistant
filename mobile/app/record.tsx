@@ -38,6 +38,7 @@ export default function RecordScreen() {
   const recorder = useRecorder(recordingKind);
   const { tape } = useTheme<TapeTheme>();
   const [showDiscardDialog, setShowDiscardDialog] = useState(false);
+  const [expoGoClient, setExpoGoClient] = useState(isExpoGo);
   const mounted = useRef(false);
   const opacity = useSharedValue(1);
   const veil = useAnimatedStyle(() => ({ opacity: opacity.get() }));
@@ -86,6 +87,7 @@ export default function RecordScreen() {
         void (async () => {
           try {
             await recorder.prepare();
+            setExpoGoClient(isExpoGo());
             await recorder.start();
           } catch (error) {
             console.warn('Failed to start recording', error);
@@ -137,7 +139,7 @@ export default function RecordScreen() {
             {formatDuration(recorder.elapsedMs)}
           </Text>
 
-          {isExpoGo() ? (
+          {expoGoClient || isExpoGo() ? (
             <Text
               variant="bodySmall"
               style={[styles.expoGoNote, { color: tape.inkMuted }]}
@@ -204,11 +206,18 @@ export default function RecordScreen() {
 
         <View style={styles.footer}>
           <Pressable
+            testID="stop-button"
             accessibilityRole="button"
             accessibilityLabel="Stop recording"
             onPress={handleStop}
-            android_ripple={{ color: tape.line, borderless: true }}
-            style={[styles.stopButton, { backgroundColor: tape.signal }]}
+            android_ripple={{ color: tape.onSignal }}
+            style={({ pressed }) => [
+              styles.stopButton,
+              {
+                backgroundColor: tape.signal,
+                transform: [{ scale: pressed ? motion.press.scale : 1 }],
+              },
+            ]}
           >
             <View
               style={[styles.stopSquare, { backgroundColor: tape.onSignal }]}

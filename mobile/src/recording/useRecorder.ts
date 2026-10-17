@@ -3,7 +3,12 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { AppState } from 'react-native';
 import { useSharedValue, type SharedValue } from 'react-native-reanimated';
 
-import { audioModeFor, isExpoGo, shouldPauseOnReturn } from './environment';
+import {
+  audioModeFor,
+  isExpoGo,
+  markAsExpoGo,
+  shouldPauseOnReturn,
+} from './environment';
 import type { RecordingKind } from './fanOut';
 import { dbfsToLevel } from './levels';
 
@@ -70,6 +75,7 @@ export function useRecorder(_kind: RecordingKind): UseRecorderResult {
       await recorder.prepareToRecordAsync();
     } catch (err) {
       if (err instanceof Error && err.message.includes('recording service')) {
+        markAsExpoGo();
         await setAudioModeAsync(audioModeFor(true));
         await recorder.prepareToRecordAsync();
       } else {
