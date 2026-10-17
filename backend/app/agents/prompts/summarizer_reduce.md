@@ -10,4 +10,4 @@ CRITICAL INSTRUCTIONS:
   - Provide consolidated decisions, action items, and open questions.
 - For notes:
   - Provide consolidated key points (at most 8 items).
-  - Note clean text will be assembled separately; provide a title, tags, and consolidated key points.
+  - Note clean text will be assembled separately; provide a title, tags, and consolidated key points (set clean_text to an empty string "").
