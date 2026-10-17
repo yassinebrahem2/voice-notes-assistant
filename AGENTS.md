@@ -16,7 +16,7 @@ Run from `backend/` with Python 3.12 and uv:
 - Export API: `uv run python -m app.cli export-openapi`
 - Check API: `uv run python -m app.cli export-openapi --check`
 
-The foundation binds fakes for speech, embeddings and analysis, including when the requested speech backend is `real`. `/api/v1/health` reports the bound backend. The processing plan adds the speech extra.
+The processing plan adds the speech extra.
 
 ## Mobile commands
 
@@ -32,7 +32,6 @@ Run from `mobile/` with Node LTS and npm:
 
 API generation uses a private npm workspace because the generator requires TypeScript 5 while Expo SDK 58 expects TypeScript 6. `npm ci` installs both supported versions from the root lockfile; run generation through `npm run gen:api`.
 
-The foundation has placeholder screens and a no-op Record action. An Android device check, EAS project setup and preview APK installation are separate manual checks; passing CI does not verify those.
 
 ## Team workflow
 
