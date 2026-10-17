@@ -35,23 +35,24 @@
 ### Task 1: Read endpoints (library, detail, tags)
 
 **Files:**
-- Create: `backend/app/recordings/__init__.py`, `backend/app/recordings/read.py`
-- Modify: `backend/app/api/deps.py` (add `get_db`), `backend/app/api/routes/recordings.py` (`list_recordings`, `get_recording`), `backend/app/api/routes/tags.py` (`list_tags`)
-- Test: `backend/tests/recordings/conftest.py` (seed helpers), `backend/tests/recordings/test_read.py`
+- Create: `backend/app/recordings/__init__.py`, `backend/app/recordings/read.py`, `backend/tests/seed.py`
+- Modify: `backend/app/db/connection.py` (`connect(db_path, *, check_same_thread: bool = True)`), `backend/app/api/deps.py` (add `get_db`), `backend/app/api/routes/recordings.py` (`list_recordings`, `get_recording`), `backend/app/api/routes/tags.py` (`list_tags`)
+- Test: `backend/tests/recordings/test_read.py`
 
 **Interfaces:**
 - Produces:
-  - `get_db(container: Container = Depends(get_container)) -> Iterator[sqlite3.Connection]`: one connection per request, closed after.
+  - `get_db(container: Container = Depends(get_container)) -> Iterator[sqlite3.Connection]`: one connection per request opened with `check_same_thread=False` (FastAPI may run the dependency's setup and the sync handler on different threadpool threads; the request uses the connection sequentially, so this is safe), closed after. The worker keeps the default.
   - `recording_out(conn, row: sqlite3.Row) -> RecordingOut` (tags, `processing = bool(claimed)`, `waveform_peaks` parsed).
   - `list_recordings(conn, kind: RecordingKind | None, q: str | None, tag_ids: list[str]) -> list[RecordingOut]`: newest first; `q` matches title, tag names or any segment text (case-insensitive `LIKE`, `%` and `_` in `q` escaped); several `tag_id`s mean all of them.
   - `get_recording_detail(conn, rec_id: str) -> RecordingDetailOut`: segments in `idx` order; speakers with `display_name`; `summary` or `note` from `recordings.analysis` with `render_speakers` applied to every text; 404 `not_found` if missing.
   - `list_tags(conn) -> list[TagOut]`: name order, `count` = recordings using it.
-  - Seed helpers for tests (reused by later tasks and plans): `seed_recording(conn, *, kind="meeting", status="ready", title="Budget sync", segments: list[tuple[int, int, str | None, str]] = …, tags: list[str] = [], analysis: dict | None = None) -> str`.
+  - `tests/seed.py` (imported as `from tests.seed import seed_recording`; reused by later tasks and by the agents plan): `seed_recording(conn, *, kind="meeting", status="ready", title="Budget sync", segments: list[tuple[int, int, str | None, str]] = …, tags: list[str] = [], analysis: dict | None = None) -> str`.
 
 - [ ] **Step 1: Write the failing tests** (`client` fixture, seeded DB):
   - `test_list_newest_first_and_kind_filter`; `test_list_search_matches_title_tag_and_transcript` (three recordings, one match each); `test_search_escapes_like_wildcards` (`q="50%"` does not match everything); `test_list_tag_filter_requires_all_tags`.
   - `test_detail_renders_speaker_names_in_summary`: analysis text `"{{spk_X}} will send it"` with speaker renamed "Sarah" → `"Sarah will send it"`; unnamed → `"Speaker A will send it"`.
   - `test_detail_unknown_id_is_404_contract_shape`.
+  - `test_get_db_connection_usable_across_threads`: a connection from `get_db` used in another thread raises nothing.
   - `test_tags_with_counts`.
 - [ ] **Step 2: Run** `uv run pytest tests/recordings -v` → FAIL.
 - [ ] **Step 3: Implement** `get_db`, `app/recordings/read.py`, and the three handlers.
@@ -72,7 +73,7 @@
   - `update_recording(conn, rec_id, patch: RecordingPatchIn) -> RecordingOut`: only `ready` (else 409 `not_ready`); title trimmed, empty → 422 `validation_error`; tags normalised with `normalize_tag`, reused with `match_existing_tag`, duplicates removed, replace the set; unused tag rows are kept.
   - `rename_speaker(conn, rec_id, speaker_id, patch: SpeakerPatchIn) -> SpeakerOut`: only `ready`; trimmed; `""` clears the name; a speaker of another recording → 404.
   - `delete_recording(conn, data_dir, rec_id) -> None`: `DELETE FROM recordings WHERE id=? AND claimed=0`; 0 rows and the row exists → 409 `recording_busy`; 0 rows and no row → 404; then `remove_recording_files`.
-  - `retry_recording(conn, rec_id) -> RecordingOut`: only `failed` (else 409 `not_failed`); sets `status` from `failed_step` (`decoding` → `uploaded`, others → the step's own status), clears `error_*` and `failed_step`, `claimed=0`; wakes the worker through `wake_worker(container)` (Task 4 provides it; until then a no-op function in `app/processing/__init__.py`).
+  - `retry_recording(conn, rec_id) -> RecordingOut`: only `failed` (else 409 `not_failed`); sets `status` from `failed_step` (`decoding` → `uploaded`, others → the step's own status), clears `error_*` and `failed_step`, `claimed=0`; the route then calls `wake_worker(container)` (Task 4 provides it; until then a no-op function in `app/processing/__init__.py`).
 
 - [ ] **Step 1: Write the failing tests:**
   - `test_patch_title_and_tags_reuses_existing` ("Budgets " with existing "budget" → `["budget"]`); `test_patch_not_ready_is_409`.
@@ -93,13 +94,13 @@
 **Interfaces:**
 - Produces:
   - `ALLOWED_EXTENSIONS = {"m4a", "mp4", "aac", "wav", "mp3"}` (expo-audio's Android preset writes m4a).
-  - `store_upload(conn, data_dir, *, kind, client_upload_id, file: UploadFile, max_bytes) -> tuple[RecordingOut, bool]` (bool = created): an existing `client_upload_id` returns that recording and `False` without reading the body; otherwise streams to `<data_dir>/tmp/upload-<uuid>` counting bytes (over `max_bytes` → delete temp, 413 `payload_too_large`), moves to `audio_path`, then inserts the row (`status='uploaded'`, `audio_ext`, `created_at` UTC). Unknown extension → 415 `unsupported_media_type`. Any failure leaves no row and no file.
+  - `store_upload(conn, data_dir, *, kind, client_upload_id, file: UploadFile, max_bytes) -> tuple[RecordingOut, bool]` (bool = created): an existing `client_upload_id` returns that recording and `False` (Starlette has already spooled the multipart body before the handler runs, so the size limit applies while copying, not to the network transfer); otherwise copies to `<data_dir>/tmp/upload-<uuid>` counting bytes (over `max_bytes` → delete temp, 413 `payload_too_large`), moves to `audio_path`, then inserts the row; an `IntegrityError` on `client_upload_id` (the same upload arriving twice at once) returns the existing recording and deletes this request's file (`status='uploaded'`, `audio_ext`, `created_at` UTC). Unknown extension → 415 `unsupported_media_type`. Any failure leaves no row and no file.
   - Route: 201 when created, 200 when existing (set `response.status_code`); calls `wake_worker` after creating.
   - `DecodedAudio(duration_ms: int, peaks: list[float])`; `decode_to_npy(src: Path, dest: Path) -> DecodedAudio`: PyAV decode, resample to 16 kHz mono float32, `np.save`; peaks = 96 bucket maxima of `abs(samples)` scaled to 0–1 by the overall max (all zeros → all 0.0); raises `AudioUnreadable` on any decode error.
   - Audio route: `FileResponse` with the right media type (`audio/mp4` for m4a/mp4/aac, `audio/wav`, `audio/mpeg`); Starlette serves `Range` with 206. 404 if missing.
 
 - [ ] **Step 1: Write the failing tests** (tests generate a 2 s sine wav and a short m4a with PyAV into `tmp_path`):
-  - `test_upload_creates_recording_201`; `test_upload_same_client_id_returns_existing_200` (one row, one file); `test_upload_too_large_413_leaves_nothing` (setting `upload_max_bytes=1000`); `test_upload_unknown_extension_415`.
+  - `test_upload_creates_recording_201`; `test_upload_same_client_id_returns_existing_200` (one row, one file); `test_concurrent_duplicate_client_id_keeps_one_file` (the row inserted between copy and insert via monkeypatch → existing returned, this request's file removed); `test_upload_too_large_413_leaves_nothing` (setting `upload_max_bytes=1000`); `test_upload_unknown_extension_415`.
   - `test_decode_m4a_to_16k_mono` (shape ≈ 32 000 samples, float32, `duration_ms ≈ 2000`, 96 peaks within 0–1); `test_decode_silence_peaks_zero`; `test_decode_garbage_raises_audio_unreadable`.
   - `test_audio_range_returns_206_with_content_range`; `test_audio_full_200`; `test_audio_missing_404`.
 - [ ] **Step 2: Run** → FAIL. **Step 3: Implement.** **Step 4: Run** → PASS, checks clean.
@@ -109,7 +110,7 @@
 
 **Files:**
 - Create: `backend/app/processing/worker.py`, `backend/app/processing/pipeline.py`, `backend/app/processing/speakers.py`
-- Modify: `backend/app/processing/__init__.py` (real `wake_worker`), `backend/app/api/app.py` (`create_app(container, *, start_worker: bool = False)` with a lifespan that starts and stops the worker), `backend/app/cli.py` (`serve` passes `start_worker=True`)
+- Modify: `backend/app/container.py` (add `worker: "Worker | None" = None` as the last field, `Worker` imported under `TYPE_CHECKING` to avoid an import cycle), `backend/app/processing/__init__.py` (real `wake_worker`), `backend/app/api/app.py` (`create_app(container, *, start_worker: bool = False)` with a lifespan that starts and stops the worker), `backend/app/cli.py` (`serve` passes `start_worker=True`)
 - Test: `backend/tests/processing/test_pipeline.py`, `backend/tests/processing/test_speakers.py`, `backend/tests/processing/test_worker.py`
 
 **Interfaces:**
@@ -164,23 +165,28 @@
 
 **Interfaces:**
 - Produces:
-  - `pyproject.toml`: base adds `fastembed>=0.9,<0.10`; optional extra `speech = ["faster-whisper==1.2.1", "pyannote.audio==4.0.7", "torch==2.10.0", "torchaudio==2.10.0"]`; `[tool.uv.sources]` torch and torchaudio from index `pytorch-cu128` (`https://download.pytorch.org/whl/cu128`, `explicit = true`) with marker `sys_platform != 'darwin'` (macOS uses PyPI).
+  - `pyproject.toml`: base adds `fastembed>=0.9,<0.10`; optional extra `speech = ["faster-whisper==1.2.1", "pyannote.audio==4.0.7", "torch==2.10.0", "torchaudio==2.10.0"]`; `[tool.uv.sources]` and `[[tool.uv.index]]` copied from `yassinebrahem2/live-debate-analysis`'s `pyproject.toml` (torch and torchaudio from index `pytorch-cu128`, `https://download.pytorch.org/whl/cu128`, `explicit = true`; proven with torch 2.10.0+cu128 and pyannote 4.0.7 on the demo laptop), adding only the marker `sys_platform != 'darwin'` (macOS uses PyPI).
   - `run_child(module: str, args: list[str], *, timeout_s: float, env: Mapping[str, str]) -> dict[str, object]`: `subprocess.run([sys.executable, "-m", module, *args, "--out", <tmp json>], timeout=…)`; non-zero exit or timeout → `ChildFailed(returncode | None)`; stderr goes to the server log only; returns the parsed JSON.
   - Child modules: `asr_child --audio <npy> --model <id> --device <d> --compute <c>` writes `{"segments": [{start_ms, end_ms, text}]}` (faster-whisper `language="en"`, `vad_filter=True`, `condition_on_previous_text=False`); `diarize_child --audio <npy> --model <id> --device <d>` writes `{"turns": [{start_ms, end_ms, speaker}]}` (pyannote gets `{"waveform": tensor, "sample_rate": 16000}`, never a path; token from `HF_TOKEN`). Top of `asr_child`: on Windows only, `os.add_dll_directory(<sys.prefix>/Lib/site-packages/torch/lib)` before importing faster-whisper.
-  - `RealAsr(models, settings)` / `RealDiarizer(models, settings)` implementing the protocols via `run_child`, env with `HF_HOME=<model_cache_dir>/hf` and the parent's `HF_TOKEN`; `ChildFailed` → `StepError` in the pipeline.
-  - `FastEmbedEmbedder(model_id: str, cache_dir: Path)`: `dim = 384`; `embed_passages` → `TextEmbedding.embed`; `embed_query` prepends `"Represent this sentence for searching relevant passages: "` (fastembed 0.9 does not).
+  - `RealAsr(models, settings)` / `RealDiarizer(models, settings)` implementing the protocols via `run_child` with `env = {**os.environ, "HF_HOME": str(model_cache_dir / "hf")}`: always the full parent environment (on Windows a child without `SYSTEMROOT` dies at startup; it also carries `PATH`, CUDA variables, `HF_TOKEN` and `HF_HUB_OFFLINE`), never a minimal mapping; `ChildFailed` → `StepError` in the pipeline.
+  - `FastEmbedEmbedder(model_id: str, cache_dir: Path)`: `dim = 384`; constructing it touches nothing (no download, no model load): the `TextEmbedding` is created on the first `embed_*` call, because `build_container` runs in CI (`export-openapi --check`); `embed_passages` → `TextEmbedding.embed`; `embed_query` prepends `"Represent this sentence for searching relevant passages: "` (fastembed 0.9 does not).
   - `build_container`: `speech_backend == "real"` → `RealAsr`, `RealDiarizer`, `speech_backend_bound="real"`; embedder is `FastEmbedEmbedder` in both modes (tests build their own container with fakes).
   - `/health` local roles: `embedder` ready if its files are in the cache dir; `asr`/`diarizer` = `"fake"` when fake is bound, else ready if model files are cached (and `HF_TOKEN` for the diarizer).
   - `python -m app.cli setup`: creates data and cache dirs, downloads the embedder, and when the speech extra is importable downloads the ASR and diarizer models; prints each role's readiness and missing env vars; never prints values.
 
 - [ ] **Step 1: Write the failing tests** (no network, no torch):
+  - `test_run_child_passes_full_environment` (echo child writes back whether `PATH` is set and the value of `HF_HOME`).
   - `test_run_child_returns_json` / `test_run_child_nonzero_exit_raises` / `test_run_child_timeout_kills_and_raises` using `tests.speech.echo_child` (`--mode ok|fail|hang`).
+  - `test_constructing_embedder_touches_no_network` (monkeypatch `TextEmbedding` to raise if called; constructing and `build_container` succeed).
   - `test_embed_query_adds_bge_prefix` (monkeypatch `TextEmbedding` with a recorder; asserts the exact prefix, and that passages have none).
   - `test_container_binds_real_speech_when_configured` (monkeypatch the classes; `speech_backend_bound == "real"`).
 - [ ] **Step 2: Run** → FAIL. **Step 3: Implement**, then `uv lock`.
 - [ ] **Step 4: Run** the suite, ruff, pyright → clean; `uv sync --locked` in CI still works without the extra.
-- [ ] **Step 5 (manual, lead's laptop):** `uv run --extra speech python -m app.cli setup` → every role ready; `serve`; upload a 1-minute two-person recording with `curl -F`; it reaches `ready` with two speakers. Record timings (decode, ASR, diarization) in the plan issue.
+- [ ] **Step 5 (manual, lead's laptop; in the plan issue's lead checklist):** `uv run --extra speech python -m app.cli setup` → every role ready; `serve`; upload a 1-minute two-person recording with `curl -F`; it reaches `ready` with two speakers. Record timings (decode, ASR, diarization) in the plan issue.
 - [ ] **Step 6: Commit** `feat(backend): run real speech in child processes and add the setup command`.
+
+## Shared files with the agents plan
+Both this plan and the agents plan edit `backend/app/container.py` (binding points) and may touch `backend/app/api/app.py`. Whichever merges second rebases and keeps both changes.
 
 ## Self-review notes
 - Spec coverage: pipeline and claim/resume/retry (processing §1, §6) Tasks 2 and 4; speech execution (§2) Task 6; analysis storage (§4, server part) Task 5; chunking and indexing (§5) Task 5; upload limits and idempotency (data-API §4) Task 3; routes owned by this plan (overview) Tasks 1–3; installs and setup (platform §2) Task 6. The `Analyzer` (prompts, failover, map-reduce) is the agents plan.
