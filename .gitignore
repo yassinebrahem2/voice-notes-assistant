@@ -36,6 +36,9 @@ data/
 # ...except the UI design skill's bundled catalogs
 !.claude/skills/ui-ux-pro-max/data/
 
+# Agent working files (docs/implementing-plan-tasks.md)
+.agent-work/
+
 # OS / editors
 .DS_Store
 Thumbs.db
