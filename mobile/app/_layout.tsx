@@ -10,12 +10,15 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { queryClient } from '../src/api/queryClient';
 import { fontAssets } from '../src/theme/fonts';
+import { useThemePreference } from '../src/settings/themePreference';
 import { paperTheme } from '../src/theme/paperTheme';
 
 void SplashScreen.preventAutoHideAsync();
 
 export default function RootLayout() {
-  const scheme = useColorScheme() === 'dark' ? 'dark' : 'light';
+  const systemScheme = useColorScheme() === 'dark' ? 'dark' : 'light';
+  const { preference } = useThemePreference();
+  const scheme = preference === 'system' ? systemScheme : preference;
   const theme = paperTheme(scheme);
   const [fontsLoaded, fontError] = useFonts(fontAssets);
 
