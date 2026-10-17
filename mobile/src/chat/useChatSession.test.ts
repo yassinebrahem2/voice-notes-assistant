@@ -430,3 +430,57 @@ test('retryRun answered with not_failed resumes polling instead of failing', asy
   await act(() => jest.advanceTimersByTimeAsync(500));
   expect(result.current.turns[0]?.run.phase).toBe('done');
 });
+
+test('a late send failure from the old chat does not reclassify the new chat turn', async () => {
+  let rejectOld!: (error: ApiError) => void;
+  let chats = 0;
+  fetchMock.mockImplementation(async (path: string) => {
+    if (path === 'chats') return { id: `chat_${++chats}`, created_at: '' };
+    if (path === 'chats/chat_1/messages')
+      return new Promise<never>((_resolve, reject) => {
+        rejectOld = reject;
+      });
+    if (path === 'chats/chat_2/messages')
+      throw new ApiError(0, 'network_error', 'Could not reach the server.');
+    if (path === 'chats/chat_2')
+      return {
+        id: 'chat_2',
+        messages: [{ role: 'user', id: 'msg_new', text: 'New' }],
+      };
+    return runOut({ status: 'done', message });
+  });
+  const { result } = await renderHook(() => useChatSession());
+  let oldAsk!: Promise<void>;
+  await act(async () => {
+    oldAsk = result.current.ask('Old');
+  });
+  await act(() => result.current.newChat());
+  await act(async () => {
+    await result.current.ask('New');
+  });
+  await act(async () => {
+    rejectOld(new ApiError(500, 'internal_error', 'boom'));
+    await oldAsk;
+  });
+  await act(async () => {
+    await result.current.retry(0);
+  });
+  expect(count('chats/chat_2/messages')).toBe(1);
+  expect(count('chats/chat_2')).toBe(1);
+});
+
+test('a 2xx response with an unreadable body counts as possibly stored', async () => {
+  lostRunServer({
+    askError: new ApiError(200, 'internal_error', 'invalid response'),
+    stored: [{ id: 'msg_u1', text: 'Q' }],
+  });
+  const { result } = await renderHook(() => useChatSession());
+  await act(async () => {
+    await result.current.ask('Q');
+  });
+  await act(async () => {
+    await result.current.retry(0);
+  });
+  expect(count('chats/chat_1/messages')).toBe(1);
+  expect(count('chats/chat_1')).toBe(1);
+});

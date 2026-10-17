@@ -115,6 +115,16 @@ async function ensureChat(): Promise<string> {
   return id;
 }
 
+// Only a lost answer (or a 2xx whose body was unreadable) leaves the question possibly
+// stored; an error response from the server means it was not.
+function unsentKind(error: unknown): Unsent {
+  if (!(error instanceof ApiError)) return 'rejected';
+  const lost = error.code === 'network_error' || error.code === 'timeout';
+  return lost || (error.status >= 200 && error.status < 300)
+    ? 'uncertain'
+    : 'rejected';
+}
+
 async function send(index: number, question: string): Promise<void> {
   const gen = generation;
   try {
@@ -129,12 +139,8 @@ async function send(index: number, question: string): Promise<void> {
         ...(state.tagIds.length > 0 ? { tag_ids: state.tagIds } : {}),
       }));
     } catch (error: unknown) {
-      // Only a lost answer leaves the question possibly stored; an error response means it was not.
-      unsent[index] =
-        error instanceof ApiError &&
-        (error.code === 'network_error' || error.code === 'timeout')
-          ? 'uncertain'
-          : 'rejected';
+      // A late failure of an old chat must not write into the new chat's turn at this index.
+      if (gen === generation) unsent[index] = unsentKind(error);
       throw error;
     }
     if (gen !== generation) return;
@@ -170,7 +176,7 @@ async function retry(index: number): Promise<void> {
   setRun(index, { phase: 'sending', steps: [] });
   startedAt[index] = Date.now();
   const gen = generation;
-  if (runId === undefined) {
+  if (runId === undefined || chatId === null) {
     if (chatId !== null && unsent[index] === 'uncertain') {
       await recoverRunId(chatId, index, turn.question);
     } else {
@@ -180,7 +186,7 @@ async function retry(index: number): Promise<void> {
     return;
   }
   try {
-    await api.retryRun(chatId as string, runId);
+    await api.retryRun(chatId, runId);
   } catch (error: unknown) {
     if (gen !== generation) return;
     // not_failed: the run is still going or already done, so just follow it.
