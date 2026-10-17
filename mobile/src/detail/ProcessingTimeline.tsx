@@ -52,13 +52,7 @@ function StepDot({ step }: { step: TimelineStepItem }) {
 
   if (step.state === 'done') {
     return (
-      <View
-        style={[
-          styles.dotBase,
-          styles.dotDone,
-          { backgroundColor: tape.signal },
-        ]}
-      >
+      <View style={[styles.dotBase, { backgroundColor: tape.signal }]}>
         <MaterialCommunityIcons
           name="check"
           size={14}
@@ -74,8 +68,11 @@ function StepDot({ step }: { step: TimelineStepItem }) {
       <Animated.View
         style={[
           styles.dotBase,
-          styles.dotCurrent,
-          { borderColor: tape.signal, backgroundColor: tape.raised },
+          {
+            borderColor: tape.signal,
+            backgroundColor: tape.raised,
+            borderWidth: 2,
+          },
           animatedDotStyle,
         ]}
       >
@@ -86,13 +83,7 @@ function StepDot({ step }: { step: TimelineStepItem }) {
 
   if (step.state === 'failed') {
     return (
-      <View
-        style={[
-          styles.dotBase,
-          styles.dotFailed,
-          { backgroundColor: tape.signal },
-        ]}
-      >
+      <View style={[styles.dotBase, { backgroundColor: tape.signal }]}>
         <MaterialCommunityIcons
           name="close"
           size={14}
@@ -107,8 +98,11 @@ function StepDot({ step }: { step: TimelineStepItem }) {
     <View
       style={[
         styles.dotBase,
-        styles.dotTodo,
-        { borderColor: tape.line, backgroundColor: tape.surface },
+        {
+          borderColor: tape.line,
+          backgroundColor: tape.surface,
+          borderWidth: 2,
+        },
       ]}
     />
   );
@@ -135,8 +129,8 @@ export function ProcessingTimeline({ recording }: ProcessingTimelineProps) {
       <View style={styles.stepsContainer}>
         {steps.map((item, index) => {
           const isLast = index === steps.length - 1;
-          const isCurrent = item.state === 'current';
-          const isFailedStep = item.state === 'failed';
+          const isHighlight =
+            item.state === 'current' || item.state === 'failed';
 
           return (
             <View key={item.step} style={styles.stepRow}>
@@ -159,12 +153,10 @@ export function ProcessingTimeline({ recording }: ProcessingTimelineProps) {
                   style={[
                     styles.stepLabel,
                     {
-                      color:
-                        isCurrent || isFailedStep ? tape.ink : tape.inkMuted,
-                      fontFamily:
-                        isCurrent || isFailedStep
-                          ? fontFamilies.semibold
-                          : fontFamilies.regular,
+                      color: isHighlight ? tape.ink : tape.inkMuted,
+                      fontFamily: isHighlight
+                        ? fontFamilies.semibold
+                        : fontFamilies.regular,
                     },
                   ]}
                 >
@@ -180,10 +172,7 @@ export function ProcessingTimeline({ recording }: ProcessingTimelineProps) {
         <View
           style={[
             styles.failedBox,
-            {
-              backgroundColor: tape.surface,
-              borderColor: tape.line,
-            },
+            { backgroundColor: tape.surface, borderColor: tape.line },
           ]}
         >
           <View style={styles.errorRow}>
@@ -237,31 +226,12 @@ export function ProcessingTimeline({ recording }: ProcessingTimelineProps) {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    padding: spacing.md,
-  },
-  stepsContainer: {
-    marginBottom: spacing.lg,
-  },
-  stepRow: {
-    flexDirection: 'row',
-    minHeight: 52,
-  },
-  dotColumn: {
-    width: 28,
-    alignItems: 'center',
-  },
-  labelColumn: {
-    flex: 1,
-    paddingLeft: spacing.sm,
-    justifyContent: 'flex-start',
-    paddingTop: 2,
-  },
-  connectorLine: {
-    width: 2,
-    flex: 1,
-    marginVertical: 4,
-  },
+  container: { padding: spacing.md },
+  stepsContainer: { marginBottom: spacing.lg },
+  stepRow: { flexDirection: 'row', minHeight: 52 },
+  dotColumn: { width: 28, alignItems: 'center' },
+  labelColumn: { flex: 1, paddingLeft: spacing.sm, paddingTop: 2 },
+  connectorLine: { width: 2, flex: 1, marginVertical: 4 },
   dotBase: {
     width: 20,
     height: 20,
@@ -269,38 +239,16 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  dotDone: {},
-  dotCurrent: {
-    borderWidth: 2,
-  },
-  dotInner: {
-    width: 8,
-    height: 8,
-    borderRadius: radius.round,
-  },
-  dotFailed: {},
-  dotTodo: {
-    borderWidth: 2,
-  },
-  stepLabel: {
-    fontSize: typeScale.body,
-    lineHeight: 22,
-  },
+  dotInner: { width: 8, height: 8, borderRadius: radius.round },
+  stepLabel: { fontSize: typeScale.body, lineHeight: 22 },
   failedBox: {
     borderRadius: radius.card,
     borderWidth: 1,
     padding: spacing.md,
     gap: spacing.md,
   },
-  errorRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-  },
-  errorText: {
-    flex: 1,
-    fontSize: typeScale.body,
-  },
+  errorRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  errorText: { flex: 1, fontSize: typeScale.body },
   retryButton: {
     minHeight: 48,
     minWidth: 96,
@@ -310,7 +258,5 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg,
     alignSelf: 'flex-start',
   },
-  retryText: {
-    fontSize: typeScale.body,
-  },
+  retryText: { fontSize: typeScale.body },
 });

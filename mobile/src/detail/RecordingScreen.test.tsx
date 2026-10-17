@@ -6,6 +6,7 @@ import {
 } from '@testing-library/react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import React from 'react';
+import { ScrollView } from 'react-native';
 import { PaperProvider } from 'react-native-paper';
 
 import { RecordingScreen } from '../../app/recording/[id]';
@@ -267,11 +268,31 @@ describe('RecordingScreen', () => {
       refetch: jest.fn(),
     });
 
+    const scrollToSpy = jest
+      .spyOn(ScrollView.prototype, 'scrollTo')
+      .mockImplementation(() => {});
+
     await renderScreen('rec_meeting_param', 'seg_target');
 
     // Should already be on transcript and showing the segment
     expect(screen.getByText('This is the cited segment.')).toBeTruthy();
     expect(screen.getByTestId('segment-seg_target-highlighted')).toBeTruthy();
+
+    const turnEl = screen.getByTestId('turn-0');
+    const segmentEl = screen.getByTestId('segment-seg_target-highlighted');
+
+    await fireEvent(turnEl, 'layout', {
+      nativeEvent: { layout: { y: 150 } },
+    });
+    await fireEvent(segmentEl, 'layout', {
+      nativeEvent: { layout: { y: 40 } },
+    });
+
+    expect(scrollToSpy).toHaveBeenCalledWith({
+      y: 170,
+      animated: true,
+    });
+    scrollToSpy.mockRestore();
   });
 
   test('renders note view with key points and clean note', async () => {

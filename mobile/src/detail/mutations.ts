@@ -1,9 +1,10 @@
-import { useMutation } from '@tanstack/react-query';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 
 import { apiFetch, type Schemas } from '../api/client';
-import { queryClient } from '../api/queryClient';
 
 export function useRetryRecording() {
+  const queryClient = useQueryClient();
+
   return useMutation({
     mutationFn: (id: string) =>
       apiFetch<Schemas['RecordingDetailOut']>(`recordings/${id}/retry`, {

@@ -13,10 +13,12 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import type { Schemas } from '../../src/api/client';
 import { NoteView } from '../../src/detail/NoteView';
 import { ProcessingTimeline } from '../../src/detail/ProcessingTimeline';
+import { RecordingHeader } from '../../src/detail/RecordingHeader';
 import { SummaryView } from '../../src/detail/SummaryView';
 import { TranscriptView } from '../../src/detail/TranscriptView';
 import { groupTurns } from '../../src/detail/turns';
 import { useRecording } from '../../src/detail/useRecording';
+import { LibrarySkeleton } from '../../src/library/LibrarySkeleton';
 import { fontFamilies } from '../../src/theme/fonts';
 import { motion } from '../../src/theme/motion';
 import type { TapeTheme } from '../../src/theme/paperTheme';
@@ -61,50 +63,20 @@ export function RecordingScreen(props: RecordingScreenProps = {}) {
 
   const segments = recording?.segments;
   const speakers = recording?.speakers;
-  const turns = useMemo(() => {
-    if (!segments) return [];
-    return groupTurns(segments, speakers ?? []);
-  }, [segments, speakers]);
+  const turns = useMemo(
+    () => (!segments ? [] : groupTurns(segments, speakers ?? [])),
+    [segments, speakers],
+  );
 
   const handleSelectSegment = (segmentId: string) => {
     setActiveSegmentId(segmentId);
     setActiveTab('transcript');
   };
 
-  const renderTopBar = (titleText?: string) => (
-    <View style={styles.topBar}>
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel="Back"
-        onPress={() => router.back()}
-        android_ripple={{ color: tape.line, borderless: true }}
-        style={styles.iconButton}
-      >
-        <MaterialCommunityIcons
-          name="arrow-left"
-          size={24}
-          color={tape.ink}
-          accessible={false}
-        />
-      </Pressable>
-      {titleText ? (
-        <Text
-          numberOfLines={1}
-          style={[
-            styles.topBarTitle,
-            { color: tape.ink, fontFamily: fontFamilies.semibold },
-          ]}
-        >
-          {titleText}
-        </Text>
-      ) : null}
-    </View>
-  );
-
   if (deleted) {
     return (
       <SafeAreaView style={[styles.screen, { backgroundColor: tape.bg }]}>
-        {renderTopBar()}
+        <RecordingHeader title="" onBack={() => router.back()} />
         <View style={styles.centerContainer}>
           <MaterialCommunityIcons
             name="delete-outline"
@@ -128,27 +100,7 @@ export function RecordingScreen(props: RecordingScreenProps = {}) {
   if (isLoading || !recording) {
     return (
       <SafeAreaView style={[styles.screen, { backgroundColor: tape.bg }]}>
-        <View style={styles.loadingContainer}>
-          <View
-            style={[
-              styles.skeletonCard,
-              { backgroundColor: tape.surface, borderColor: tape.line },
-            ]}
-          >
-            <View
-              style={[
-                styles.skeletonLineLong,
-                { backgroundColor: tape.raised },
-              ]}
-            />
-            <View
-              style={[
-                styles.skeletonLineShort,
-                { backgroundColor: tape.raised },
-              ]}
-            />
-          </View>
-        </View>
+        <LibrarySkeleton />
       </SafeAreaView>
     );
   }
@@ -158,7 +110,7 @@ export function RecordingScreen(props: RecordingScreenProps = {}) {
   if (recording.status !== 'ready') {
     return (
       <SafeAreaView style={[styles.screen, { backgroundColor: tape.bg }]}>
-        {renderTopBar(title)}
+        <RecordingHeader title={title} onBack={() => router.back()} />
         <ProcessingTimeline recording={recording} />
       </SafeAreaView>
     );
@@ -175,34 +127,11 @@ export function RecordingScreen(props: RecordingScreenProps = {}) {
         }
         style={styles.content}
       >
-        <View style={styles.header}>
-          {renderTopBar(title)}
-          {recording.tags && recording.tags.length > 0 ? (
-            <View style={styles.tagsRow}>
-              {recording.tags.map((tag) => (
-                <View
-                  key={tag.id}
-                  style={[
-                    styles.tagChip,
-                    { backgroundColor: tape.surface, borderColor: tape.line },
-                  ]}
-                >
-                  <Text
-                    style={[
-                      styles.tagText,
-                      {
-                        color: tape.inkMuted,
-                        fontFamily: fontFamilies.regular,
-                      },
-                    ]}
-                  >
-                    {tag.name}
-                  </Text>
-                </View>
-              ))}
-            </View>
-          ) : null}
-        </View>
+        <RecordingHeader
+          title={title}
+          tags={recording.tags}
+          onBack={() => router.back()}
+        />
 
         {empty ? (
           <View style={styles.centerContainer}>
@@ -324,34 +253,6 @@ export default RecordingScreen;
 const styles = StyleSheet.create({
   screen: { flex: 1 },
   content: { flex: 1 },
-  header: {
-    paddingHorizontal: spacing.md,
-    paddingTop: spacing.xs,
-    paddingBottom: spacing.sm,
-    gap: spacing.sm,
-  },
-  topBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-    minHeight: 48,
-  },
-  topBarTitle: { flex: 1, fontSize: typeScale.title },
-  iconButton: {
-    width: 48,
-    height: 48,
-    borderRadius: radius.round,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  tagsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs },
-  tagChip: {
-    paddingHorizontal: spacing.sm,
-    paddingVertical: spacing.xs,
-    borderRadius: radius.round,
-    borderWidth: 1,
-  },
-  tagText: { fontSize: typeScale.small },
   body: { flex: 1, paddingHorizontal: spacing.md, gap: spacing.md },
   segmentedContainer: {
     flexDirection: 'row',
@@ -376,15 +277,4 @@ const styles = StyleSheet.create({
     gap: spacing.md,
   },
   centerText: { fontSize: typeScale.body, textAlign: 'center' },
-  loadingContainer: { padding: spacing.md },
-  skeletonCard: {
-    minHeight: 120,
-    borderRadius: radius.card,
-    borderWidth: 1,
-    padding: spacing.md,
-    gap: spacing.sm,
-    justifyContent: 'center',
-  },
-  skeletonLineLong: { height: 20, borderRadius: 4, width: '70%' },
-  skeletonLineShort: { height: 14, borderRadius: 4, width: '40%' },
 });

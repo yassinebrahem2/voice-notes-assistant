@@ -97,4 +97,13 @@ describe('useRecording', () => {
     expect(mockApiFetch).toHaveBeenCalledTimes(2);
     expect(result.current.deleted).toBe(false);
   });
+
+  test('does not fetch when id is empty', async () => {
+    const { result } = await renderHook(() => useRecording(''), {
+      wrapper: createWrapper(),
+    });
+
+    expect(result.current.isLoading).toBe(false);
+    expect(mockApiFetch).not.toHaveBeenCalled();
+  });
 });

@@ -1,3 +1,4 @@
+import type React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useTheme } from 'react-native-paper';
 
@@ -31,10 +32,7 @@ function CitationChip({
       android_ripple={{ color: tape.line }}
       style={[
         styles.citationChip,
-        {
-          backgroundColor: tape.raised,
-          borderColor: tape.line,
-        },
+        { backgroundColor: tape.raised, borderColor: tape.line },
       ]}
     >
       <Text
@@ -46,6 +44,46 @@ function CitationChip({
         {time}
       </Text>
     </Pressable>
+  );
+}
+
+function ItemCard({
+  text,
+  citations,
+  onSelectSegment,
+  children,
+}: {
+  text: string;
+  citations?: Schemas['Citation'][];
+  onSelectSegment: (segmentId: string) => void;
+  children?: React.ReactNode;
+}) {
+  const { tape } = useTheme<TapeTheme>();
+
+  return (
+    <View
+      style={[
+        styles.itemCard,
+        { backgroundColor: tape.surface, borderColor: tape.line },
+      ]}
+    >
+      <Text
+        style={[
+          styles.itemText,
+          { color: tape.ink, fontFamily: fontFamilies.regular },
+        ]}
+      >
+        {text}
+      </Text>
+      {children}
+      {citations && citations.length > 0 ? (
+        <View style={styles.citationRow}>
+          {citations.map((c, idx) => (
+            <CitationChip key={idx} citation={c} onPress={onSelectSegment} />
+          ))}
+        </View>
+      ) : null}
+    </View>
   );
 }
 
@@ -90,33 +128,12 @@ export function SummaryView({
             Decisions
           </Text>
           {summary.decisions.map((item, idx) => (
-            <View
+            <ItemCard
               key={idx}
-              style={[
-                styles.itemCard,
-                { backgroundColor: tape.surface, borderColor: tape.line },
-              ]}
-            >
-              <Text
-                style={[
-                  styles.itemText,
-                  { color: tape.ink, fontFamily: fontFamilies.regular },
-                ]}
-              >
-                {item.text}
-              </Text>
-              {item.citations && item.citations.length > 0 ? (
-                <View style={styles.citationRow}>
-                  {item.citations.map((c, cIdx) => (
-                    <CitationChip
-                      key={cIdx}
-                      citation={c}
-                      onPress={onSelectSegment}
-                    />
-                  ))}
-                </View>
-              ) : null}
-            </View>
+              text={item.text}
+              citations={item.citations}
+              onSelectSegment={onSelectSegment}
+            />
           ))}
         </View>
       ) : null}
@@ -140,21 +157,12 @@ export function SummaryView({
               : null;
 
             return (
-              <View
+              <ItemCard
                 key={idx}
-                style={[
-                  styles.itemCard,
-                  { backgroundColor: tape.surface, borderColor: tape.line },
-                ]}
+                text={item.text}
+                citations={item.citations}
+                onSelectSegment={onSelectSegment}
               >
-                <Text
-                  style={[
-                    styles.itemText,
-                    { color: tape.ink, fontFamily: fontFamilies.regular },
-                  ]}
-                >
-                  {item.text}
-                </Text>
                 {ownerName || item.due ? (
                   <View style={styles.metaRow}>
                     {ownerName ? (
@@ -185,18 +193,7 @@ export function SummaryView({
                     ) : null}
                   </View>
                 ) : null}
-                {item.citations && item.citations.length > 0 ? (
-                  <View style={styles.citationRow}>
-                    {item.citations.map((c, cIdx) => (
-                      <CitationChip
-                        key={cIdx}
-                        citation={c}
-                        onPress={onSelectSegment}
-                      />
-                    ))}
-                  </View>
-                ) : null}
-              </View>
+              </ItemCard>
             );
           })}
         </View>
@@ -213,33 +210,12 @@ export function SummaryView({
             Open Questions
           </Text>
           {summary.open_questions.map((item, idx) => (
-            <View
+            <ItemCard
               key={idx}
-              style={[
-                styles.itemCard,
-                { backgroundColor: tape.surface, borderColor: tape.line },
-              ]}
-            >
-              <Text
-                style={[
-                  styles.itemText,
-                  { color: tape.ink, fontFamily: fontFamilies.regular },
-                ]}
-              >
-                {item.text}
-              </Text>
-              {item.citations && item.citations.length > 0 ? (
-                <View style={styles.citationRow}>
-                  {item.citations.map((c, cIdx) => (
-                    <CitationChip
-                      key={cIdx}
-                      citation={c}
-                      onPress={onSelectSegment}
-                    />
-                  ))}
-                </View>
-              ) : null}
-            </View>
+              text={item.text}
+              citations={item.citations}
+              onSelectSegment={onSelectSegment}
+            />
           ))}
         </View>
       ) : null}
@@ -248,38 +224,19 @@ export function SummaryView({
 }
 
 const styles = StyleSheet.create({
-  container: {
-    gap: spacing.lg,
-  },
-  section: {
-    gap: spacing.sm,
-  },
-  sectionTitle: {
-    fontSize: typeScale.body,
-    lineHeight: 24,
-  },
-  bodyText: {
-    fontSize: typeScale.body,
-    lineHeight: 24,
-  },
+  container: { gap: spacing.lg },
+  section: { gap: spacing.sm },
+  sectionTitle: { fontSize: typeScale.body, lineHeight: 24 },
+  bodyText: { fontSize: typeScale.body, lineHeight: 24 },
   itemCard: {
     borderRadius: radius.card,
     borderWidth: 1,
     padding: spacing.md,
     gap: spacing.sm,
   },
-  itemText: {
-    fontSize: typeScale.body,
-    lineHeight: 22,
-  },
-  metaRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: spacing.md,
-  },
-  metaText: {
-    fontSize: typeScale.small,
-  },
+  itemText: { fontSize: typeScale.body, lineHeight: 22 },
+  metaRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.md },
+  metaText: { fontSize: typeScale.small },
   citationRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -295,7 +252,5 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  citationText: {
-    fontSize: typeScale.small,
-  },
+  citationText: { fontSize: typeScale.small },
 });

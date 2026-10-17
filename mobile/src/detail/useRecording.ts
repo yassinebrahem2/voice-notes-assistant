@@ -6,6 +6,7 @@ export function useRecording(id: string) {
   const query = useQuery({
     queryKey: ['recording', id],
     queryFn: () => apiFetch<Schemas['RecordingDetailOut']>(`recordings/${id}`),
+    enabled: Boolean(id),
     retry: (failureCount, error) =>
       !(error instanceof ApiError && error.status === 404) && failureCount < 2,
     refetchInterval: (q) => {

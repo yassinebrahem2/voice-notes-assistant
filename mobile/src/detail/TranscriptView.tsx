@@ -1,7 +1,8 @@
 import type React from 'react';
-import { useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useTheme } from 'react-native-paper';
+import { useReducedMotion } from 'react-native-reanimated';
 
 import type { Schemas } from '../api/client';
 import { formatDuration } from '../library/PendingRow';
@@ -26,20 +27,39 @@ export function TranscriptView({
   kind = 'meeting',
 }: TranscriptViewProps) {
   const { tape } = useTheme<TapeTheme>();
+  const reducedMotion = useReducedMotion();
   const scrollViewRef = useRef<React.ElementRef<typeof ScrollView>>(null);
-  const itemPositions = useRef<Record<string, number>>({});
+  const turnPositions = useRef<number[]>([]);
+  const segmentOffsets = useRef<Record<string, number>>({});
+  const scrolledSegmentId = useRef<string | null>(null);
+
+  const scrollToSegment = useCallback(
+    (segmentId: string) => {
+      const turnIdx = turns.findIndex((t) =>
+        t.segments.some((s) => s.id === segmentId),
+      );
+      if (turnIdx === -1) return;
+
+      const turnY = turnPositions.current[turnIdx];
+      const segmentY = segmentOffsets.current[segmentId];
+
+      if (turnY !== undefined && segmentY !== undefined) {
+        const targetY = turnY + segmentY;
+        scrolledSegmentId.current = segmentId;
+        scrollViewRef.current?.scrollTo({
+          y: Math.max(0, targetY - 20),
+          animated: !reducedMotion,
+        });
+      }
+    },
+    [turns, reducedMotion],
+  );
 
   useEffect(() => {
-    if (
-      activeSegmentId &&
-      itemPositions.current[activeSegmentId] !== undefined
-    ) {
-      scrollViewRef.current?.scrollTo({
-        y: Math.max(0, itemPositions.current[activeSegmentId] - 20),
-        animated: true,
-      });
+    if (activeSegmentId && scrolledSegmentId.current !== activeSegmentId) {
+      scrollToSegment(activeSegmentId);
     }
-  }, [activeSegmentId]);
+  }, [activeSegmentId, scrollToSegment]);
 
   const showSpeakerChips = kind === 'meeting' && speakers.length > 0;
 
@@ -92,7 +112,21 @@ export function TranscriptView({
             speakerIdx >= 0 ? tape.speaker[speakerIdx % 6] : tape.inkMuted;
 
           return (
-            <View key={turnIdx} style={styles.turnCard}>
+            <View
+              key={turnIdx}
+              testID={`turn-${turnIdx}`}
+              style={styles.turnCard}
+              onLayout={(event) => {
+                turnPositions.current[turnIdx] = event.nativeEvent.layout.y;
+                if (
+                  activeSegmentId &&
+                  scrolledSegmentId.current !== activeSegmentId &&
+                  turn.segments.some((s) => s.id === activeSegmentId)
+                ) {
+                  scrollToSegment(activeSegmentId);
+                }
+              }}
+            >
               <View style={styles.turnHeader}>
                 {kind === 'meeting' ? (
                   <Text
@@ -134,8 +168,14 @@ export function TranscriptView({
                       onPress={() => onSelectSegment?.(segment.id)}
                       android_ripple={{ color: tape.line }}
                       onLayout={(event) => {
-                        itemPositions.current[segment.id] =
+                        segmentOffsets.current[segment.id] =
                           event.nativeEvent.layout.y;
+                        if (
+                          activeSegmentId === segment.id &&
+                          scrolledSegmentId.current !== activeSegmentId
+                        ) {
+                          scrollToSegment(activeSegmentId);
+                        }
                       }}
                       style={[
                         styles.segmentBox,
