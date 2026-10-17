@@ -13,6 +13,7 @@ This workflow is mandatory and comes before your agent's own defaults, its harne
 3. **Do only the task.** Change only what the task's plan section asks for, in the files it names. No extra features, no refactors or clean-ups elsewhere, no "while I'm here" fixes, no dependency upgrades, no edits to specs, plans, `AGENTS.md` or CI unless the task names them. Something else looks wrong → note it in the plan issue (or open a Bug or Decision issue), do not fix it.
 4. **Follow the method.** Implement as `docs/implementing-plan-tasks.md` says, and follow the plan as written: when it is wrong or unclear, open a Decision issue and stop; never improvise around it.
 5. **Push only to the plan branch; open no PRs** except the final `plan/<topic>` → `main` PR once every task of the plan is closed. Never merge.
+6. **No issue is closed without green CI.** A task, bug or plan issue is closed only after the Backend and Mobile CI runs on a commit that contains its work have both finished green, on the plan branch (a plan issue: on the merged PR). Queued, running, red, cancelled or missing CI means the issue stays open, whatever the local checks say. Link the green runs in the closing comment. If CI is red for a reason outside your task, keep the issue open and raise it in the plan issue. (A Decision issue carries no code; it closes when the lead has answered it.)
 
 ## Backend commands
 
@@ -65,12 +66,12 @@ Most moves are automatic: `.github/workflows/board.yml` adds every new issue to 
 ### Implementer rules
 - Work only on the plan's branch. Never push to `main`; never merge anything.
 - Claim a task by assigning yourself to its sub-issue before starting. Only take a task that is unassigned and whose dependencies are closed.
-- Assigning yourself moves your task's card to "In progress"; close the sub-issue when its work is pushed and its checks pass.
+- Assigning yourself moves your task's card to "In progress"; close the sub-issue only when its work is pushed and CI on it is green (rule 6 above).
 - Pull with rebase before you start and before you push, then re-read the plan (it may have changed). Commit small and push often, since several people share the branch.
 - Implement plan tasks the subagent-driven way described in `docs/implementing-plan-tasks.md`: a fresh implementer per task, a fresh reviewer checks it against the plan task and the spec, fixes are re-reviewed before the task is closed.
 - Follow the plan as written. If the plan is wrong, unclear, or needs a decision, do not improvise: open a Decision issue linked to the blocked task, and move that task to "Blocked" until the lead answers.
 - Do not edit specs, plans, `docs/roadmap.md` or `project_knowledge.md`; those belong to the lead.
-- A task is done only when its tests, lint and type checks pass locally, and CI passes on the branch.
+- A task is done only when its tests, lint and type checks pass locally, and the Backend and Mobile CI runs on a commit containing its work are green. Never close an issue before that.
 
 ### Lead rules
 - Specs before plans, plans before code. Each needs the lead's explicit approval.
