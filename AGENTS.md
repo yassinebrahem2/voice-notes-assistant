@@ -14,6 +14,18 @@ This workflow is mandatory and comes before your agent's own defaults, its harne
 4. **Follow the method.** Implement as `docs/implementing-plan-tasks.md` says, and follow the plan as written: when it is wrong or unclear, open a Decision issue and stop; never improvise around it.
 5. **Push only to the plan branch; open no PRs** except the final `plan/<topic>` → `main` PR once every task of the plan is closed. Never merge.
 6. **No issue is closed without green CI.** A task, bug or plan issue is closed only after the Backend and Mobile CI runs on a commit that contains its work have both finished green, on the plan branch (a plan issue: on the merged PR). Queued, running, red, cancelled or missing CI means the issue stays open, whatever the local checks say. Link the green runs in the closing comment. If CI is red for a reason outside your task, keep the issue open and raise it in the plan issue. (A Decision issue carries no code; it closes when the lead has answered it.)
+7. **Keep the board true.** Every time your issue changes state, move its card to the matching column yourself, then check it moved; automation can be late or fail, so never assume it did:
+
+   | When | Card |
+   |---|---|
+   | you claim a task (assign yourself) | In progress |
+   | you stop on a Decision issue, a failing check you cannot fix, or anything else outside your control | Blocked (and say why in the issue) |
+   | the blocker is resolved and you resume | In progress |
+   | you stop working on it and unassign yourself | Todo |
+   | the plan's PR into `main` is opened | the plan issue: In review |
+   | the issue is closed (rule 6) | Done |
+
+   Move a card with `scripts/board-status.sh <number> "<Status>"` (needs `gh`, `jq` and a token with the `project` scope) or, where the Projects API is not reachable (cloud agent sessions), by running the `board` workflow with `workflow_dispatch` inputs `number` and `status` (for example `gh workflow run board.yml -f number=42 -f status="Blocked"`). Check that the run succeeded. If you cannot move the card, say so in the issue so a person moves it in the GitHub UI. Column names are exactly: Todo, In progress, Blocked, In review, Done.
 
 ## Backend commands
 
@@ -61,15 +73,15 @@ Lifecycle of a piece of work:
 6. The lead reviews. Merging the PR closes the plan issue and moves it to "Done".
 
 Project board: GitHub Projects (https://github.com/users/yassinebrahem2/projects/6), Status = Todo / In progress / Blocked / In review / Done. Milestones: one per roadmap stage ("Stage 1: Core MVP", "Stage 2: Stretch and polish"). Move a card with `scripts/board-status.sh <issue-or-PR number> "<Status>"` (needs `gh` and `jq`, and a token with the `project` scope).
-Most moves are automatic: `.github/workflows/board.yml` adds every new issue to Todo, the board's built-in workflows set Done on close and merge, and `board.yml` sets In progress when a `task` issue is assigned (Todo when its last assignee is removed), Blocked when a `decision` issue names the task under "Blocked task" (In progress again when that Decision closes), and In review when a PR into `main` says `Closes #<n>`. Cloud agent sessions cannot reach the board API; they move a card by running the `board` workflow manually (`workflow_dispatch` with `number` and `status`).
+Rule 7 above makes every agent and person keep their own cards right; the automation is a backup, not a replacement. Most moves are also automated: `.github/workflows/board.yml` adds every new issue to Todo, the board's built-in workflows set Done on close and merge, and `board.yml` sets In progress when a `task` issue is assigned (Todo when its last assignee is removed), Blocked when a `decision` issue names the task under "Blocked task" (In progress again when that Decision closes), and In review when a PR into `main` says `Closes #<n>`. Cloud agent sessions cannot reach the board API; they move a card by running the `board` workflow manually (`workflow_dispatch` with `number` and `status`).
 
 ### Implementer rules
 - Work only on the plan's branch. Never push to `main`; never merge anything.
 - Claim a task by assigning yourself to its sub-issue before starting. Only take a task that is unassigned and whose dependencies are closed.
-- Assigning yourself moves your task's card to "In progress"; close the sub-issue only when its work is pushed and CI on it is green (rule 6 above).
+- Move your task's card as rule 7 says (In progress when you claim it, Blocked when you stop on a blocker, In progress again when you resume, Done when closed); close the sub-issue only when its work is pushed and CI on it is green (rule 6 above).
 - Pull with rebase before you start and before you push, then re-read the plan (it may have changed). Commit small and push often, since several people share the branch.
 - Implement plan tasks the subagent-driven way described in `docs/implementing-plan-tasks.md`: a fresh implementer per task, a fresh reviewer checks it against the plan task and the spec, fixes are re-reviewed before the task is closed.
-- Follow the plan as written. If the plan is wrong, unclear, or needs a decision, do not improvise: open a Decision issue linked to the blocked task, and move that task to "Blocked" until the lead answers.
+- Follow the plan as written. If the plan is wrong, unclear, or needs a decision, do not improvise: open a Decision issue linked to the blocked task, move that task's card to "Blocked" yourself (rule 7), and move it back to "In progress" when the lead's answer lets you resume.
 - Do not edit specs, plans, `docs/roadmap.md` or `project_knowledge.md`; those belong to the lead.
 - A task is done only when its tests, lint and type checks pass locally, and the Backend and Mobile CI runs on a commit containing its work are green. Never close an issue before that.
 
