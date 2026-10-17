@@ -72,7 +72,7 @@ Runtime data lives outside the repository (see Data layout).
 
 ### Configuration: one place per concern
 - `config/app.json`: the app name and branding values. Read by the backend and by the Expo config (`mobile/app.config.ts`), which passes them to the app through `extra` (read with `expo-constants`). App code never imports from `../config/`. No other file hard-codes the name.
-- `config/models.yaml`: providers (`base_url`, `key_env`) and models by role (`llm` for Chat, `llm_analysis` for processing, `embedder`, `asr`, `diarizer`), hosted or local; each LLM role has an ordered failover list (configurable). Code asks for a role, never a model name.
+- `config/models.yaml`: providers (`client`: `openai` for an OpenAI-compatible endpoint with its `base_url`, or `google_genai` for Gemini's native API without one; `key_env`) and models by role (`llm` for Chat, `llm_analysis` for processing, `embedder`, `asr`, `diarizer`), hosted or local; each LLM role has an ordered failover list (configurable). Code asks for a role, never a model name. Every configured LLM entry works in every LLM role and at any position of a failover list, including taking over mid-run from another provider: switching models is a config change, never a code change.
 - Secrets live only in environment variables, loaded from `backend/.env` (git-ignored). `models.yaml` names the variable (`key_env`); it never holds a key. A `base_url` with credentials in it is refused at load.
 - `backend/.env.example` lists every variable with no values.
 

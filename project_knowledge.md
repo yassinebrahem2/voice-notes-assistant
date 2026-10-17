@@ -75,9 +75,9 @@ Versions checked 2026-10-16; majors are pinned.
 - Storage: SQLite with sqlite-vec 0.1.9 (vectors in the same file, exact search). Fallback if extensions cannot load: LanceDB 0.40.
 - Embedder: fastembed 0.9, `BAAI/bge-small-en-v1.5`, local on CPU.
 - Speech: faster-whisper 1.2.1 (`distil-large-v3`); pyannote.audio 4.0.7 `speaker-diarization-community-1` for meetings only (needs `HF_TOKEN`). Speech dependencies are an optional install group; ASR and diarizer sit behind interfaces with fakes, so CI never installs torch or needs a token.
-- LLMs: Groq free tier first, Gemini free tier as fallback (OpenAI-compatible endpoints).
+- LLMs: Groq free tier first, Gemini free tier as fallback. Each provider names its client in `models.yaml`: Groq through its OpenAI-compatible endpoint (`langchain-openai`), Gemini through its native API (`langchain-google-genai`), because Gemini 3 tool calling needs thought signatures that the OpenAI-compatible path drops (2026-10-17, user).
 - Agents: LangGraph 1.2 with LangChain 1.4 (1.x APIs such as `create_agent`; LangChain's model fallback for the LLM role, exact mechanism in the stage 1 spec). Not `langgraph-supervisor` (pre-1.0).
-- Model config: one `models.yaml` with providers (`base_url`, `key_env`) and models by role (`llm`, `llm_analysis`, `embedder`, `asr`, `diarizer`), each hosted (provider + model id) or local (model id, device, precision); each LLM role has a configurable failover order; code asks for a role, never a model name.
+- Model config: one `models.yaml` with providers (`client`, `base_url` for OpenAI-compatible ones, `key_env`) and models by role (`llm`, `llm_analysis`, `embedder`, `asr`, `diarizer`), each hosted (provider + model id) or local (model id, device, precision); each LLM role has a configurable failover order; code asks for a role, never a model name. [USER] Any configured model must work in every LLM role and at any position of the failover order: switching models is a config change, never a code change, and a provider-specific limitation is fixed in the client layer, not worked around in config (2026-10-17). Gemini model: `gemini-3.1-flash-lite` (2026-10-17, user).
 - Mobile: Expo SDK 58, expo-router, expo-audio, expo-keep-awake, TanStack Query 5, React Native Paper 5 (Material 3, dark mode). React Native version chosen by `npx expo install`.
 - Development on phones in Expo Go; the demo APK is built with EAS Build (cloud, free tier: 15 Android builds/month, low-priority queue with possible 90+ minute waits), by Monday 2026-10-19. Expo Go is the demo fallback.
 
@@ -121,6 +121,7 @@ Each item is safe to decide later; the stage that decides it is named.
 - Live recording with live transcript (2026-10-16, user) → record live, process on stop; live transcript moved to Ideas (2026-10-16, user).
 - Timestamps and speaker labels "desirable, not decided" (brief) → diarization is in and provides timestamps (2026-10-16, user).
 - Automation platform vs. custom backend open (brief) → all code (2026-10-16, user).
+- Every LLM through `ChatOpenAI` on OpenAI-compatible endpoints (stage 1 spec) → a client per provider (`openai` or `google_genai`) (2026-10-17, user: Gemini 3 rejected multi-turn tool calls on the OpenAI-compatible endpoint; dropping Gemini from Chat was refused as a workaround).
 
 ## 6. Files
 - `project_knowledge.md`: this file.
