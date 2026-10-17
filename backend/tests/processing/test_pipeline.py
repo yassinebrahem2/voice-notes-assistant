@@ -10,6 +10,7 @@ import pytest
 
 from app.agents.schemas import MeetingAnalysis, NoteAnalysis
 from app.api.errors import ErrorCode
+from app.audio.decode import AudioUnreadable, DecodedAudio, decode_to_npy
 from app.audio.storage import audio_path, tmp_dir
 from app.container import Container
 from app.db.connection import connect
@@ -390,3 +391,44 @@ def test_tmp_dir_is_removed_even_when_recording_the_failure_fails(container: Con
 
     assert not _tmp(container, rec_id).exists()
     assert _recording(container, rec_id)["status"] == "diarizing"
+
+
+def test_decode_dying_mid_write_never_leaves_a_partial_audio_npy(
+    container: Container, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # A re-decode after a restart: peaks are stored, so a truncated audio.npy would be trusted by the next resume.
+    rec_id = _queue(container, status="diarizing")
+    _execute(container, "UPDATE recordings SET duration_ms = 2000, waveform_peaks = ? WHERE id = ?", ("[0.5]", rec_id))
+    npy = _tmp(container, rec_id) / "audio.npy"
+    left_on_crash: list[bool] = []
+
+    def write_partly_then_die(src: Path, dest: Path) -> DecodedAudio:
+        decode_to_npy(src, dest)
+        dest.write_bytes(dest.read_bytes()[:64])
+        # What a process killed right now would leave behind.
+        left_on_crash.append(npy.exists())
+        raise AudioUnreadable("The audio could not be decoded.")
+
+    monkeypatch.setattr("app.processing.pipeline.decode_to_npy", write_partly_then_die)
+
+    _run(container)
+
+    assert left_on_crash == [False]
+    assert not _tmp(container, rec_id).exists()
+    row = _recording(container, rec_id)
+    assert (row["status"], row["failed_step"], row["error_code"]) == ("failed", "decoding", "audio_unreadable")
+
+
+def test_successful_decode_leaves_only_audio_npy(container: Container) -> None:
+    seen: list[list[str]] = []
+
+    class ListingAsr:
+        def transcribe(self, audio_npy: Path) -> list[AsrSegment]:
+            seen.append(sorted(path.name for path in audio_npy.parent.iterdir()))
+            return []
+
+    _queue(container)
+
+    _run(dataclasses.replace(container, asr=ListingAsr()))
+
+    assert seen == [["audio.npy"]]

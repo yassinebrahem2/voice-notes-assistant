@@ -7,13 +7,14 @@ output is replaced together with its new output or not at all.
 
 import json
 import logging
+import os
 import shutil
 import sqlite3
 from pathlib import Path
 from typing import Literal
 
 from app.api.errors import ErrorCode, describe_frames
-from app.audio.decode import decode_to_npy
+from app.audio.decode import DecodedAudio, decode_to_npy
 from app.audio.storage import audio_path, tmp_dir
 from app.container import Container
 from app.domain.analysis import MeetingSummary, NoteContent
@@ -78,13 +79,27 @@ def _start_decoding(conn: sqlite3.Connection, rec_id: str) -> None:
         conn.execute("UPDATE recordings SET status = 'transcribing' WHERE id = ?", (rec_id,))
 
 
+def _decode_atomically(src: Path, npy: Path) -> DecodedAudio:
+    # np.save writes in place, so a process killed mid-write would leave a truncated audio.npy that the next
+    # resume trusts. The decode lands under a temporary name (ending in .npy, or np.save would append it) and is
+    # renamed, so audio.npy only ever appears complete.
+    part = npy.with_name("audio.part.npy")
+    try:
+        decoded = decode_to_npy(src, part)
+    except Exception:
+        part.unlink(missing_ok=True)
+        raise
+    os.replace(part, npy)
+    return decoded
+
+
 def _ensure_audio(container: Container, conn: sqlite3.Connection, row: sqlite3.Row) -> Path:
     """Decodes the upload unless a complete earlier decode is still on disk (it is gone after a restart)."""
     npy = _audio_npy(container, row["id"])
     # NULL peaks mean the server stopped before the first decode was stored, so its file cannot be trusted.
     if npy.is_file() and row["waveform_peaks"] is not None and row["duration_ms"] is not None:
         return npy
-    decoded = decode_to_npy(audio_path(container.settings.data_dir, row["id"], row["audio_ext"]), npy)
+    decoded = _decode_atomically(audio_path(container.settings.data_dir, row["id"], row["audio_ext"]), npy)
     with conn:
         # Values already stored are kept: a re-decode after a restart must not change what the app has shown.
         conn.execute(_DECODED_SQL, (decoded.duration_ms, json.dumps(decoded.peaks), row["id"]))
