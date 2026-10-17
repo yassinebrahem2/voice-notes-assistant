@@ -58,8 +58,8 @@
 - Produces:
   - `splitAnswer(text: string, citations: CitationOut[]): ({ text: string } | { citation: CitationOut })[]` (turns `[k]` markers into chip parts; unknown markers stay as text).
   - `citationLabel(c: CitationOut): string` → `"<recording title> · <mm:ss>"`.
-  - Screen: scope selector (Notes / Meetings / Both, segmented) and tag chips at the top; empty chat → 3–4 starter questions (fixed list in the file); no ready recording yet → "Chat answers from your recordings. Record something first." with a Record button calling `openFanOut()` (UI spec §3); each turn shows the question, then the live `StatusLine` (last step, animated dots, reduce-motion safe), then the answer with citation chips (`router.push("/recording/<id>?segment=<seg>")`) or the fixed reply text; failed / interrupted / too slow → message + Retry; "New chat" in the header; input with send button (disabled while a run is going), keyboard-avoiding.
-- [ ] **Step 1: Write the failing tests:** `splitAnswer` (markers in order, repeated marker, unknown marker kept as text); `citationLabel` formatting; screen: starters shown when empty; tapping a chip calls `router.push` with the segment; Retry visible on interrupted.
+  - Screen: scope selector (Notes / Meetings / Both, segmented) and tag chips at the top; empty chat → 3–4 starter questions (fixed list in the file); no ready recording yet → "Chat answers from your recordings. Record something first." with a Record button calling `openFanOut()` (UI spec §3); each turn shows the question, then the live `StatusLine` (last step, animated dots, reduce-motion safe), then the answer with citation chips (`router.push({ pathname: "/recording/[id]", params: { id, segment } })`; the `/recording/[id]` route comes from the mobile recording plan: until it exists, local `tsc` rejects this typed path, so run `npx expo start` once (it regenerates the typed routes in `.expo/types`) after that plan merges; CI is unaffected) or the fixed reply text; failed / interrupted / too slow → message + Retry; "New chat" in the header; input with send button (disabled while a run is going), keyboard-avoiding.
+- [ ] **Step 1: Write the failing tests:** `splitAnswer` (markers in order, repeated marker, unknown marker kept as text); `citationLabel` formatting; screen: starters shown when empty; tapping a chip calls `router.push` with `{ pathname: "/recording/[id]", params: { id, segment } }`; Retry visible on interrupted.
 - [ ] **Step 2: Run** → FAIL. **Step 3: Implement.** **Step 4: Run** → clean.
 - [ ] **Step 5 (phone):** the input stays visible above the keyboard (Android edge-to-edge changes `KeyboardAvoidingView` behaviour).
 - [ ] **Step 6: Commit** `feat(mobile): add the chat screen`.
@@ -73,32 +73,34 @@
 
 **Interfaces:**
 - Produces:
-  - `testConnection(input: string): Promise<{ ok: true; health: HealthOut } | { ok: false; problem: "not_https" | "unreachable" | "not_this_server" }>`: normalises with `normalizeServerUrl`; `http://` → `not_https` without a request; `GET /api/v1/health` with a 5 s timeout; network error or timeout → `unreachable`; a response that is not `HealthOut` or whose `app_name` differs from `appInfo.name` → `not_this_server`.
+  - `testConnection(input: string): Promise<{ ok: true; health: HealthOut } | { ok: false; problem: "not_https" | "unreachable" | "not_this_server" }>`: normalises with `normalizeServerUrl`; `http://` → `not_https` without a request; `fetch(<typed URL>/api/v1/health)` directly with an `AbortController` 5 s timeout (not `apiFetch`, which uses the stored URL rather than the one being tested); network error or timeout → `unreachable`; a response that is not `HealthOut` or whose `app_name` differs from `appInfo.name` → `not_this_server`.
   - `ThemePreference = "system" | "light" | "dark"`; `getThemePreference()`, `setThemePreference()` (AsyncStorage `theme`), `useThemePreference()`; the root layout picks `paperTheme(preference === "system" ? colorScheme : preference)`.
   - Screen: server URL field with Save and Test connection (result shown inline: "Connected", "Not HTTPS", "Can't reach the server", "That isn't this app's server"); theme segmented control; readiness list from `/health` roles ("Speech: fake (dev)", "Chat AI: missing GROQ_API_KEY", …); app name and version from `appInfo`.
-- [ ] **Step 1: Write the failing tests:** `testConnection` cases (http → not_https with no fetch; timeout → unreachable; wrong app name → not_this_server; good → ok); theme preference round-trip and default `system`.
+- [ ] **Step 1: Write the failing tests:** `testConnection` cases (http → not_https with no fetch; the request goes to the typed URL even when a different URL is stored; timeout → unreachable; wrong app name → not_this_server; good → ok); theme preference round-trip and default `system`.
 - [ ] **Step 2: Run** → FAIL. **Step 3: Implement.** **Step 4: Run** → clean.
 - [ ] **Step 5: Commit** `feat(mobile): add settings with connection test and theme`.
 
 ### Task 4: Server status banner and tab dot
 
 **Files:**
-- Create: `mobile/src/server/useServerStatus.ts`, `mobile/src/server/ServerBanner.tsx`
-- Modify: `mobile/app/_layout.tsx` (banner above the tabs), `mobile/src/components/TabBar.tsx` (status dot on Settings), `mobile/src/api/queryClient.ts` (report network errors to the status store)
-- Test: `mobile/src/server/useServerStatus.test.ts`
+- Create: `mobile/src/server/statusStore.ts` (dependency-free: imports nothing from `src/api`), `mobile/src/server/useServerStatus.ts`, `mobile/src/server/ServerBanner.tsx`
+- Modify: `mobile/app/_layout.tsx` (banner above the tabs), `mobile/src/components/TabBar.tsx` (status dot on Settings), `mobile/src/api/client.ts` (`apiFetch` reports to the status store)
+- Test: `mobile/src/server/useServerStatus.test.ts`, `mobile/src/api/client.test.ts` (extend)
 
 **Interfaces:**
 - Produces:
-  - `serverStatus` store: `"unknown" | "ok" | "unreachable" | "no_server"`; `reportNetworkError()` (called from the query client's `QueryCache({ onError })` and `MutationCache({ onError })` for `network_error`/`timeout`; TanStack Query 5 has no client-level `onError`), `reportOk()`; while `unreachable`, `GET /health` every 10 s, `ok` on success.
+  - `statusStore.ts`: `ServerStatus = "unknown" | "ok" | "unreachable" | "no_server"`; `reportNetworkError()`, `reportOk()`, `reportNoServer()`, `useServerStatusValue()` (module state + `useSyncExternalStore`, like the foundation's `fanOutStore`). It imports nothing, so `client.ts` can import it without a cycle.
+  - `apiFetch` (in `client.ts`) calls `reportNetworkError()` on the first failure of the real request (its `network_error` or `timeout` from the catch around `fetch`), and `reportOk()` on any successful response. The earlier throws for a missing or unreadable server URL do not report a network error (they would turn `no_server` into `unreachable`). Reporting from `QueryCache`/`MutationCache` `onError` would be too late: it fires only after the last retry (≥ 30 s with `retry: 2` and the 10 s timeout).
+  - `useServerStatus()`: while `unreachable`, `GET /health` every 10 s (through `apiFetch`, which reports `ok` on success); no stored server URL → `no_server` without polling.
   - `ServerBanner`: "Can't reach the server" with a Settings link when `unreachable`; "Set the server address in Settings" when `no_server`; hidden otherwise; animated in and out (reduce-motion safe).
   - `TabBar` Settings dot: signal colour when unreachable, outline colour when ok.
-- [ ] **Step 1: Write the failing tests** (fake timers, mocked fetch): a network error flips to unreachable; health polling every 10 s; success flips back to ok and stops polling; no server URL → `no_server` without polling.
+- [ ] **Step 1: Write the failing tests** (fake timers, mocked fetch): the first `apiFetch` network error or timeout flips the store to unreachable immediately (no retries waited for); a successful response flips it to ok; "Set a server URL in Settings." does not flip it to unreachable; health polling every 10 s while unreachable; success flips back to ok and stops polling; no server URL → `no_server` without polling.
 - [ ] **Step 2: Run** → FAIL. **Step 3: Implement.** **Step 4: Run** → clean.
 - [ ] **Step 5 (phone):** stop the laptop's server → banner within 10 s, libraries keep their rows; start it → banner disappears.
 - [ ] **Step 6: Commit** `feat(mobile): add server status banner and tab dot`.
 
 ## Shared files with the mobile recording plan
-This plan edits `app/_layout.tsx`, `TabBar.tsx` and `queryClient.ts`; the recording plan replaces `RecordAction` and owns the recording page. Both may define a `useTags` hook with query key `["tags"]`; on rebase keep one. Whichever merges second rebases and keeps both.
+This plan edits `app/_layout.tsx`, `TabBar.tsx` and `src/api/client.ts`; the recording plan adds the fan-out overlay to `app/_layout.tsx` and owns the recording page. Both may define a `useTags` hook with query key `["tags"]`; on rebase keep one. Whichever merges second rebases and keeps both.
 
 ## Self-review notes
 - Spec coverage: UI §3 Chat (Tasks 1–2), Settings (Task 3), Everywhere banner (Task 4); §6 Chat run failures (Task 1), server unreachable (Task 4), error-code messages via `errorMessage` (foundation Task 9). Chat spec §6 states mapped in `nextRunView`.
