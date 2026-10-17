@@ -145,7 +145,7 @@
 
 **Files:**
 - Create: `backend/app/chats/__init__.py`, `backend/app/chats/store.py`, `backend/app/chats/runs.py`
-- Modify: `backend/app/api/routes/chats.py` (all five handlers; `ask_chat`, `retry_run` become `async def`), `backend/app/container.py` (field `chat_runs: "ChatRuns | None" = None`, `ChatRuns` imported only under `TYPE_CHECKING`; set in `build_container` after the container is constructed), `backend/tests/conftest.py` (sets `chat_runs` on the fixture's replaced container)
+- Modify: `backend/app/api/routes/chats.py` (all five handlers; `ask_chat`, `retry_run` become `async def`), `backend/app/container.py` (field `chat_runs: "ChatRuns | None" = None`, `ChatRuns` imported only under `TYPE_CHECKING`; set in `build_container` after the container is constructed), `backend/tests/conftest.py` (sets `chat_runs` on the fixture's replaced container), `backend/tests/api/test_routes_exist.py` (remove the five chats routes from `STUBS`, the explicit list processing Task 1 introduces; if that list does not exist yet on this branch, introduce it as processing Task 1 describes; if this empties it, delete `STUBS` and `test_every_stub_returns_501`; Decision #46)
 - Test: `backend/tests/chats/test_store.py`, `backend/tests/chats/test_runs_api.py`
 
 **Interfaces:**
@@ -184,7 +184,7 @@
 - [ ] **Step 6 (manual, lead; in the plan issue's lead checklist):** with real keys, run `smoke-llm`; fix model ids in `config/models.yaml` if any is missing; if a provider rejects `tool_choice="required"` with tool history, open a Decision issue (that provider cannot serve the forced final turn) instead of patching around it. After demo recordings exist, run `calibrate-retrieval` and set `retrieval_max_distance`. Record results in the plan issue.
 
 ## Shared files with the processing plan
-Both plans edit `backend/app/container.py` (binding points; this plan adds the analyzer binding and `chat_runs`), `backend/tests/conftest.py` (the fixture's `dataclasses.replace` with fakes; this plan also sets `chat_runs`), `backend/app/cli.py`, `docs/setup.md`, `backend/pyproject.toml` and `backend/uv.lock`. Whichever merges second rebases and keeps both changes. A `uv.lock` conflict is resolved by taking either side and re-running `uv lock`, never by hand-merging the file.
+Both plans edit `backend/app/container.py` (binding points; this plan adds the analyzer binding and `chat_runs`), `backend/tests/conftest.py` (the fixture's `dataclasses.replace` with fakes; this plan also sets `chat_runs`), `backend/app/cli.py`, `docs/setup.md`, `backend/pyproject.toml` and `backend/uv.lock`. Whichever merges second rebases and keeps both changes. A `uv.lock` conflict is resolved by taking either side and re-running `uv lock`, never by hand-merging the file. Both plans remove their implemented routes from `STUBS` in `backend/tests/api/test_routes_exist.py` (Decision #46); the task that removes the last entry deletes `STUBS` and `test_every_stub_returns_501`.
 
 ## Self-review notes
 - Spec coverage: registry and factory (chat §1) Task 1; Summarizer and map-reduce (processing §4, model side) Task 2; retrieval (chat §5) and citation check (chat §4) Task 3; Orchestrator, tools, final answer, graph (chat §2–§4) Task 4; runs and failures (chat §6, data-API chats routes) Task 5; smoke test and calibration (chat §1, §5) Task 6.
