@@ -57,9 +57,15 @@ def _line(segment: SegmentRow, kind: RecordingKind) -> str:
 
 
 def _last_index(
-    segments: list[SegmentRow], start: int, kind: RecordingKind, max_tokens: int, min_tokens_at_speaker_change: int
+    segments: list[SegmentRow],
+    start: int,
+    *,
+    overlapping: bool,
+    kind: RecordingKind,
+    max_tokens: int,
+    min_tokens_at_speaker_change: int,
 ) -> int:
-    """The position of the last segment of the chunk that starts at `start`."""
+    """The position of the last segment of the chunk that starts at `start` (the overlap segment when overlapping)."""
     end = start
     total = _tokens(segments[start])
     while end + 1 < len(segments):
@@ -67,7 +73,10 @@ def _last_index(
         if total + _tokens(following) > max_tokens:
             break
         speaker_changes = following.speaker_label != segments[end].speaker_label
-        if kind == "meeting" and speaker_changes and total >= min_tokens_at_speaker_change:
+        # The speaker-change rule applies to the chunk's new content: a chunk holding only the overlap segment
+        # always goes on, or the overlap would be lost whenever that segment alone reaches the minimum.
+        only_overlap = overlapping and end == start
+        if kind == "meeting" and speaker_changes and total >= min_tokens_at_speaker_change and not only_overlap:
             break
         end += 1
         total += _tokens(following)
@@ -82,9 +91,17 @@ def chunk_segments(
     start = 0
     overlapping = False
     while start < len(segments):
-        end = _last_index(segments, start, kind, max_tokens, min_tokens_at_speaker_change)
+        end = _last_index(
+            segments,
+            start,
+            overlapping=overlapping,
+            kind=kind,
+            max_tokens=max_tokens,
+            min_tokens_at_speaker_change=min_tokens_at_speaker_change,
+        )
         if overlapping and end == start:
-            # The overlap segment fits with nothing after it, so this chunk would only repeat it.
+            # The overlap segment and the next one together exceed max_tokens, so this chunk would only repeat
+            # the overlap; the next chunk starts after it instead of breaking the size limit.
             start += 1
             overlapping = False
             continue

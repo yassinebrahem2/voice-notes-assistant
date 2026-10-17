@@ -89,3 +89,14 @@ def test_note_chunks_plain_text() -> None:
 
     assert [chunk.text for chunk in chunks] == [f"{segments[0].text}\n{segments[1].text}"]
     assert "Speaker" not in chunks[0].text
+
+
+def test_meeting_overlap_is_kept_when_it_alone_reaches_min_at_a_speaker_change() -> None:
+    # The carried-over segment (100) already reaches the minimum and the next segment changes speaker; the
+    # speaker-change rule applies to the chunk's new content, so the overlap still starts the next chunk.
+    segments = _segments([("A", 40), ("A", 100), ("B", 40)])
+
+    chunks = chunk_segments(segments, "meeting", max_tokens=1000, min_tokens_at_speaker_change=80)
+
+    assert _spans(chunks) == [(0, 1), (1, 2)]
+    assert chunks[1].text == f"Speaker A: {segments[1].text}\nSpeaker B: {segments[2].text}"
