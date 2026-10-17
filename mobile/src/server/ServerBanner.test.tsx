@@ -6,6 +6,7 @@ import {
   screen,
   waitFor,
 } from '@testing-library/react-native';
+import { AccessibilityInfo, Animated } from 'react-native';
 import { PaperProvider } from 'react-native-paper';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
@@ -40,6 +41,8 @@ async function setup() {
     </SafeAreaProvider>,
   );
 }
+
+afterEach(() => jest.restoreAllMocks());
 
 beforeEach(() => {
   resetStatus();
@@ -82,4 +85,32 @@ test('disappears by itself once the server answers again', async () => {
   await waitFor(() =>
     expect(screen.queryByText("Can't reach the server")).toBeNull(),
   );
+});
+
+describe('motion', () => {
+  const never = new Promise<boolean>(() => {});
+
+  test.each([
+    ['on', Promise.resolve(true)],
+    ['unknown', never],
+  ])('does not animate when reduce motion is %s', async (_name, enabled) => {
+    jest
+      .spyOn(AccessibilityInfo, 'isReduceMotionEnabled')
+      .mockReturnValue(enabled);
+    const timing = jest.spyOn(Animated, 'timing');
+    await setup();
+    await act(async () => reportNetworkError());
+    expect(screen.getByText("Can't reach the server")).toBeTruthy();
+    expect(timing).not.toHaveBeenCalled();
+  });
+
+  test('animates when reduce motion is off', async () => {
+    jest
+      .spyOn(AccessibilityInfo, 'isReduceMotionEnabled')
+      .mockResolvedValue(false);
+    const timing = jest.spyOn(Animated, 'timing');
+    await setup();
+    await act(async () => reportNetworkError());
+    expect(timing).toHaveBeenCalled();
+  });
 });

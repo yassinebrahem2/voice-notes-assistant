@@ -2,8 +2,10 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { act, renderHook } from '@testing-library/react-native';
 
 import { apiFetch } from '../api/client';
+import { setServerUrl } from '../settings/serverUrl';
 import {
   reportNetworkError,
+  reportNoServer,
   reportOk,
   resetStatus,
   useServerStatusValue,
@@ -213,4 +215,41 @@ test('no stored server URL reports no_server without polling', async () => {
     await jest.advanceTimersByTimeAsync(60_000);
   });
   expect(fetch).not.toHaveBeenCalled();
+});
+
+test.each([
+  ['ok', reportOk],
+  ['no_server', reportNoServer],
+])('a changed server URL resets %s to unknown', async (_name, report) => {
+  const { result } = await renderHook(() => useServerStatus());
+  await act(async () => {
+    await jest.advanceTimersByTimeAsync(0);
+  });
+  await act(async () => report());
+  await act(async () => setServerUrl('https://other.example'));
+  expect(result.current).toBe('unknown');
+});
+
+test('the first URL load does not wipe a failure reported before it finished', async () => {
+  reportNetworkError();
+  const { result } = await renderHook(() => useServerStatus());
+  await act(async () => {
+    await jest.advanceTimersByTimeAsync(0);
+  });
+  expect(result.current).toBe('unreachable');
+});
+
+test.each([
+  ['unknown', () => undefined],
+  ['ok', reportOk],
+  ['no_server', reportNoServer],
+])('never polls /health while the status is %s', async (_name, report) => {
+  const fetch = jest.spyOn(global, 'fetch');
+  report();
+  await renderHook(() => useServerStatus());
+  await act(async () => {
+    await jest.advanceTimersByTimeAsync(60_000);
+  });
+  expect(fetch).not.toHaveBeenCalled();
+  expect(jest.getTimerCount()).toBe(0);
 });
