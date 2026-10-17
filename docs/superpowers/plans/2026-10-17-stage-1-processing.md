@@ -2,7 +2,7 @@
 
 > **For agentic workers:** implement this plan task by task as described in `docs/implementing-plan-tasks.md` (fresh implementer, fresh reviewer, fix loop per task); follow `AGENTS.md`. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-> **Status:** draft. Gets its branch `plan/stage-1-processing` and plan issue after the foundation (#1) merges.
+> **Status:** approved. Branch `plan/stage-1-processing`, plan issue #17.
 
 **Goal:** Recordings go from upload to `ready`: upload and audio serving, the processing worker (claim, resume, retry, delete), speech in child processes, storing the analysis, chunking and indexing, and every recordings and tags route.
 

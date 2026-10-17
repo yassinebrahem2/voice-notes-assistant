@@ -2,7 +2,7 @@
 
 > **For agentic workers:** implement this plan task by task as described in `docs/implementing-plan-tasks.md` (fresh implementer, fresh reviewer, fix loop per task); follow `AGENTS.md`. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-> **Status:** draft. Gets its branch `plan/stage-1-agents` and plan issue after the foundation (#1) merges.
+> **Status:** approved. Branch `plan/stage-1-agents`, plan issue #18.
 
 **Goal:** The reasoning side: the model registry turned into chat models with failover, the Summarizer agent behind the processing `Analyzer`, retrieval, the Orchestrator agent with its tools and citation check, and the Chat endpoints with live steps.
 

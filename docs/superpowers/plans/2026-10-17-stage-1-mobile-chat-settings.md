@@ -2,7 +2,7 @@
 
 > **For agentic workers:** implement this plan task by task as described in `docs/implementing-plan-tasks.md` (fresh implementer, fresh reviewer, fix loop per task); follow `AGENTS.md`. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-> **Status:** draft. Gets its branch `plan/stage-1-mobile-chat-settings` and plan issue after the foundation (#1) merges.
+> **Status:** approved. Branch `plan/stage-1-mobile-chat-settings`, plan issue #20.
 
 **Goal:** The Chat tab (scope and tags, starters, live agent steps, answers with citation chips, fixed replies, retry), Settings (server URL with Test connection, theme, readiness), and the app-wide server banner and status dot.
 

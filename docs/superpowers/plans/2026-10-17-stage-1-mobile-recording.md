@@ -2,7 +2,7 @@
 
 > **For agentic workers:** implement this plan task by task as described in `docs/implementing-plan-tasks.md` (fresh implementer, fresh reviewer, fix loop per task); follow `AGENTS.md`. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-> **Status:** draft. Gets its branch `plan/stage-1-mobile-recording` and plan issue after the foundation (#1) merges.
+> **Status:** approved. Branch `plan/stage-1-mobile-recording`, plan issue #19.
 
 **Goal:** The recording half of the app: the ● fan-out and recorder with the live waveform, the upload queue, the Meetings and Notes libraries, the recording page (processing timeline, summary, transcript, speakers, note) and the player; Tier 2 polish last.
 
