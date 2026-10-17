@@ -1,5 +1,5 @@
-import { PlaceholderScreen } from '../../src/components/PlaceholderScreen';
+import { ChatScreen } from '../../src/chat/ChatScreen';
 
 export default function Chat() {
-  return <PlaceholderScreen title="Chat" />;
+  return <ChatScreen />;
 }
