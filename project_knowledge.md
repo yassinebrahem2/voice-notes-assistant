@@ -94,12 +94,12 @@ Versions checked 2026-10-16; majors are pinned.
 - [BRIEF] The coding assistant asks before choosing the stack for any open item.
 - [USER] 2026-10-17: CI (Backend, Mobile) and the `board` workflow run on the lead's homelab self-hosted runners (labels `self-hosted, linux, homelab`); the free GitHub-hosted minutes for this private repository ran out and paid minutes are not an option. The repository must stay private while those runners are connected (on a public repository anyone's pull request could run code on them).
 - [USER] 2026-10-17: no task, bug or plan issue is closed without green Backend and Mobile CI on a commit containing its work (AGENTS.md rule 6).
-- [PROPOSED] Decision issues are exempt from that rule: they carry no code and close when answered.
+- [AGREED] Decision issues are exempt from that rule: they carry no code and close when answered.
 - [USER] 2026-10-17: every agent and person moves their own issue's board card at every state change (claim, block, resume, unassign, close) and checks the move (AGENTS.md rule 7); the board automation is a backup.
 - [USER] 2026-10-17: plan tasks are implemented the subagent-driven way described in `docs/implementing-plan-tasks.md` (fresh implementer, fresh reviewer, fix loop), on the plan's branch only, within the task's scope.
-- [PROPOSED] Decision #46: a task that implements a stub route also updates the stub-route tests (explicit `STUBS` list in `backend/tests/api/test_routes_exist.py`).
-- [PROPOSED] Decision #48: Chat Retry recovers a lost run id from `GET /chats/{id}` (the run id is the stored user message id) and never sends a question twice; only a 4xx on the question's POST means it was not stored; a chat that is gone (404) is replaced by a new chat on Retry.
-- [PROPOSED] Decision #60: `/health` role readiness means "can process now"; fake speech reports `ready`, and the fake backend is reported only by `speech_backend`.
+- [AGREED] Decision #46: a task that implements a stub route also updates the stub-route tests (explicit `STUBS` list in `backend/tests/api/test_routes_exist.py`).
+- [AGREED] Decision #48: Chat Retry recovers a lost run id from `GET /chats/{id}` (the run id is the stored user message id) and never sends a question twice; only a 4xx on the question's POST means it was not stored; a chat that is gone (404) is replaced by a new chat on Retry.
+- [AGREED] Decision #60: `/health` role readiness means "can process now"; fake speech reports `ready`, and the fake backend is reported only by `speech_backend`.
 
 ## 3. Open
 Each item is safe to decide later; the stage that decides it is named.
