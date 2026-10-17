@@ -100,3 +100,13 @@ def test_meeting_overlap_is_kept_when_it_alone_reaches_min_at_a_speaker_change()
 
     assert _spans(chunks) == [(0, 1), (1, 2)]
     assert chunks[1].text == f"Speaker A: {segments[1].text}\nSpeaker B: {segments[2].text}"
+
+
+def test_one_segment_chunk_is_still_repeated_as_the_next_chunks_first() -> None:
+    # The first chunk ends at the speaker change after one segment; that segment and the next ones fit, so the
+    # next chunk starts with it as every other overlap does.
+    segments = _segments([("A", 90), ("B", 40), ("B", 40)])
+
+    chunks = chunk_segments(segments, "meeting", max_tokens=200, min_tokens_at_speaker_change=80)
+
+    assert _spans(chunks) == [(0, 0), (0, 2)]

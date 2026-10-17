@@ -117,7 +117,9 @@ def chunk_segments(
         )
         if end == len(segments) - 1:
             break
-        # A one-segment chunk cannot share its segment: the next chunk would start, and stop, on it again.
-        overlapping = end > start
-        start = end if overlapping else end + 1
+        # Spec §5: the next chunk starts with this chunk's last segment, also after a one-segment chunk, which then
+        # becomes a prefix of its successor (the spec makes no exception for that). Progress is still certain: the
+        # next chunk either adds a segment or is skipped above.
+        overlapping = True
+        start = end
     return chunks
