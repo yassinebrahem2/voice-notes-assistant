@@ -17,7 +17,7 @@ Routes (expo-router): `(tabs)/meetings`, `(tabs)/notes`, `(tabs)/chat`, `(tabs)/
    - waveform of ≈ 48 bars scrolling right to left, the newest in the signal colour, older ones fading to ink-muted; drawn with Reanimated `Animated.View`s (no Skia);
    - a ring around the Stop disc breathes with the current level;
    - timer in IBM Plex Mono, tabular digits; the screen is kept awake.
-   - Levels: recorder created with `isMeteringEnabled: true`; the status listener of `useAudioRecorder` (polling ≈ 50 ms) writes into a shared value; dBFS clamped to −50…0 and mapped to 0…1. Not `useAudioRecorderState` (it would re-render the screen 20×/s).
+   - Levels: recorder created with `isMeteringEnabled: true`; while recording, `recorder.getStatus()` is polled every 50 ms (`setInterval`) and its `metering` written into a shared value (no React re-render), the elapsed time updated at most 4×/s; dBFS clamped to −50…0 and mapped to 0…1. In expo-audio 58.0.9 the `useAudioRecorder` status listener only reports stop and errors (`metering` and `durationMillis` come only from `getStatus()`). Not `useAudioRecorderState` (it would re-render the screen 20×/s).
 5. Stop: medium haptic; the file moves to the document directory; the ring becomes the upload progress ring (XMLHttpRequest `upload.onprogress`, multipart FormData); on success a check mark, then the screen turns into `recording/[id]`. Failure: Retry on the ring (section 6).
 6. ✕ or Android back while recording asks "Discard recording?".
 7. Background: in the EAS APK recording continues with Android's ongoing notification; in Expo Go it pauses and the recorder shows "Paused while the app was in the background" with Resume / Stop, plus a quiet line "Keep the app open while recording" (platform file §5).
