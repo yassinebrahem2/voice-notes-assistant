@@ -49,6 +49,18 @@ test('renders five accessible actions in order and marks the active tab', async 
   ).toBe(false);
 });
 
+test.each(['Meetings', 'Notes', 'Chat', 'Settings'])(
+  'exposes only %s as selected when its tab is active',
+  async (name) => {
+    await setup(['Meetings', 'Notes', 'Chat', 'Settings'].indexOf(name));
+    expect(screen.getAllByRole('tab', { selected: true })).toHaveLength(1);
+    expect(screen.getByRole('tab', { selected: true })).toHaveAccessibleName(
+      name,
+    );
+    expect(screen.getAllByRole('tab', { selected: false })).toHaveLength(3);
+  },
+);
+
 test('navigates to a different tab and emits standard events', async () => {
   const { navigate, emit } = await setup();
   await fireEvent.press(screen.getByRole('tab', { name: 'Notes' }));
