@@ -17,7 +17,19 @@ const config: ExpoConfig = {
   userInterfaceStyle: 'automatic',
   android: { package: `com.app.${slug.replace(/-/g, '')}` },
   web: { output: 'single' },
-  plugins: ['expo-router', 'expo-font', 'expo-splash-screen'],
+  plugins: [
+    'expo-router',
+    'expo-font',
+    'expo-splash-screen',
+    [
+      'expo-audio',
+      {
+        microphonePermission:
+          'Allow $(PRODUCT_NAME) to access your microphone for recording meetings and voice notes.',
+        enableBackgroundRecording: true,
+      },
+    ],
+  ],
   experiments: { typedRoutes: true },
   extra: {
     appName: app.name,
