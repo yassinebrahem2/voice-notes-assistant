@@ -1,3 +1,4 @@
+import sqlite3
 from concurrent.futures import ThreadPoolExecutor
 from types import SimpleNamespace
 
@@ -63,6 +64,7 @@ def test_registry_labels_and_resolve() -> None:
         recording_title="Meeting 1",
     )
     assert registry.resolve("[P1]") == registry.resolve("P1")
+    assert registry.resolve("[ P1 ]") == registry.resolve("P1")
     assert registry.resolve("p1") == registry.resolve("P1")
 
     assert registry.resolve("R1") == ResolvedSource(
@@ -80,6 +82,29 @@ def test_registry_labels_and_resolve() -> None:
 
     assert registry.resolve("P99") is None
     assert registry.resolve("R99") is None
+
+
+def test_registry_add_recording_sqlite_row() -> None:
+    conn = sqlite3.connect(":memory:")
+    try:
+        conn.row_factory = sqlite3.Row
+        row = conn.execute(
+            "SELECT 'rec_row' AS id, 'Row Title' AS title, 'seg_row' AS first_segment_id, 500 AS start_ms"
+        ).fetchone()
+        assert row is not None
+
+        registry = SourceRegistry()
+        r_label = registry.add_recording(row)
+        assert r_label == "R1"
+        resolved = registry.resolve(r_label)
+        assert resolved == ResolvedSource(
+            recording_id="rec_row",
+            segment_id="seg_row",
+            start_ms=500,
+            recording_title="Row Title",
+        )
+    finally:
+        conn.close()
 
 
 def test_registry_threadsafe_unique_labels() -> None:

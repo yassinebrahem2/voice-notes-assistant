@@ -1,9 +1,10 @@
 """Source registry tracking passages and recordings with sequential run-scoped labels."""
 
-from collections.abc import Mapping
-from dataclasses import dataclass
+import re
 import sqlite3
 import threading
+from collections.abc import Mapping
+from dataclasses import dataclass
 from typing import cast
 
 from app.rag.retrieve import Hit
@@ -11,8 +12,9 @@ from app.rag.retrieve import Hit
 
 def _extract(obj: object, *keys: str) -> object | None:
     if isinstance(obj, sqlite3.Row):
+        row_keys = set(obj.keys())
         for k in keys:
-            if k in obj.keys():
+            if k in row_keys:
                 return cast(object, obj[k])
         return None
     if isinstance(obj, Mapping):
@@ -81,6 +83,6 @@ class SourceRegistry:
             return label
 
     def resolve(self, label: str) -> ResolvedSource | None:
-        norm = label.strip("[]").upper()
+        norm = re.sub(r"[\s\[\]]", "", label).upper()
         with self._lock:
             return self._sources.get(norm)
