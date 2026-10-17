@@ -23,7 +23,7 @@
 1. The server restarts mid-question → "Interrupted" + Retry, which asks the same question once. (Task 1 test.)
 2. A run that never finishes → the app stops polling at 90 s with "Taking too long" + Retry. (Task 1 test.)
 3. A server URL typed with `http://` or a trailing slash → saved normalised; Test connection says "Not HTTPS". (Task 3 test.)
-4. The laptop goes offline → banner within 10 s, gone by itself once reachable; lists keep their data. (Task 4 test.)
+4. The laptop goes offline, or only the backend stops behind `tailscale serve` (502) → banner within 10 s, gone by itself once reachable; lists keep their data. (Task 4 and Task 6 tests.)
 5. Switching tabs mid-run → coming back shows the same run continuing. (Task 1 test.)
 
 ---
@@ -98,9 +98,54 @@
 - [ ] **Step 5 (phone):** stop the laptop's server → banner within 10 s, libraries keep their rows; start it → banner disappears.
 - [ ] **Step 6: Commit** `feat(mobile): add server status banner and tab dot`.
 
+### Task 5: Chat retry after a 5xx answer to the question's POST
+
+Follow-up from the final branch review (plan issue #20). Task 1's interface text (amended in `70c4295`, Decision #48) says a 5xx answer to `POST …/messages` may come after the server stored the question, so Retry must go through the `getChat` check; the code still treats every error response as "not stored" and sends the question again.
+
+**Files:**
+- Modify: `mobile/src/chat/useChatSession.ts` (`unsentKind`)
+- Test: `mobile/src/chat/useChatSession.test.ts`
+
+**Interfaces:**
+- No new interfaces. `unsentKind(error)`: `network_error`, `timeout`, any 5xx status and a 2xx with an unreadable body → `uncertain` (Retry runs the `getChat` check); only a 4xx (422 `validation_error`, 404 `not_found`, …) → `rejected` (Retry asks again without `getChat`).
+- [ ] **Step 1: Write the failing tests:** replace the test "retry after a server error response asks again without looking in the chat" with: a 500 `internal_error` POST whose question is stored (mocked `getChat` lists it) → Retry adopts that message id and polls it, `chats/chat_1/messages` called once; a 500 POST whose question is not stored → Retry calls `getChat`, then asks once; a 422 `validation_error` POST → Retry asks again without calling `getChat`.
+- [ ] **Step 2: Run** `npx jest src/chat` → FAIL. **Step 3: Implement.** **Step 4: Run** jest, tsc, eslint, prettier → clean.
+- [ ] **Step 5: Commit** `fix(mobile): look for a stored question after a 5xx before asking again`.
+
+### Task 6: A gateway error without the API's error body means unreachable
+
+Follow-up from the final branch review (plan issue #20). The phone reaches the backend through `tailscale serve`. When the laptop is up but the backend is stopped, `tailscale serve` is expected to answer itself with a 502 (not observed yet; phone check below). Today `apiFetch` counts any HTTP response as reachable, so the banner never shows, the Settings dot says "Server connected" and the health poller stops; Test connection says "That isn't this app's server". The backend's own errors always carry the `{ error: { code, message } }` envelope (`backend/app/api/errors.py`), so the envelope tells the two apart.
+
+**Files:**
+- Modify: `mobile/src/api/client.ts`, `mobile/src/settings/testConnection.ts`
+- Test: `mobile/src/api/client.test.ts`, `mobile/src/server/useServerStatus.test.ts`, `mobile/src/settings/testConnection.test.ts`
+
+**Interfaces:**
+- `apiFetch`: a response with status 502, 503 or 504 whose body is not the API error envelope (not JSON, or JSON without `error.code` and `error.message` strings) is treated like a failed request: `reportNetworkError()` and throw `ApiError(0, 'network_error', 'Could not reach the server.')` (the existing network-error message). `reportOk()` moves after this check, so it is called only for responses that are not such a gateway error. A 502/503/504 that carries the envelope is the backend's own answer: `reportOk()` and the usual `parseApiError`. Every other status keeps today's behaviour.
+- `testConnection`: the same gateway error (502/503/504 without the envelope) → `{ ok: false, problem: 'unreachable' }`, not `not_this_server`.
+- [ ] **Step 1: Write the failing tests:** `apiFetch` 502 with a plain-text body → status store `unreachable`, throws `network_error`; 503 with an HTML body and 504 with JSON that is not the envelope → same; 503 with the error envelope → status `ok`, throws the envelope's code; 500 without the envelope → status `ok` (unchanged); health polling keeps going every 10 s while `/health` answers 502, and stops once it answers 200; `testConnection` 502 plain text → `unreachable`, 500 plain text → `not_this_server` (unchanged).
+- [ ] **Step 2: Run** → FAIL. **Step 3: Implement.** **Step 4: Run** jest, tsc, eslint, prettier → clean.
+- [ ] **Step 5 (phone):** laptop and Tailscale up, backend stopped → banner within 10–20 s, Settings dot in the signal colour, Test connection says "Can't reach the server"; start the backend → banner goes away by itself.
+- [ ] **Step 6: Commit** `fix(mobile): count a gateway error from the proxy as unreachable`.
+
+### Task 7: Chat starters match the server's help reply
+
+Follow-up from the final branch review (plan issue #20). The server's `help` fixed reply lists the starter questions (chat spec: "`help` (lists the starter questions)"); the app's `STARTERS` list is different, so the user sees two lists. The agents plan's `HELP` text is the source; the app copies it.
+
+**Files:**
+- Modify: `mobile/src/chat/Starters.tsx` (`STARTERS`)
+- Test: `mobile/src/chat/ChatScreen.test.tsx`
+
+**Interfaces:**
+- `STARTERS` is exactly, in this order: `'What was decided in our last sync?'`, `'What are my open action items?'`, `'Summarize my notes on architecture.'` (the three questions of `HELP` in `backend/app/agents/citations.py` on `plan/stage-1-agents`). A comment names that constant as the source, so a change to one is made to both.
+- [ ] **Step 1: Write the failing test:** the empty chat shows exactly these three starters, in this order.
+- [ ] **Step 2: Run** → FAIL. **Step 3: Implement.** **Step 4: Run** jest, tsc, eslint, prettier → clean.
+- [ ] **Step 5: Commit** `fix(mobile): use the server's help questions as chat starters`.
+
 ## Shared files with the mobile recording plan
 This plan edits `app/_layout.tsx`, `TabBar.tsx` and `src/api/client.ts`; the recording plan adds the fan-out overlay to `app/_layout.tsx` and owns the recording page. Both may define a `useTags` hook with query key `["tags"]`; on rebase keep one. Whichever merges second rebases and keeps both.
 
 ## Self-review notes
 - Spec coverage: UI §3 Chat (Tasks 1–2), Settings (Task 3), Everywhere banner (Task 4); §6 Chat run failures (Task 1), server unreachable (Task 4), error-code messages via `errorMessage` (foundation Task 9). Chat spec §6 states mapped in `nextRunView`.
 - Dependencies: Task 1 none; Task 2 needs 1; Task 3 none; Task 4 needs 3 (no-server state uses the stored URL). Tasks 1 and 3 can run in parallel.
+- Tasks 5–7 (from the final branch review): Task 5 needs 1; Task 6 needs 4; Task 7 needs 2. They touch different files and can run in parallel.
