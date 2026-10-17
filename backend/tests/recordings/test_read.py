@@ -79,6 +79,8 @@ def test_list_search_matches_title_tag_and_transcript(client: TestClient, contai
 def test_search_escapes_like_wildcards(client: TestClient, container: Container) -> None:
     literal = _seed(container, title="Growth 50% target", segments=SEGMENTS_ONE)
     _seed(container, title="Plain", segments=SEGMENTS_ONE)
+    # Without escaping, "50%" becomes the pattern "%50%%" and would also match this "50" not followed by "%".
+    _seed(container, title="500 users", segments=SEGMENTS_ONE)
     underscore = _seed(container, title="snake_case name", segments=SEGMENTS_ONE)
     _seed(container, title="snakeXcase name", segments=SEGMENTS_ONE)
 
@@ -99,6 +101,25 @@ def test_list_tag_filter_requires_all_tags(client: TestClient, container: Contai
     assert _ids(client, {"tag_id": [tags["alpha"], tags["alpha"], tags["beta"]]}) == [both]
     assert _ids(client, {"tag_id": [tags["alpha"], "tag_unknown"]}) == []
     assert _ids(client, {"kind": "note", "tag_id": [tags["alpha"]]}) == []
+
+
+def test_search_combined_with_kind_and_tag_is_an_and(client: TestClient, container: Container) -> None:
+    both = _seed(container, title="Zebra meeting", kind="meeting", tags=["alpha"], segments=SEGMENTS_ONE)
+    wrong_kind = _seed(container, title="Zebra note", kind="note", tags=["alpha"], segments=SEGMENTS_ONE)
+    wrong_tag = _seed(container, title="Zebra other", kind="meeting", tags=["beta"], segments=SEGMENTS_ONE)
+    tags = {tag["name"]: tag["id"] for tag in client.get("/api/v1/tags").json()}
+
+    assert set(_ids(client, {"q": "zebra"})) == {both, wrong_kind, wrong_tag}
+    assert _ids(client, {"q": "zebra", "kind": "meeting", "tag_id": [tags["alpha"]]}) == [both]
+    assert _ids(client, {"q": "zebra", "kind": "note"}) == [wrong_kind]
+    assert _ids(client, {"q": "zebra", "tag_id": [tags["beta"]]}) == [wrong_tag]
+
+
+def test_equal_timestamps_are_ordered_by_id_descending(client: TestClient, container: Container) -> None:
+    same = "2026-05-05T00:00:00Z"
+    ids = [_seed(container, title=f"Same {n}", created_at=same) for n in range(3)]
+
+    assert _ids(client) == sorted(ids, reverse=True)
 
 
 def test_recording_tags_carry_counts_in_name_order(client: TestClient, container: Container) -> None:
