@@ -2,10 +2,10 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
 
+from app.agents.summarizer import SummarizerAnalyzer
 from app.config.app_config import AppConfig, load_app_config
 from app.config.models_registry import ModelsRegistry, load_models_registry
 from app.config.settings import Settings
-from app.processing.fakes import FakeAnalyzer
 from app.processing.protocols import Analyzer
 from app.rag.fakes import FakeEmbedder
 from app.rag.protocols import Embedder
@@ -33,7 +33,7 @@ def build_container(settings: Settings) -> Container:
     # The processing plan binds real speech and embeddings here for speech_backend="real".
     asr, diarizer, embedder = FakeAsr(), FakeDiarizer(), FakeEmbedder()
     # The agents plan binds the real analyzer here.
-    analyzer = FakeAnalyzer()
+    analyzer = SummarizerAnalyzer(models)
     return Container(
         settings, app_config, models, settings.data_dir / "app.db", "fake", asr, diarizer, embedder, analyzer
     )

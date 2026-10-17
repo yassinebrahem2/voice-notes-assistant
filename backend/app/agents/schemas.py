@@ -1,4 +1,4 @@
-from typing import Literal
+from typing import Literal, cast
 
 from pydantic import BaseModel, Field
 
@@ -27,6 +27,17 @@ class NoteAnalysis(BaseModel):
     tags: list[str] = Field(min_length=1, max_length=4)
     key_points: list[Item] = Field(min_length=1, max_length=8)
     clean_text: str
+
+
+class MeetingSectionNotes(BaseModel):
+    decisions: list[Item] = Field(default_factory=lambda: cast(list[Item], []))
+    action_items: list[ActionItem] = Field(default_factory=lambda: cast(list[ActionItem], []))
+    open_questions: list[Item] = Field(default_factory=lambda: cast(list[Item], []))
+
+
+class NoteSectionNotes(BaseModel):
+    key_points: list[Item] = Field(default_factory=lambda: cast(list[Item], []))
+    clean_text: str = ""
 
 
 class ChatReply(BaseModel):
