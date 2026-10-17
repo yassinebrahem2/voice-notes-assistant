@@ -6,6 +6,7 @@ from app.api.deps import get_container
 from app.api.models.health import HealthOut
 from app.config.settings import hf_token, provider_key
 from app.container import Container
+from app.rag.fastembed_embedder import FastEmbedEmbedder
 
 router = APIRouter(tags=["health"])
 
@@ -19,6 +20,8 @@ def get_health(container: Annotated[Container, Depends(get_container)]) -> Healt
             roles[role] = f"Missing {container.models.providers[first.provider].key_env}"
     if container.speech_backend_bound == "real" and hf_token() is None:
         roles["diarizer"] = "Missing HF_TOKEN"
+    if isinstance(container.embedder, FastEmbedEmbedder) and not container.embedder.is_cached():
+        roles["embedder"] = "Model not downloaded"
     return HealthOut(
         app_name=container.app_config.name,
         version=container.app_config.version,

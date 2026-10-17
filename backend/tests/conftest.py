@@ -1,3 +1,4 @@
+import dataclasses
 import os
 from collections.abc import Iterator
 from pathlib import Path
@@ -13,6 +14,8 @@ from app.config.settings import Settings, load_settings
 from app.container import Container, build_container
 from app.db.connection import connect
 from app.db.migrate import apply_migrations
+from app.processing.fakes import FakeAnalyzer
+from app.rag.fakes import FakeEmbedder
 
 
 @pytest.fixture(autouse=True)
@@ -47,7 +50,8 @@ def container(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Container:
         apply_migrations(connection)
     finally:
         connection.close()
-    return result
+    # Real models would download or need keys as soon as a test indexes or analyzes.
+    return dataclasses.replace(result, embedder=FakeEmbedder(), analyzer=FakeAnalyzer())
 
 
 @pytest.fixture

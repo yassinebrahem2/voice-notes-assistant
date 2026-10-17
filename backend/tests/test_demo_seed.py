@@ -1,3 +1,4 @@
+import dataclasses
 import json
 from pathlib import Path
 from typing import cast
@@ -8,9 +9,16 @@ from app.cli import main
 from app.config.app_config import AppConfig
 from app.config.settings import Settings
 from app.container import Container
+from app.container import build_container as real_build_container
 from app.db.connection import connect
 from app.domain.analysis import MeetingSummary, NoteContent
+from app.processing.fakes import FakeAnalyzer
+from app.rag.fakes import FakeEmbedder
 from app.rag.vectors import unpack_embedding
+
+
+def build_with_fakes(settings: Settings) -> Container:
+    return dataclasses.replace(real_build_container(settings), embedder=FakeEmbedder(), analyzer=FakeAnalyzer())
 
 
 @pytest.fixture
@@ -23,6 +31,7 @@ def cli_container(container: Container, tmp_path: Path, monkeypatch: pytest.Monk
         return container.settings
 
     monkeypatch.setattr("app.cli.load_settings", isolated_settings)
+    monkeypatch.setattr("app.cli.build_container", build_with_fakes)
     return container
 
 
