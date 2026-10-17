@@ -10,4 +10,4 @@ The rules shared by every coding agent live in AGENTS.md and apply in full:
 
 - Use the advisor tool: before committing to an approach, when stuck, and before declaring a task done. Give its advice serious weight; if it conflicts with evidence you have, raise the conflict in another advisor call instead of silently picking a side.
 - On specs and plans, keep calling the advisor until a round finds no blocking issues.
-- Implement plan tasks with the `superpowers:subagent-driven-development` skill if it is available, otherwise by `docs/implementing-plan-tasks.md` (see AGENTS.md, Implementer rules). Ask each implementer and reviewer subagent to call the advisor before it reports, and call it yourself before declaring the plan's work done.
+- Implement plan tasks by `docs/implementing-plan-tasks.md` (see AGENTS.md, Implementer rules), not by the generic subagent-driven-development skill. Ask each implementer and reviewer subagent to call the advisor before it reports, and call it yourself before declaring the task done.

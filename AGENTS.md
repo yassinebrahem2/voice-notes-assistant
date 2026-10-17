@@ -32,7 +32,7 @@ Most moves are automatic: the board's built-in workflows add items to Todo and s
 - Claim a task by assigning yourself to its sub-issue before starting. Only take a task that is unassigned and whose dependencies are closed.
 - Assigning yourself moves your task's card to "In progress"; close the sub-issue when its work is pushed and its checks pass.
 - Pull with rebase before you start and before you push, then re-read the plan (it may have changed). Commit small and push often, since several people share the branch.
-- Implement plan tasks the subagent-driven way (a fresh implementer per task, a fresh reviewer checks it against the plan task and the spec, fixes are re-reviewed before the next task starts). If your agent has the `superpowers:subagent-driven-development` skill, use it; if not, follow `docs/implementing-plan-tasks.md`. Either way the repository rules at the end of that file apply.
+- Implement plan tasks the subagent-driven way described in `docs/implementing-plan-tasks.md`: a fresh implementer per task, a fresh reviewer checks it against the plan task and the spec, fixes are re-reviewed before the task is closed.
 - Follow the plan as written. If the plan is wrong, unclear, or needs a decision, do not improvise: open a Decision issue linked to the blocked task, and move that task to "Blocked" until the lead answers.
 - Do not edit specs, plans, `docs/roadmap.md` or `project_knowledge.md`; those belong to the lead.
 - A task is done only when its tests, lint and type checks pass locally, and CI passes on the branch.
@@ -81,7 +81,7 @@ Four types, each with its template and label. Blank issues are disabled.
 ## Documents
 - `project_knowledge.md`: what we know about the project (decisions, open questions, ideas, superseded decisions). Facts only, never plans or task notes.
 - `docs/roadmap.md`: the build stages and the shared contracts every stage follows. A change to a contract is made there first.
-- `docs/implementing-plan-tasks.md`: how an agent implements a plan task (implementer, reviewer, fix loop) when it lacks the subagent-driven-development skill.
+- `docs/implementing-plan-tasks.md`: how every agent implements a plan task (implementer, reviewer, fix loop).
 - `docs/superpowers/specs/`: one design spec per stage. `docs/superpowers/plans/`: implementation plans.
 - `project_context.md`: the original idea file (read-only). `new-project-playbook.md`: how the work is run.
 

@@ -1,6 +1,6 @@
 # Implementing plan tasks
 
-How a coding agent implements a plan task in this repository. If your agent has the `superpowers:subagent-driven-development` skill, use it, with the repository rules in the last section of this file taking precedence over it. If it does not, follow this file. `AGENTS.md` applies in full either way.
+How every coding agent implements a plan task in this repository, whatever agent it is. It fits the team workflow in `AGENTS.md` (claim a task, work on the plan branch, Decision issues for anything the plan does not settle), which applies in full.
 
 The method: you (the controller) never write the task's code yourself. A fresh implementer does the task, a fresh reviewer checks the result against the plan task and the spec, fixes are made and re-reviewed, and only then does the next task start. Fresh context for each role keeps the reviewer from inheriting the implementer's assumptions.
 
@@ -83,10 +83,9 @@ Always name the model when you dispatch a subagent. Use the cheapest tier that c
 
 When every task of the plan is closed, the person opening the PR runs one final review of the whole branch on the most capable model: package from the merge base with `main` (`git merge-base origin/main HEAD`) to HEAD, checked against the plan's Goal and Review Focus and the spec sections the plan covers, looking at how the tasks fit together rather than at each task again. Fix Critical and Important findings through the same loop before opening the PR.
 
-## Repository rules that override the skill
-
-These hold whether you use the skill or this file.
-- **No rulings by the agent.** When the plan is wrong, unclear or needs a decision, do not choose for the lead: open a Decision issue linked to the task and move the task to Blocked (`AGENTS.md`, Implementer rules). Continue only after the lead answers.
+## Rules that hold throughout
+- **No rulings by the agent.** When the plan is wrong, unclear or needs a decision, do not choose for the lead: open a Decision issue linked to the task, naming it under "Blocked task" (the board moves the task to Blocked and back when the Decision closes). Continue only after the lead answers.
 - **No silent deferral.** Open Minor findings, concerns from a `DONE_WITH_CONCERNS` report, and anything done differently from the plan are written in the plan issue and, at the end, in the PR description. The ledger alone is not enough.
-- **One task per claim.** Work only on tasks you have claimed; several people share the branch.
+- **One task per claim.** Work only on tasks you have claimed; several people share the branch, so pull with rebase before each push.
+- **Handoffs in the issue.** If you stop before a task is done, comment on its issue: what is committed, what is left, the base commit. The next person (or session) starts from that comment.
 - **Checks are real.** A task is done only when its tests, lint and type checks pass locally and CI passes on the branch; report the real output.
