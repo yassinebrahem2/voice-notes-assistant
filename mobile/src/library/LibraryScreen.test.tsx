@@ -203,11 +203,12 @@ describe('LibraryScreen', () => {
       tags: [{ id: 't-1', name: 'Scrum', count: 1 }],
     };
 
+    const refetchFn = jest.fn();
     mockUseRecordings.mockReturnValue({
       data: [serverRecording],
       isLoading: false,
       error: null,
-      refetch: jest.fn(),
+      refetch: refetchFn,
     } as unknown as ReturnType<typeof useRecordings>);
 
     await renderScreen('meeting');
@@ -223,6 +224,7 @@ describe('LibraryScreen', () => {
       fireEvent.press(retryButton);
     });
     expect(retryFn).toHaveBeenCalledWith('pending-1');
+    expect(refetchFn).toHaveBeenCalled();
 
     await act(async () => {
       fireEvent.press(deleteButton);
