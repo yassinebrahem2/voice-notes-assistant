@@ -11,10 +11,10 @@ from langchain.agents.middleware import (
     ToolCallLimitMiddleware,
 )
 from langchain_core.messages import AIMessage, BaseMessage, SystemMessage
-from langchain_core.runnables import RunnableConfig
 from langgraph.graph import END, START, StateGraph  # pyright: ignore[reportMissingTypeStubs]
 from langgraph.graph.message import add_messages  # pyright: ignore[reportMissingTypeStubs]
 from langgraph.graph.state import CompiledStateGraph  # pyright: ignore[reportMissingTypeStubs]
+from langgraph.runtime import Runtime  # pyright: ignore[reportMissingTypeStubs]
 
 from app.agents.chat_context import ChatContext
 from app.agents.citations import FinalReply, check_citations
@@ -67,14 +67,8 @@ class ChatState(TypedDict):
     final: FinalReply | None
 
 
-def check_citations_node(state: ChatState, config: RunnableConfig) -> dict[str, Any]:
-    rt = config.get("configurable", {}).get("__pregel_runtime")
-    context: ChatContext | None = getattr(rt, "context", None)
-    if context is None:
-        raise RuntimeError("ChatContext missing from runtime configuration")
-    reply = state.get("structured_response")
-    final = check_citations(reply, context.sources)
-    return {"final": final}
+def check_citations_node(state: ChatState, runtime: Runtime[ChatContext]) -> dict[str, Any]:
+    return {"final": check_citations(state.get("structured_response"), runtime.context.sources)}
 
 
 def build_chat_graph(container: Container) -> CompiledStateGraph[Any, Any, Any, Any]:
