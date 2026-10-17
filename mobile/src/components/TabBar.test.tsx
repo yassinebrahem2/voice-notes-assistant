@@ -1,5 +1,6 @@
 import type { BottomTabBarProps } from 'expo-router/js-tabs';
 import { fireEvent, render, screen } from '@testing-library/react-native';
+import { StyleSheet } from 'react-native';
 import { PaperProvider } from 'react-native-paper';
 
 import { paperTheme } from '../theme/paperTheme';
@@ -80,4 +81,29 @@ test('does not navigate when tabPress is prevented or the tab is already selecte
   await fireEvent.press(screen.getByRole('tab', { name: 'Meetings' }));
   await fireEvent.press(screen.getByRole('button', { name: 'Record' }));
   expect(navigate).not.toHaveBeenCalled();
+});
+
+test('keeps the whole Record disc inside the tab bar bounds', async () => {
+  await setup();
+  // Android delivers touches only inside a view's parent bounds, so the disc must not be pulled out of the bar.
+  let node = screen.getByRole('button', { name: 'Record' }).parent;
+  const ancestors = [];
+  while (node && node.props.testID !== 'tab-bar') {
+    ancestors.push(node);
+    node = node.parent;
+  }
+  expect(node?.props.testID).toBe('tab-bar');
+  ancestors.push(node);
+  for (const ancestor of ancestors) {
+    const style = StyleSheet.flatten(ancestor?.props.style) ?? {};
+    expect(style.marginTop ?? 0).toBeGreaterThanOrEqual(0);
+    expect(style.top ?? 0).toBeGreaterThanOrEqual(0);
+    expect(style.position).not.toBe('absolute');
+    expect(style.height).toBeUndefined();
+    expect(style.maxHeight).toBeUndefined();
+  }
+  // The area above the visible bar shows the screen background, so the root paints nothing itself.
+  expect(
+    StyleSheet.flatten(node?.props.style)?.backgroundColor,
+  ).toBeUndefined();
 });

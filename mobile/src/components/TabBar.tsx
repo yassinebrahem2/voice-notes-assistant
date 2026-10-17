@@ -19,6 +19,10 @@ const tabs: Record<
   settings: { title: 'Settings', icon: 'cog-outline' },
 };
 
+// How far the Record disc rises above the visible bar. The root is this much taller than the bar so that the disc stays
+// inside its parent: Android does not deliver touches to the part of a child drawn outside its parent's bounds.
+const discOverhang = spacing.sm;
+
 export type TabBarProps = Pick<
   BottomTabBarProps,
   'state' | 'emitter' | 'navigateToTab' | 'insets'
@@ -72,17 +76,22 @@ export function TabBar({ state, emitter, navigateToTab, insets }: TabBarProps) {
 
   return (
     <View
+      testID="tab-bar"
       style={[
-        styles.bar,
+        styles.root,
         {
-          backgroundColor: tape.surface,
-          borderTopColor: tape.line,
           paddingBottom: Math.max(insets.bottom, spacing.sm),
           paddingLeft: insets.left,
           paddingRight: insets.right,
         },
       ]}
     >
+      <View
+        style={[
+          styles.surface,
+          { backgroundColor: tape.surface, borderTopColor: tape.line },
+        ]}
+      />
       {tab('meetings')}
       {tab('notes')}
       <View style={styles.record}>
@@ -95,16 +104,24 @@ export function TabBar({ state, emitter, navigateToTab, insets }: TabBarProps) {
 }
 
 const styles = StyleSheet.create({
-  bar: {
+  // No background: the band above the visible bar shows the screen background.
+  root: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-start',
+  },
+  surface: {
+    position: 'absolute',
+    top: discOverhang,
+    left: 0,
+    right: 0,
+    bottom: 0,
     borderTopWidth: StyleSheet.hairlineWidth,
-    paddingTop: spacing.sm,
   },
   tab: {
     flex: 1,
     minWidth: 48,
     minHeight: 56,
+    marginTop: discOverhang + spacing.sm,
     alignItems: 'center',
     justifyContent: 'center',
     gap: spacing.xs,
@@ -115,6 +132,5 @@ const styles = StyleSheet.create({
     flex: 1,
     minWidth: 64,
     alignItems: 'center',
-    marginTop: -spacing.lg,
   },
 });
