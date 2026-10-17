@@ -9,6 +9,7 @@ import { PaperProvider } from 'react-native-paper';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { queryClient } from '../src/api/queryClient';
+import { FanOutOverlay } from '../src/recording/FanOutOverlay';
 import { fontAssets } from '../src/theme/fonts';
 import { paperTheme } from '../src/theme/paperTheme';
 
@@ -38,7 +39,16 @@ export default function RootLayout() {
             }}
           >
             <Stack.Screen name="(tabs)" />
+            <Stack.Screen
+              name="record"
+              options={{
+                animation: 'none',
+                gestureEnabled: false,
+                headerShown: false,
+              }}
+            />
           </Stack>
+          <FanOutOverlay />
         </PaperProvider>
       </SafeAreaProvider>
     </QueryClientProvider>
