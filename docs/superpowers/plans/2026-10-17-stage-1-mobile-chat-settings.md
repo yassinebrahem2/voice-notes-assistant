@@ -13,7 +13,7 @@
 
 **Spec:** `docs/superpowers/specs/2026-10-16-stage-1-design-ui.md` (§3 Chat, Settings, Everywhere; §6), `…-design-chat.md` §6 (run states), `…-design-data-api.md` (§4 chats routes, `/health`; §5 errors).
 
-**Stage overview:** `docs/superpowers/plans/2026-10-16-stage-1-overview.md`. **Builds on:** the foundation mobile code (`apiFetch`, `ApiError`, `errorMessage` and `openFanOut` (added to foundation Task 6, pending the lead's approval), `Schemas`, `queryClient`, `normalizeServerUrl`/`getServerUrl`/`setServerUrl`/`useServerUrl`, theme, `TabBar`, `appInfo`). Uses the agents plan's chat endpoints; until they land, the stub routes answer 501 and Chat shows its error state.
+**Stage overview:** `docs/superpowers/plans/2026-10-16-stage-1-overview.md`. **Builds on:** the foundation mobile code (`apiFetch`, `ApiError`, `errorMessage` and `openFanOut` (foundation Task 9), `Schemas`, `queryClient`, `normalizeServerUrl`/`getServerUrl`/`setServerUrl`/`useServerUrl`, theme, `TabBar`, `appInfo`). Uses the agents plan's chat endpoints; until they land, the stub routes answer 501 and Chat shows its error state.
 
 ## Global Constraints (this plan)
 - Everything in the overview's Global constraints and the mobile recording plan's (tokens only, 48 dp targets, reduce motion, `npx expo install`).

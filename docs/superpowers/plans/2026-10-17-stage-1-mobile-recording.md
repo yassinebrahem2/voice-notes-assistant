@@ -13,7 +13,7 @@
 
 **Spec:** `docs/superpowers/specs/2026-10-16-stage-1-design-ui.md` (§1–§6), `…-design-data-api.md` (§2–§5), `…-design-platform.md` §5 (platform quirks).
 
-**Stage overview:** `docs/superpowers/plans/2026-10-16-stage-1-overview.md`. **Builds on:** the foundation mobile code (`apiFetch`, `ApiError`, `errorMessage` and the fan-out store `openFanOut`/`closeFanOut`/`useFanOut` (both added to foundation Task 6, pending the lead's approval), `Schemas`, `queryClient`, `useServerUrl`, `tokens`, `paperTheme`, `motion`, `TabBar`, `RecordAction` placeholder, generated `schema.d.ts`). Uses the processing plan's endpoints; until they land, the stub routes answer 501 and screens show their error state.
+**Stage overview:** `docs/superpowers/plans/2026-10-16-stage-1-overview.md`. **Builds on:** the foundation mobile code (`apiFetch`, `ApiError`, `errorMessage` and the fan-out store `openFanOut`/`closeFanOut`/`useFanOut` (both foundation Task 9), `Schemas`, `queryClient`, `useServerUrl`, `tokens`, `paperTheme`, `motion`, `TabBar`, `RecordAction` placeholder, generated `schema.d.ts`). Uses the processing plan's endpoints; until they land, the stub routes answer 501 and screens show their error state.
 
 ## Global Constraints (this plan)
 - Everything in the overview's Global constraints.
