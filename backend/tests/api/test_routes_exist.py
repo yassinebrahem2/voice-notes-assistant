@@ -36,10 +36,6 @@ def test_routes_exist(container: Container) -> None:
 # One route per line: later plans remove routes from this list as they implement them.
 STUBS = [
     ("post", "/recordings"),
-    ("patch", "/recordings/{id}"),
-    ("delete", "/recordings/{id}"),
-    ("patch", "/recordings/{id}/speakers/{speaker_id}"),
-    ("post", "/recordings/{id}/retry"),
     ("get", "/recordings/{id}/audio"),
     ("post", "/chats"),
     ("get", "/chats/{chat_id}"),

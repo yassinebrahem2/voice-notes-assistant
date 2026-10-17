@@ -3,7 +3,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, Form, Query, Response, UploadFile
 
-from app.api.deps import get_db
+from app.api.deps import get_container, get_db
 from app.api.errors import not_implemented
 from app.api.models.recordings import (
     RecordingDetailOut,
@@ -12,8 +12,10 @@ from app.api.models.recordings import (
     SpeakerOut,
     SpeakerPatchIn,
 )
+from app.container import Container
 from app.domain.types import RecordingKind
-from app.recordings import read
+from app.processing import wake_worker
+from app.recordings import edit, read
 
 router = APIRouter(prefix="/recordings", tags=["recordings"])
 
@@ -47,23 +49,37 @@ def get_recording(id: str, conn: Annotated[sqlite3.Connection, Depends(get_db)])
 
 
 @router.patch("/{id}", response_model=RecordingOut, operation_id="update_recording")
-def update_recording(id: str, patch: RecordingPatchIn) -> RecordingOut:
-    not_implemented()
+def update_recording(
+    id: str, patch: RecordingPatchIn, conn: Annotated[sqlite3.Connection, Depends(get_db)]
+) -> RecordingOut:
+    return edit.update_recording(conn, id, patch)
 
 
 @router.patch("/{id}/speakers/{speaker_id}", response_model=SpeakerOut, operation_id="rename_speaker")
-def rename_speaker(id: str, speaker_id: str, patch: SpeakerPatchIn) -> SpeakerOut:
-    not_implemented()
+def rename_speaker(
+    id: str, speaker_id: str, patch: SpeakerPatchIn, conn: Annotated[sqlite3.Connection, Depends(get_db)]
+) -> SpeakerOut:
+    return edit.rename_speaker(conn, id, speaker_id, patch)
 
 
 @router.delete("/{id}", status_code=204, operation_id="delete_recording")
-def delete_recording(id: str) -> None:
-    not_implemented()
+def delete_recording(
+    id: str,
+    conn: Annotated[sqlite3.Connection, Depends(get_db)],
+    container: Annotated[Container, Depends(get_container)],
+) -> None:
+    edit.delete_recording(conn, container.settings.data_dir, id)
 
 
 @router.post("/{id}/retry", response_model=RecordingOut, operation_id="retry_recording")
-def retry_recording(id: str) -> RecordingOut:
-    not_implemented()
+def retry_recording(
+    id: str,
+    conn: Annotated[sqlite3.Connection, Depends(get_db)],
+    container: Annotated[Container, Depends(get_container)],
+) -> RecordingOut:
+    recording = edit.retry_recording(conn, id)
+    wake_worker(container)
+    return recording
 
 
 @router.get(
