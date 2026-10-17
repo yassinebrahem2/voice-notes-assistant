@@ -460,19 +460,19 @@ def summarize(
         if valid_decisions:
             out_lines.append("Decisions:")
             for d in valid_decisions:
-                src_labels = " ".join(f"[{s}]" for s in d.sources)
+                src_labels = " ".join(f"[{re.sub(r'[\s\[\]]', '', s).upper()}]" for s in d.sources)
                 out_lines.append(f"- {src_labels} {d.text}")
         if valid_actions:
             out_lines.append("Action items:")
             for a in valid_actions:
-                src_labels = " ".join(f"[{s}]" for s in a.sources)
+                src_labels = " ".join(f"[{re.sub(r'[\s\[\]]', '', s).upper()}]" for s in a.sources)
                 owner_info = f" (Owner: {a.owner})" if a.owner else ""
                 due_info = f" (Due: {a.due})" if a.due else ""
                 out_lines.append(f"- {src_labels} {a.text}{owner_info}{due_info}")
         if valid_questions:
             out_lines.append("Open questions:")
             for q in valid_questions:
-                src_labels = " ".join(f"[{s}]" for s in q.sources)
+                src_labels = " ".join(f"[{re.sub(r'[\s\[\]]', '', s).upper()}]" for s in q.sources)
                 out_lines.append(f"- {src_labels} {q.text}")
 
         merged_out = escape_untrusted("\n\n".join(out_lines))
