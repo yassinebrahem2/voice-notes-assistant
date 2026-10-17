@@ -36,7 +36,7 @@
 
 **Files:**
 - Create: `backend/app/recordings/__init__.py`, `backend/app/recordings/read.py`
-- Modify: `backend/app/api/routes/recordings.py` (`list_recordings`, `get_recording`), `backend/app/api/routes/tags.py` (`list_tags`)
+- Modify: `backend/app/api/routes/recordings.py` (`list_recordings`, `get_recording`), `backend/app/api/routes/tags.py` (`list_tags`), `backend/tests/api/test_errors.py` (`test_stub_route_returns_contract_shape` registers its own route that calls `not_implemented()`, as the `/crash` test does, so the 501 contract check no longer depends on a real route staying a stub), `backend/tests/api/test_routes_exist.py` (`test_every_stub_returns_501` is parametrised over an explicit `STUBS` list, one route per line, instead of `ROUTES` minus `/health`; this task's three routes are left out of it; `ROUTES` and `test_routes_exist` stay as they are). Decision #46.
 - Test: `backend/tests/recordings/test_read.py`
 
 **Interfaces:**
@@ -62,7 +62,7 @@
 
 **Files:**
 - Create: `backend/app/recordings/edit.py`, `backend/app/audio/__init__.py`, `backend/app/audio/storage.py`
-- Modify: `backend/app/api/routes/recordings.py` (`update_recording`, `rename_speaker`, `delete_recording`, `retry_recording`)
+- Modify: `backend/app/api/routes/recordings.py` (`update_recording`, `rename_speaker`, `delete_recording`, `retry_recording`), `backend/tests/api/test_routes_exist.py` (remove this task's routes from `STUBS`; see Decision #46)
 - Test: `backend/tests/recordings/test_edit.py`
 
 **Interfaces:**
@@ -87,7 +87,7 @@
 
 **Files:**
 - Create: `backend/app/audio/upload.py`, `backend/app/audio/decode.py`, `backend/tests/fixtures/` (generated in tests, not committed binaries)
-- Modify: `backend/pyproject.toml` (add `av>=19,<20`), `backend/app/api/routes/recordings.py` (`upload_recording`, `get_recording_audio`)
+- Modify: `backend/pyproject.toml` (add `av>=19,<20`), `backend/app/api/routes/recordings.py` (`upload_recording`, `get_recording_audio`), `backend/tests/api/test_routes_exist.py` (remove this task's routes from `STUBS`; see Decision #46)
 - Test: `backend/tests/audio/test_upload.py`, `backend/tests/audio/test_decode.py`, `backend/tests/audio/test_serve.py`
 
 **Interfaces:**
@@ -224,7 +224,7 @@
 - [ ] **Step 6: Commit** `feat(backend): run real speech in child processes and add the setup command`.
 
 ## Shared files with the agents plan
-Both this plan and the agents plan edit `backend/app/container.py` (binding points), `backend/tests/conftest.py` (the fixture's `dataclasses.replace` with fakes; the agents plan also sets `chat_runs` there), `backend/app/cli.py`, `docs/setup.md`, `backend/pyproject.toml` and `backend/uv.lock`, and may touch `backend/app/api/app.py`. Whichever merges second rebases and keeps both changes. A `uv.lock` conflict is resolved by taking either side and re-running `uv lock`, never by hand-merging the file.
+Both this plan and the agents plan edit `backend/app/container.py` (binding points), `backend/tests/conftest.py` (the fixture's `dataclasses.replace` with fakes; the agents plan also sets `chat_runs` there), `backend/app/cli.py`, `docs/setup.md`, `backend/pyproject.toml` and `backend/uv.lock`, and may touch `backend/app/api/app.py`. Both remove their implemented routes from `STUBS` in `backend/tests/api/test_routes_exist.py` (Decision #46); the task that removes the last entry deletes `STUBS` and `test_every_stub_returns_501`. Whichever merges second rebases and keeps both changes. A `uv.lock` conflict is resolved by taking either side and re-running `uv lock`, never by hand-merging the file.
 
 ## Self-review notes
 - Spec coverage: pipeline and claim/resume/retry (processing §1, §6) Tasks 2 and 4; speech execution (§2) Task 7; embedder (§5) Task 6; analysis storage (§4, server part) Task 5; chunking and indexing (§5) Task 5; upload limits and idempotency (data-API §4) Task 3; routes owned by this plan (overview) Tasks 1–3; installs and setup (platform §2) Tasks 6 and 7. The `Analyzer` (prompts, failover, map-reduce) is the agents plan.
