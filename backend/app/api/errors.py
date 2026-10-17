@@ -7,6 +7,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from starlette.exceptions import HTTPException as StarletteHTTPException
+from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 logger = logging.getLogger(__name__)
 
@@ -55,7 +56,36 @@ def error_response(status: int, code: ErrorCode, message: str) -> JSONResponse:
     return JSONResponse(status_code=status, content=ErrorOut(error=ErrorBody(code=code, message=message)).model_dump())
 
 
+class SafeErrorMiddleware:
+    def __init__(self, app: ASGIApp) -> None:
+        self.app = app
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+        response_started = False
+
+        async def track_start(message: Message) -> None:
+            nonlocal response_started
+            if message["type"] == "http.response.start":
+                response_started = True
+            await send(message)
+
+        try:
+            await self.app(scope, receive, track_start)
+        except Exception as exc:
+            # Starlette's outer error handler re-raises to Uvicorn, which logs the exception.
+            logger.error("Unhandled request error (%s)", type(exc).__name__)
+            if response_started:
+                raise RuntimeError("Response failed.") from None
+            response = error_response(500, ErrorCode.internal_error, "An internal error occurred.")
+            await response(scope, receive, send)
+
+
 def register_error_handlers(app: FastAPI) -> None:
+    app.add_middleware(SafeErrorMiddleware)
+
     @app.exception_handler(ApiError)
     async def handle_api_error(request: Request, exc: ApiError) -> JSONResponse:
         return error_response(exc.status, exc.code, exc.message)

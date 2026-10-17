@@ -1,11 +1,16 @@
+import asyncio
 import logging
+import traceback
+from collections.abc import AsyncIterator
 
 import pytest
 from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
+from starlette.responses import StreamingResponse
+from starlette.types import Message, Receive, Scope, Send
 
 from app.api.app import create_app
-from app.api.errors import ApiError, ErrorCode
+from app.api.errors import ApiError, ErrorCode, SafeErrorMiddleware
 from app.container import Container
 
 
@@ -36,13 +41,45 @@ def test_unhandled_exception_is_generic(container: Container, caplog: pytest.Log
     def crash() -> None:
         raise RuntimeError("private-value path /x")
 
-    with TestClient(app, raise_server_exceptions=False) as client:
+    with TestClient(app) as client:
         response = client.get("/crash")
     assert response.status_code == 500
     assert response.json()["error"]["code"] == "internal_error"
     assert "private-value" not in response.text
     assert "private-value" not in caplog.text
     assert any(record.levelno >= logging.ERROR for record in caplog.records)
+
+
+def test_streaming_exception_does_not_expose_original(container: Container, caplog: pytest.LogCaptureFixture) -> None:
+    app = create_app(container)
+    private_message = "private-value path /x"
+
+    async def stream() -> AsyncIterator[bytes]:
+        yield b"partial response"
+        raise RuntimeError(private_message)
+
+    @app.get("/stream-crash")
+    def stream_crash() -> StreamingResponse:
+        return StreamingResponse(stream())
+
+    with TestClient(app) as client, pytest.raises(RuntimeError, match=r"^Response failed\.$") as caught:
+        client.get("/stream-crash")
+    assert "private-value" not in "".join(traceback.format_exception(caught.value))
+    assert "private-value" not in caplog.text
+
+
+def test_error_middleware_does_not_swallow_lifespan_errors() -> None:
+    async def fail_lifespan(scope: Scope, receive: Receive, send: Send) -> None:
+        raise RuntimeError("startup failed")
+
+    async def receive() -> Message:
+        raise AssertionError("No event should be requested.")
+
+    async def send(message: Message) -> None:
+        raise AssertionError("No HTTP response should be sent.")
+
+    with pytest.raises(RuntimeError, match="startup failed"):
+        asyncio.run(SafeErrorMiddleware(fail_lifespan)({"type": "lifespan"}, receive, send))
 
 
 def test_http_exception_is_sanitized(container: Container) -> None:
