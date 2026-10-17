@@ -215,24 +215,218 @@ test('a network error while polling keeps polling', async () => {
   expect(result.current.turns[0]?.run.phase).toBe('done');
 });
 
-test('a poll response arriving after newChat is dropped', async () => {
+test('a poll response arriving after newChat does not touch the new chat', async () => {
   let release!: (run: Schemas['RunOut']) => void;
+  let chats = 0;
+  fetchMock.mockImplementation(async (path: string) => {
+    if (path === 'chats') return { id: `chat_${++chats}`, created_at: '' };
+    if (path.endsWith('/messages'))
+      return { run_id: path.startsWith('chats/chat_1') ? 'run_1' : 'run_2' };
+    if (path.endsWith('/runs/run_1'))
+      return new Promise<Schemas['RunOut']>((resolve) => {
+        release = resolve;
+      });
+    return runOut({ steps: ['Searching'] });
+  });
+  const { result } = await renderHook(() => useChatSession());
+  await act(async () => {
+    await result.current.ask('Old');
+  });
+  await act(() => jest.advanceTimersByTimeAsync(500));
+  await act(() => result.current.newChat());
+  await act(async () => {
+    await result.current.ask('New');
+  });
+  await act(async () => {
+    release(runOut({ status: 'done', message }));
+  });
+  expect(result.current.chatId).toBe('chat_2');
+  expect(result.current.turns).toHaveLength(1);
+  expect(result.current.turns[0]?.run.phase).not.toBe('done');
+});
+
+type Stored = { id: string; text: string; role?: 'user' | 'assistant' };
+
+// A server where the first POST /messages fails with `askError`; later ones succeed
+// with run ids run_2, run_3...
+function lostRunServer(opts: {
+  askError: ApiError | null;
+  stored: Stored[] | ApiError;
+  chatError?: ApiError;
+}): void {
+  let asked = 0;
+  let chats = 0;
+  fetchMock.mockImplementation(async (path: string) => {
+    if (path === 'chats') {
+      if (opts.chatError && chats++ === 0) throw opts.chatError;
+      return { id: 'chat_1', created_at: '' };
+    }
+    if (path === 'chats/chat_1') {
+      if (opts.stored instanceof ApiError) throw opts.stored;
+      return {
+        id: 'chat_1',
+        messages: opts.stored.map((m) => ({ role: 'user', ...m })),
+      };
+    }
+    if (path.endsWith('/messages')) {
+      asked += 1;
+      if (asked === 1 && opts.askError) throw opts.askError;
+      return { run_id: `run_${asked}` };
+    }
+    if (path.endsWith('/retry')) return { run_id: 'x' };
+    return runOut({ status: 'done', message });
+  });
+}
+
+const timeout = () => new ApiError(0, 'timeout', 'The request timed out.');
+
+test('retry after a timed-out POST adopts the stored message id without asking again', async () => {
+  lostRunServer({ askError: timeout(), stored: [{ id: 'msg_u1', text: 'Q' }] });
+  const { result } = await renderHook(() => useChatSession());
+  await act(async () => {
+    await result.current.ask('Q');
+  });
+  expect(result.current.turns[0]?.run.phase).toBe('failed');
+  await act(async () => {
+    await result.current.retry(0);
+  });
+  expect(count('chats/chat_1/messages')).toBe(1);
+  await act(() => jest.advanceTimersByTimeAsync(500));
+  expect(paths()).toContain('chats/chat_1/runs/msg_u1');
+  expect(result.current.turns[0]?.run.phase).toBe('done');
+});
+
+test('retry after a timed-out POST whose question is not stored asks once more', async () => {
+  lostRunServer({ askError: timeout(), stored: [] });
+  const { result } = await renderHook(() => useChatSession());
+  await act(async () => {
+    await result.current.ask('Q');
+  });
+  await act(async () => {
+    await result.current.retry(0);
+  });
+  expect(count('chats/chat_1/messages')).toBe(2);
+  await act(() => jest.advanceTimersByTimeAsync(500));
+  expect(result.current.turns[0]?.run.phase).toBe('done');
+});
+
+test('retry with no chat id creates the chat and asks', async () => {
+  lostRunServer({
+    askError: null,
+    stored: [],
+    chatError: new ApiError(0, 'network_error', 'Could not reach the server.'),
+  });
+  const { result } = await renderHook(() => useChatSession());
+  await act(async () => {
+    await result.current.ask('Q');
+  });
+  expect(result.current.chatId).toBeNull();
+  await act(async () => {
+    await result.current.retry(0);
+  });
+  expect(count('chats')).toBe(2);
+  expect(count('chats/chat_1/messages')).toBe(1);
+  expect(count('chats/chat_1')).toBe(0);
+});
+
+test('retry after a server error response asks again without looking in the chat', async () => {
+  lostRunServer({
+    askError: new ApiError(500, 'internal_error', 'boom'),
+    stored: [{ id: 'msg_u1', text: 'Q' }],
+  });
+  const { result } = await renderHook(() => useChatSession());
+  await act(async () => {
+    await result.current.ask('Q');
+  });
+  await act(async () => {
+    await result.current.retry(0);
+  });
+  expect(count('chats/chat_1')).toBe(0);
+  expect(count('chats/chat_1/messages')).toBe(2);
+});
+
+test('when getChat fails the turn stays failed and Retry stays available', async () => {
+  lostRunServer({
+    askError: timeout(),
+    stored: new ApiError(0, 'network_error', 'Could not reach the server.'),
+  });
+  const { result } = await renderHook(() => useChatSession());
+  await act(async () => {
+    await result.current.ask('Q');
+  });
+  await act(async () => {
+    await result.current.retry(0);
+  });
+  expect(result.current.turns[0]?.run).toEqual({
+    phase: 'failed',
+    steps: [],
+    error: "Can't reach the server.",
+  });
+  expect(count('chats/chat_1/messages')).toBe(1);
+  await act(async () => {
+    await result.current.retry(0);
+  });
+  expect(count('chats/chat_1')).toBe(2);
+});
+
+test('a stored message id already used by another turn is not adopted', async () => {
+  let asked = 0;
+  fetchMock.mockImplementation(async (path: string) => {
+    if (path === 'chats') return { id: 'chat_1', created_at: '' };
+    if (path === 'chats/chat_1')
+      return {
+        id: 'chat_1',
+        messages: [
+          { role: 'user', id: 'msg_a', text: 'Same' },
+          { role: 'assistant', id: 'msg_x', text: 'Same' },
+        ],
+      };
+    if (path.endsWith('/messages')) {
+      asked += 1;
+      if (asked === 1) return { run_id: 'msg_a' };
+      if (asked === 2) throw timeout();
+      return { run_id: 'msg_c' };
+    }
+    return runOut({ status: 'done', message });
+  });
+  const { result } = await renderHook(() => useChatSession());
+  await act(async () => {
+    await result.current.ask('Same');
+  });
+  await act(() => jest.advanceTimersByTimeAsync(500));
+  await act(async () => {
+    await result.current.ask('Same');
+  });
+  await act(async () => {
+    await result.current.retry(1);
+  });
+  expect(count('chats/chat_1/messages')).toBe(3);
+  await act(() => jest.advanceTimersByTimeAsync(500));
+  expect(paths()).toContain('chats/chat_1/runs/msg_c');
+  expect(paths()).not.toContain('chats/chat_1/runs/msg_x');
+});
+
+test('retryRun answered with not_failed resumes polling instead of failing', async () => {
+  let polls = 0;
   fetchMock.mockImplementation(async (path: string) => {
     if (path === 'chats') return { id: 'chat_1', created_at: '' };
     if (path.endsWith('/messages')) return { run_id: 'run_1' };
-    return new Promise<Schemas['RunOut']>((resolve) => {
-      release = resolve;
-    });
+    if (path.endsWith('/retry'))
+      throw new ApiError(409, 'not_failed', 'The run is not failed.');
+    polls += 1;
+    if (polls === 1) throw new ApiError(404, 'not_found', 'Run not found.');
+    return runOut({ status: 'done', message });
   });
   const { result } = await renderHook(() => useChatSession());
   await act(async () => {
     await result.current.ask('Q');
   });
   await act(() => jest.advanceTimersByTimeAsync(500));
-  await act(() => result.current.newChat());
+  expect(result.current.turns[0]?.run.phase).toBe('interrupted');
   await act(async () => {
-    release(runOut({ status: 'done', message }));
+    await result.current.retry(0);
   });
-  expect(result.current.turns).toEqual([]);
-  expect(result.current.chatId).toBeNull();
+  expect(result.current.turns[0]?.run.phase).toBe('sending');
+  await act(() => jest.advanceTimersByTimeAsync(500));
+  expect(result.current.turns[0]?.run.phase).toBe('done');
 });

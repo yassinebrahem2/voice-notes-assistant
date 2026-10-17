@@ -1,11 +1,13 @@
 import { useSyncExternalStore } from 'react';
 
-import { ApiError } from '../api/errors';
+import { ApiError, type Schemas } from '../api/errors';
 import { errorMessage } from '../api/errorMessages';
 import * as api from './api';
 import { isActive, nextRunView, type RunView } from './runMachine';
 
-type Scope = 'notes' | 'meetings' | 'both';
+type Scope = Schemas['AskIn']['scope'];
+// Why a turn has no run id: the POST may or may not have stored the question.
+type Unsent = 'rejected' | 'uncertain';
 type Turn = { question: string; run: RunView };
 
 type State = {
@@ -22,6 +24,7 @@ let state: State = { chatId: null, turns: [], scope: 'both', tagIds: [] };
 // Per turn index; kept out of State because the screens never need them.
 let runIds: (string | undefined)[] = [];
 let startedAt: number[] = [];
+let unsent: (Unsent | undefined)[] = [];
 // Bumped by newChat so late responses of the old chat are dropped.
 let generation = 0;
 let creatingChat: Promise<string> | null = null;
@@ -70,14 +73,17 @@ async function pollOnce(): Promise<void> {
   if (chatId === null) return;
   polling = true;
   try {
-    const targets = state.turns
-      .map((turn, index) => ({ turn, index, runId: runIds[index] }))
-      .filter(({ turn, runId }) => isActive(turn.run) && runId !== undefined);
+    const targets = state.turns.flatMap((turn, index) => {
+      const runId = runIds[index];
+      return isActive(turn.run) && runId !== undefined
+        ? [{ index, runId }]
+        : [];
+    });
     await Promise.all(
       targets.map(async ({ index, runId }) => {
         let view: RunView | undefined;
         try {
-          const poll = await api.getRun(chatId, runId as string);
+          const poll = await api.getRun(chatId, runId);
           if (gen !== generation) return;
           view = nextRunView(state.turns[index].run, { poll });
         } catch (error: unknown) {
@@ -115,13 +121,25 @@ async function send(index: number, question: string): Promise<void> {
     const chatId = await ensureChat();
     if (gen !== generation) return;
     if (state.chatId === null) emit({ ...state, chatId });
-    const { run_id } = await api.ask(chatId, {
-      text: question,
-      scope: state.scope,
-      ...(state.tagIds.length > 0 ? { tag_ids: state.tagIds } : {}),
-    });
+    let runId: string;
+    try {
+      ({ run_id: runId } = await api.ask(chatId, {
+        text: question,
+        scope: state.scope,
+        ...(state.tagIds.length > 0 ? { tag_ids: state.tagIds } : {}),
+      }));
+    } catch (error: unknown) {
+      // Only a lost answer leaves the question possibly stored; an error response means it was not.
+      unsent[index] =
+        error instanceof ApiError &&
+        (error.code === 'network_error' || error.code === 'timeout')
+          ? 'uncertain'
+          : 'rejected';
+      throw error;
+    }
     if (gen !== generation) return;
-    runIds[index] = run_id;
+    unsent[index] = undefined;
+    runIds[index] = runId;
     startedAt[index] = Date.now();
     schedulePoll();
   } catch (error: unknown) {
@@ -151,21 +169,59 @@ async function retry(index: number): Promise<void> {
   const runId = runIds[index];
   setRun(index, { phase: 'sending', steps: [] });
   startedAt[index] = Date.now();
-  // The question never reached the server (the send itself failed): ask again.
-  if (chatId === null || runId === undefined) {
-    await send(index, turn.question);
+  const gen = generation;
+  if (runId === undefined) {
+    if (chatId !== null && unsent[index] === 'uncertain') {
+      await recoverRunId(chatId, index, turn.question);
+    } else {
+      // Nothing was stored: no chat yet, or the server answered with an error.
+      await send(index, turn.question);
+    }
     return;
   }
-  const gen = generation;
   try {
-    await api.retryRun(chatId, runId);
+    await api.retryRun(chatId as string, runId);
+  } catch (error: unknown) {
     if (gen !== generation) return;
-    startedAt[index] = Date.now();
-    schedulePoll();
+    // not_failed: the run is still going or already done, so just follow it.
+    if (!(error instanceof ApiError && error.code === 'not_failed')) {
+      setRun(index, { phase: 'failed', steps: [], error: errorMessage(error) });
+      return;
+    }
+  }
+  if (gen !== generation) return;
+  startedAt[index] = Date.now();
+  schedulePoll();
+}
+
+// The run id is the stored user message's id, so a POST whose answer was lost can be
+// found again in the chat instead of sending the question a second time.
+async function recoverRunId(
+  chatId: string,
+  index: number,
+  question: string,
+): Promise<void> {
+  const gen = generation;
+  let detail: Schemas['ChatDetailOut'];
+  try {
+    detail = await api.getChat(chatId);
   } catch (error: unknown) {
     if (gen !== generation) return;
     setRun(index, { phase: 'failed', steps: [], error: errorMessage(error) });
+    return;
   }
+  if (gen !== generation) return;
+  const stored = detail.messages.find(
+    (m) => m.role === 'user' && m.text === question && !runIds.includes(m.id),
+  );
+  if (stored === undefined) {
+    await send(index, question);
+    return;
+  }
+  unsent[index] = undefined;
+  runIds[index] = stored.id;
+  startedAt[index] = Date.now();
+  schedulePoll();
 }
 
 function newChat(): void {
@@ -174,6 +230,7 @@ function newChat(): void {
   creatingChat = null;
   runIds = [];
   startedAt = [];
+  unsent = [];
   emit({ ...state, chatId: null, turns: [] });
 }
 

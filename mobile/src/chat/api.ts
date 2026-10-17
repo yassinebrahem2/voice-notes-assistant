@@ -33,3 +33,7 @@ export function retryRun(
     { method: 'POST' },
   );
 }
+
+export function getChat(chatId: string): Promise<Schemas['ChatDetailOut']> {
+  return apiFetch<Schemas['ChatDetailOut']>(`chats/${chatId}`);
+}
