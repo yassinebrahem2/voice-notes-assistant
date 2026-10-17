@@ -1,0 +1,36 @@
+providers:
+  groq:
+    base_url: https://api.groq.com/openai/v1
+    key_env: GROQ_API_KEY
+  gemini:
+    base_url: https://generativelanguage.googleapis.com/v1beta/openai/
+    key_env: GEMINI_API_KEY
+roles:
+  llm:
+    - provider: groq
+      model: openai/gpt-oss-20b
+      max_request_tokens: 8192
+      timeout_s: 30
+    - provider: gemini
+      model: gemini-flash-latest
+      max_request_tokens: 8192
+      timeout_s: 30
+  llm_analysis:
+    - provider: gemini
+      model: gemini-flash-latest
+      max_request_tokens: 32768
+      timeout_s: 60
+    - provider: groq
+      model: openai/gpt-oss-120b
+      max_request_tokens: 32768
+      timeout_s: 60
+  embedder:
+    model: BAAI/bge-small-en-v1.5
+    device: cpu
+  asr:
+    model: distil-large-v3
+    device: cuda
+    compute_type: int8_float16
+  diarizer:
+    model: pyannote/speaker-diarization-community-1
+    device: cuda
