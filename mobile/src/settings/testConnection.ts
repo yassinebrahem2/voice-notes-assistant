@@ -9,7 +9,7 @@ export type ConnectionResult =
 
 const TIMEOUT_MS = 5000;
 
-function isHealth(body: unknown): body is HealthOut {
+export function isHealth(body: unknown): body is HealthOut {
   if (typeof body !== 'object' || body === null) return false;
   const value = body as Record<string, unknown>;
   return (

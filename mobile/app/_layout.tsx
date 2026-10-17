@@ -9,8 +9,8 @@ import { PaperProvider } from 'react-native-paper';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { queryClient } from '../src/api/queryClient';
-import { fontAssets } from '../src/theme/fonts';
 import { useThemePreference } from '../src/settings/themePreference';
+import { fontAssets } from '../src/theme/fonts';
 import { paperTheme } from '../src/theme/paperTheme';
 
 void SplashScreen.preventAutoHideAsync();

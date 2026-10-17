@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import {
   KeyboardAvoidingView,
   Platform,
@@ -19,7 +19,7 @@ import { fontFamilies } from '../theme/fonts';
 import type { TapeTheme } from '../theme/paperTheme';
 import { radius, spacing, typeScale } from '../theme/tokens';
 import { normalizeServerUrl, useServerUrl } from './serverUrl';
-import { testConnection, type HealthOut } from './testConnection';
+import { isHealth, testConnection, type HealthOut } from './testConnection';
 import { useThemePreference, type ThemePreference } from './themePreference';
 
 export const CONNECTION_TEXT = {
@@ -150,7 +150,11 @@ function Readiness({ url }: { url: string | null }) {
   const { tape } = useTheme<TapeTheme>();
   const health = useQuery({
     queryKey: ['health', url],
-    queryFn: () => apiFetch<HealthOut>('health'),
+    // apiFetch only casts the body; a wrong server can answer 200 with anything, and null marks that.
+    queryFn: async (): Promise<HealthOut | null> => {
+      const body = await apiFetch<unknown>('health');
+      return isHealth(body) ? body : null;
+    },
     enabled: url !== null,
     retry: false,
   });
@@ -161,6 +165,12 @@ function Readiness({ url }: { url: string | null }) {
   if (health.isError)
     return (
       <Text style={{ color: tape.inkMuted }}>{errorMessage(health.error)}</Text>
+    );
+  if (health.data === null)
+    return (
+      <Text style={{ color: tape.inkMuted }}>
+        {CONNECTION_TEXT.not_this_server}
+      </Text>
     );
   if (!health.data)
     return <Text style={{ color: tape.inkMuted }}>Checking…</Text>;
@@ -189,13 +199,17 @@ export function SettingsScreen() {
   const draft = typed ?? server.url ?? '';
   const [note, setNote] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  // Bumped whenever the draft changes, so a test started for an older URL cannot report on the new one.
+  const edits = useRef(0);
 
   function onChange(text: string) {
+    edits.current += 1;
     setTyped(text);
     setNote(null);
   }
 
   async function save() {
+    edits.current += 1;
     try {
       const { url } = normalizeServerUrl(draft);
       await server.setUrl(url);
@@ -207,14 +221,17 @@ export function SettingsScreen() {
   }
 
   async function test() {
+    const started = edits.current;
     setBusy(true);
     setNote(null);
     try {
       const result = await testConnection(draft);
+      if (started !== edits.current) return;
       setNote(
         result.ok ? CONNECTION_TEXT.connected : CONNECTION_TEXT[result.problem],
       );
     } catch (error: unknown) {
+      if (started !== edits.current) return;
       // An unparseable URL is a typing error, not a connection problem.
       setNote(message(error));
     } finally {

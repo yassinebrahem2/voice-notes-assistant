@@ -9,6 +9,7 @@ import {
 import { PaperProvider } from 'react-native-paper';
 
 import { apiFetch } from '../api/client';
+import { ApiError } from '../api/errors';
 import { paperTheme } from '../theme/paperTheme';
 import { readinessRows, SettingsScreen } from './SettingsScreen';
 import { testConnection } from './testConnection';
@@ -25,12 +26,21 @@ jest.mock('../config/appInfo', () => ({
   appInfo: { name: 'Test App', version: '1.2.3' },
 }));
 jest.mock('../api/client', () => ({ apiFetch: jest.fn() }));
-jest.mock('./testConnection', () => ({ testConnection: jest.fn() }));
+jest.mock('./testConnection', () => ({
+  ...jest.requireActual('./testConnection'),
+  testConnection: jest.fn(),
+}));
 
-async function setup() {
-  jest.mocked(AsyncStorage.getItem).mockReset().mockResolvedValue(null);
+async function setup(
+  storedUrl: string | null = null,
+  health: () => Promise<unknown> = () => Promise.reject(new Error('offline')),
+) {
+  jest.mocked(AsyncStorage.getItem).mockReset().mockResolvedValue(storedUrl);
   jest.mocked(AsyncStorage.setItem).mockReset().mockResolvedValue();
-  jest.mocked(apiFetch).mockRejectedValue(new Error('offline'));
+  jest
+    .mocked(apiFetch)
+    .mockReset()
+    .mockImplementation(health as never);
   await render(
     <QueryClientProvider
       client={
@@ -45,6 +55,50 @@ async function setup() {
     </QueryClientProvider>,
   );
 }
+
+test('a stored server that answers with a non-health body does not crash', async () => {
+  await setup('https://s.example', async () => ({ hello: 'x' }));
+  expect(
+    await screen.findByText("That isn't this app's server"),
+  ).toBeOnTheScreen();
+  expect(screen.getByLabelText('Server URL')).toBeOnTheScreen();
+});
+
+test('a null health body is reported, not left on Checking', async () => {
+  await setup('https://s.example', async () => null);
+  expect(
+    await screen.findByText("That isn't this app's server"),
+  ).toBeOnTheScreen();
+});
+
+test('an unreachable stored server shows the readiness message', async () => {
+  await setup('https://s.example', () =>
+    Promise.reject(new ApiError(0, 'network_error', 'x')),
+  );
+  expect(await screen.findByText("Can't reach the server.")).toBeOnTheScreen();
+});
+
+test('a connection result for an edited URL is ignored', async () => {
+  await setup();
+  let resolve!: (value: { ok: true; health: never }) => void;
+  jest.mocked(testConnection).mockReturnValue(
+    new Promise((r) => {
+      resolve = r as typeof resolve;
+    }),
+  );
+  await fireEvent.changeText(screen.getByLabelText('Server URL'), 'https://a');
+  await fireEvent.press(
+    screen.getByRole('button', { name: 'Test connection' }),
+  );
+  await fireEvent.changeText(screen.getByLabelText('Server URL'), 'https://b');
+  resolve({ ok: true, health: undefined as never });
+  await waitFor(() =>
+    expect(
+      screen.getByRole('button', { name: 'Test connection' }),
+    ).toBeEnabled(),
+  );
+  expect(screen.queryByText('Connected')).not.toBeOnTheScreen();
+});
 
 test('Save stores the normalised URL, http included', async () => {
   await setup();
