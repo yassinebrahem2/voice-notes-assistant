@@ -73,7 +73,7 @@ Minor findings do not hold the task. Fix them in the loop if cheap; otherwise li
 ### 5. Finish
 1. Check the final state yourself: tests, lint and type checks pass on the branch head.
 2. Pull with rebase, run the checks again if anything came in, push.
-3. Close the task's issue once CI passes on the branch, as `AGENTS.md` says. Add the ledger line.
+3. Wait for the Backend and Mobile CI runs on the pushed commit. Close the task's issue only when both are green, with links to the runs in the closing comment. Queued, running, red or missing CI means the issue stays open (AGENTS.md rule 6); a red run is a finding for the fix loop. Add the ledger line.
 
 ## Choosing models
 
@@ -88,4 +88,4 @@ When every task of the plan is closed, the person opening the PR runs one final 
 - **No silent deferral.** Open Minor findings, concerns from a `DONE_WITH_CONCERNS` report, and anything done differently from the plan are written in the plan issue and, at the end, in the PR description. The ledger alone is not enough.
 - **One task per claim.** Work only on tasks you have claimed; several people share the branch, so pull with rebase before each push.
 - **Handoffs in the issue.** If you stop before a task is done, comment on its issue: what is committed, what is left, the base commit. The next person (or session) starts from that comment.
-- **Checks are real.** A task is done only when its tests, lint and type checks pass locally and CI passes on the branch; report the real output.
+- **Checks are real.** A task is done only when its tests, lint and type checks pass locally and CI on its pushed commit is green; report the real output. No issue is ever closed without green CI.
