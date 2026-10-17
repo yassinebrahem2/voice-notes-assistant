@@ -80,6 +80,7 @@ export function TabBar({ state, emitter, navigateToTab, insets }: TabBarProps) {
       style={[
         styles.root,
         {
+          backgroundColor: tape.bg,
           paddingBottom: Math.max(insets.bottom, spacing.sm),
           paddingLeft: insets.left,
           paddingRight: insets.right,
@@ -104,7 +105,8 @@ export function TabBar({ state, emitter, navigateToTab, insets }: TabBarProps) {
 }
 
 const styles = StyleSheet.create({
-  // No background: the band above the visible bar shows the screen background.
+  // The root is painted with the screen background colour (set inline from the theme), so the band above the visible
+  // bar matches the screen: behind the tab bar is the navigator's own background, not the screen.
   root: {
     flexDirection: 'row',
     alignItems: 'flex-start',

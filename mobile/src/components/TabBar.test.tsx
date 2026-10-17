@@ -102,8 +102,13 @@ test('keeps the whole Record disc inside the tab bar bounds', async () => {
     expect(style.height).toBeUndefined();
     expect(style.maxHeight).toBeUndefined();
   }
-  // The area above the visible bar shows the screen background, so the root paints nothing itself.
+});
+
+test('paints the band above the visible bar with the screen background colour', async () => {
+  await setup();
+  // Behind the tab bar is the navigator's own background, not the screen, so the root paints the screen colour itself.
   expect(
-    StyleSheet.flatten(node?.props.style)?.backgroundColor,
-  ).toBeUndefined();
+    StyleSheet.flatten(screen.getByTestId('tab-bar').props.style)
+      .backgroundColor,
+  ).toBe(paperTheme('dark').tape.bg);
 });
