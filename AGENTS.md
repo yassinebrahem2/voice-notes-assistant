@@ -32,6 +32,7 @@ Most moves are automatic: the board's built-in workflows add items to Todo and s
 - Claim a task by assigning yourself to its sub-issue before starting. Only take a task that is unassigned and whose dependencies are closed.
 - Assigning yourself moves your task's card to "In progress"; close the sub-issue when its work is pushed and its checks pass.
 - Pull with rebase before you start and before you push, then re-read the plan (it may have changed). Commit small and push often, since several people share the branch.
+- Implement plan tasks the subagent-driven way: use the `superpowers:subagent-driven-development` skill (a fresh subagent implements one task, a fresh reviewer checks it against the plan task and the spec, fixes go in before the next task starts). If your agent cannot run subagents, use `superpowers:executing-plans` and do the same per-task review as a separate pass of your own before moving on. Either way, one task at a time, in the plan's order.
 - Follow the plan as written. If the plan is wrong, unclear, or needs a decision, do not improvise: open a Decision issue linked to the blocked task, and move that task to "Blocked" until the lead answers.
 - Do not edit specs, plans, `docs/roadmap.md` or `project_knowledge.md`; those belong to the lead.
 - A task is done only when its tests, lint and type checks pass locally, and CI passes on the branch.
