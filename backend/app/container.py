@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Literal
+from typing import TYPE_CHECKING, Literal
 
 from app.config.app_config import AppConfig, load_app_config
 from app.config.models_registry import ModelsRegistry, load_models_registry
@@ -11,6 +11,10 @@ from app.rag.fakes import FakeEmbedder
 from app.rag.protocols import Embedder
 from app.speech.fakes import FakeAsr, FakeDiarizer
 from app.speech.protocols import Asr, Diarizer
+
+if TYPE_CHECKING:
+    # The worker imports this module, so a runtime import would be circular.
+    from app.processing.worker import Worker
 
 
 @dataclass
@@ -24,6 +28,7 @@ class Container:
     diarizer: Diarizer
     embedder: Embedder
     analyzer: Analyzer
+    worker: "Worker | None" = None
 
 
 def build_container(settings: Settings) -> Container:

@@ -8,4 +8,6 @@ if TYPE_CHECKING:
 
 
 def wake_worker(container: "Container") -> None:
-    """Retry calls this so a re-queued recording is picked up at once; the worker task fills in the body."""
+    """Upload and retry call this so a queued recording is picked up at once; without a worker it does nothing."""
+    if container.worker is not None:
+        container.worker.wake()

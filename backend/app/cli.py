@@ -26,7 +26,7 @@ def main(argv: list[str] | None = None) -> None:
     args = parser.parse_args(argv)
     settings = load_settings(load_app_config())
     container = build_container(settings)
-    app = create_app(container)
+    app = create_app(container, start_worker=args.command == "serve")
     if args.command == "export-openapi":
         schema = json.dumps(app.openapi(), indent=2, sort_keys=True, ensure_ascii=False) + "\n"
         if args.check:
