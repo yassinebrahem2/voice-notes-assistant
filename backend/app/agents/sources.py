@@ -47,7 +47,6 @@ class SourceRegistry:
         self._passage_counter = 0
         self._recording_counter = 0
         self._sources: dict[str, ResolvedSource] = {}
-        self.found_relevant: bool = False
 
     def add_passage(self, hit: Hit) -> str:
         with self._lock:

@@ -47,7 +47,7 @@ def get_run(
     if container.chat_runs is None:
         raise ApiError(500, ErrorCode.internal_error, "Chat runs manager not configured")
     run = container.chat_runs.get(run_id)
-    if run is None:
+    if run is None or run.chat_id != chat_id:
         raise ApiError(404, ErrorCode.not_found, "Run not found")
     return RunOut(
         status=run.status,

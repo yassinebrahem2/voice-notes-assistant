@@ -37,6 +37,14 @@ def format_ms_to_mmss(ms: int | None) -> str:
     return f"{sec // 60:02d}:{sec % 60:02d}"
 
 
+FIND_RECORDINGS_LIMIT = 20
+
+
+def _escape_like(text: str) -> str:
+    escaped = text.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+    return f"%{escaped}%"
+
+
 FIND_RECORDINGS_SQL = """
 SELECT
     r.id,
@@ -73,7 +81,20 @@ WHERE r.status = 'ready'
   )
   AND (:date_from IS NULL OR substr(r.created_at, 1, 10) >= :date_from)
   AND (:date_to IS NULL OR substr(r.created_at, 1, 10) <= :date_to)
-  AND (:like_text IS NULL OR (r.title LIKE :like_text OR r.analysis LIKE :like_text))
+  AND (
+      :like_text IS NULL
+      OR (
+          r.title LIKE :like_text ESCAPE '\\'
+          OR (
+              r.analysis IS NOT NULL
+              AND json_valid(r.analysis) = 1
+              AND EXISTS (
+                  SELECT 1 FROM json_tree(r.analysis)
+                  WHERE type = 'text' AND value LIKE :like_text ESCAPE '\\'
+              )
+          )
+      )
+  )
 ORDER BY r.created_at DESC
 """
 
@@ -111,7 +132,6 @@ def search_transcripts(
         if not hits:
             return "<sources>\n</sources>"
 
-        runtime.context.sources.found_relevant = True
         passages: list[str] = []
 
         for hit in hits:
@@ -180,15 +200,17 @@ def find_recordings(
                 "req_tags": json.dumps(req_tags),
                 "date_from": date_from,
                 "date_to": date_to,
-                "like_text": f"%{text}%" if text else None,
+                "like_text": _escape_like(text) if text else None,
             },
         ).fetchall()
 
         if not rows:
             return "<sources>\n</sources>"
 
+        displayed_rows = rows[:FIND_RECORDINGS_LIMIT]
+
         lines: list[str] = []
-        for row in rows:
+        for row in displayed_rows:
             label = runtime.context.sources.add_recording(row)
             title = str(row["title"])
             date_str = str(row["created_at"])[:10]
@@ -229,6 +251,9 @@ def find_recordings(
             escaped_desc = escape_untrusted(desc)
             lines.append(f"[{label}] {title} · {date_str} · {dur_str} · {tags_str} · {escaped_desc}")
 
+        if len(rows) > FIND_RECORDINGS_LIMIT:
+            lines.append(f"Showing {FIND_RECORDINGS_LIMIT} of {len(rows)}; narrow by date or tags.")
+
         body = "\n".join(lines)
         return f"<sources>\n{body}\n</sources>"
     finally:
@@ -255,7 +280,7 @@ def summarize(
         for s in sources:
             resolved = runtime.context.sources.resolve(s)
             if resolved is None:
-                return "not ready yet"
+                return f"Unknown source label {s}."
             rec_id = resolved.recording_id
             if rec_id not in rec_id_to_label:
                 rec_id_to_label[rec_id] = s

@@ -36,8 +36,12 @@ def _is_ai_unavailable(exc: BaseException) -> bool:
     return bool(exc.__context__ is not None and _is_ai_unavailable(exc.__context__))
 
 
+MAX_FINISHED_RUNS = 100
+
+
 @dataclass
 class RunState:
+    chat_id: str
     status: Literal["running", "done", "failed"]
     steps: list[str] = field(default_factory=lambda: cast(list[str], []))
     message: MessageOut | None = None
@@ -57,6 +61,7 @@ class ChatRuns:
         self._graph_factory = graph_factory
         self._graph: CompiledStateGraph[Any, Any, Any, Any] | None = None
         self._runs: dict[str, RunState] = {}
+        self._finished_run_ids: list[str] = []
 
     def _get_graph(self) -> CompiledStateGraph[Any, Any, Any, Any]:
         if self._graph is None:
@@ -66,8 +71,24 @@ class ChatRuns:
     def get(self, run_id: str) -> RunState | None:
         return self._runs.get(run_id)
 
+    @property
+    def runs(self) -> dict[str, RunState]:
+        return self._runs
+
+    def record_finished(self, run_id: str) -> None:
+        if run_id in self._finished_run_ids:
+            self._finished_run_ids.remove(run_id)
+        self._finished_run_ids.append(run_id)
+        while len(self._finished_run_ids) > MAX_FINISHED_RUNS:
+            oldest_id = self._finished_run_ids.pop(0)
+            run = self._runs.get(oldest_id)
+            if run is not None and run.status in ("done", "failed"):
+                del self._runs[oldest_id]
+
     def start(self, chat_id: str, msg_id: str) -> None:
-        state = RunState(status="running", steps=[])
+        if msg_id in self._finished_run_ids:
+            self._finished_run_ids.remove(msg_id)
+        state = RunState(chat_id=chat_id, status="running", steps=[])
         self._runs[msg_id] = state
         state.task = asyncio.create_task(self._execute(chat_id, msg_id, state))
 
@@ -142,10 +163,12 @@ class ChatRuns:
 
                 state.message = msg_out
                 state.status = "done"
+                self.record_finished(msg_id)
 
         except TimeoutError:
             state.status = "failed"
             state.error = ErrorBody(code=ErrorCode.timed_out, message="That took too long.")
+            self.record_finished(msg_id)
         except Exception as exc:
             if _is_ai_unavailable(exc):
                 state.status = "failed"
@@ -154,10 +177,13 @@ class ChatRuns:
                 logger.exception("Chat run %s failed with unexpected error: %s", msg_id, exc)
                 state.status = "failed"
                 state.error = ErrorBody(code=ErrorCode.internal_error, message="Internal error")
+            self.record_finished(msg_id)
 
     def retry(self, chat_id: str, run_id: str) -> None:
         if run_id in self._runs:
             run = self._runs[run_id]
+            if run.chat_id != chat_id:
+                raise ApiError(404, ErrorCode.not_found, "Run not found")
             if run.status in ("running", "done"):
                 raise ApiError(409, ErrorCode.not_failed, "Run is running or already completed")
             self.start(chat_id, run_id)
@@ -201,7 +227,8 @@ class ChatRuns:
                         else next_row["created_at"]
                     ),
                 )
-                self._runs[run_id] = RunState(status="done", steps=[], message=msg)
+                self._runs[run_id] = RunState(chat_id=chat_id, status="done", steps=[], message=msg)
+                self.record_finished(run_id)
                 return
 
             self.start(chat_id, run_id)

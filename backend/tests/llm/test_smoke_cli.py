@@ -8,7 +8,7 @@ import httpx2 as httpx
 import openai
 import pytest
 from langchain_core.messages import AIMessage
-from pydantic import HttpUrl, TypeAdapter
+from pydantic import HttpUrl, TypeAdapter, ValidationError
 
 from app.agents.schemas import ChatReply, Item, NoteAnalysis
 from app.cli import main
@@ -19,7 +19,7 @@ from app.container import Container
 from app.db.connection import connect
 from app.db.migrate import apply_migrations
 from app.llm.smoke import run_smoke_tests
-from app.rag.calibrate import CalibrationResult, calibrate_retrieval, run_calibration
+from app.rag.calibrate import CalibrationResult, QuestionItem, calibrate_retrieval, run_calibration
 from app.rag.fakes import FakeEmbedder
 from tests.agents.fake_models import FailingChatModel, ScriptedChatModel
 from tests.seed import seed_chunk, seed_recording
@@ -577,3 +577,32 @@ def test_calibrate_retrieval_empty_db_or_file_error(tmp_path: Path) -> None:
         assert "No ready recording chunks found" in out2.getvalue()
     finally:
         conn.close()
+
+
+def test_question_item_validator_requires_exactly_one() -> None:
+    # Valid cases
+    q1 = QuestionItem(text="hello", expect_recording_title="Meeting")
+    assert q1.expect_recording_title == "Meeting"
+    assert q1.unrelated is False
+
+    q2 = QuestionItem(text="hello", unrelated=True)
+    assert q2.expect_recording_title is None
+    assert q2.unrelated is True
+
+    # Neither specified -> raises ValidationError
+    with pytest.raises(ValidationError):
+        QuestionItem(text="hello")
+
+    with pytest.raises(ValidationError):
+        QuestionItem(text="hello", expect_recording_title=None, unrelated=False)
+
+    # Both specified -> raises ValidationError
+    with pytest.raises(ValidationError):
+        QuestionItem(text="hello", expect_recording_title="Meeting", unrelated=True)
+
+    # Empty / whitespace expect_recording_title with unrelated=False -> raises ValidationError
+    with pytest.raises(ValidationError):
+        QuestionItem(text="hello", expect_recording_title="", unrelated=False)
+
+    with pytest.raises(ValidationError):
+        QuestionItem(text="hello", expect_recording_title="   ", unrelated=False)

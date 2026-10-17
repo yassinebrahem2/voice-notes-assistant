@@ -462,3 +462,82 @@ def test_retry_while_running_409(container: Container, monkeypatch: pytest.Monke
         retry_done = client.post(f"/api/v1/chats/{chat_id}/runs/{run_id}/retry")
         assert retry_done.status_code == 409
         assert retry_done.json()["error"]["code"] == "not_failed"
+
+
+def test_run_scoping_different_chat_id_returns_404_on_get_and_retry(
+    container: Container, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    reply = ChatReply(reply_type="answer", text="Answer")
+    scripted = ScriptedChatModel(
+        messages=iter(
+            [
+                AIMessage(
+                    content="",
+                    tool_calls=[{"name": "ChatReply", "args": reply.model_dump(), "id": "call_scoping"}],
+                ),
+            ]
+        )
+    )
+
+    def fake_role_models(_reg: object, _role: object) -> list[BaseChatModel]:
+        return [scripted]
+
+    monkeypatch.setattr("app.llm.factory.role_models", fake_role_models)
+
+    with TestClient(create_app(container)) as client:
+        # Create chat 1 and start a run
+        res1 = client.post("/api/v1/chats")
+        assert res1.status_code == 201
+        chat_id_1 = res1.json()["id"]
+
+        # Create chat 2
+        res2 = client.post("/api/v1/chats")
+        assert res2.status_code == 201
+        chat_id_2 = res2.json()["id"]
+
+        ask_res = client.post(
+            f"/api/v1/chats/{chat_id_1}/messages",
+            json={"text": "Question for chat 1", "scope": "both"},
+        )
+        assert ask_res.status_code == 202
+        run_id = ask_res.json()["run_id"]
+
+        # GET on chat_id_2 with run_id from chat_id_1 must return 404
+        get_res = client.get(f"/api/v1/chats/{chat_id_2}/runs/{run_id}")
+        assert get_res.status_code == 404
+        assert get_res.json()["error"]["code"] == "not_found"
+        assert get_res.json()["error"]["message"] == "Run not found"
+
+        # POST retry on chat_id_2 with run_id from chat_id_1 must return 404
+        retry_res = client.post(f"/api/v1/chats/{chat_id_2}/runs/{run_id}/retry")
+        assert retry_res.status_code == 404
+        assert retry_res.json()["error"]["code"] == "not_found"
+        assert retry_res.json()["error"]["message"] == "Run not found"
+
+
+def test_chat_runs_max_finished_runs_drops_oldest_finished_keeps_running(
+    container: Container, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from app.chats.runs import MAX_FINISHED_RUNS, RunState
+
+    chat_runs = ChatRuns(container, build_chat_graph)
+    container.chat_runs = chat_runs
+
+    # Start a running run directly in state
+    chat_runs.runs["running_run"] = RunState(chat_id="chat_1", status="running", steps=[])
+
+    # Record 101 finished runs
+    for i in range(MAX_FINISHED_RUNS + 1):
+        r_id = f"finished_{i}"
+        chat_runs.runs[r_id] = RunState(chat_id="chat_1", status="done", steps=[])
+        chat_runs.record_finished(r_id)
+
+    # Oldest finished run (finished_0) should have been dropped
+    assert chat_runs.get("finished_0") is None
+    # Subsequent finished runs should still be present
+    assert chat_runs.get("finished_1") is not None
+    assert chat_runs.get(f"finished_{MAX_FINISHED_RUNS}") is not None
+    # The running run must still be present
+    running_state = chat_runs.get("running_run")
+    assert running_state is not None
+    assert running_state.status == "running"

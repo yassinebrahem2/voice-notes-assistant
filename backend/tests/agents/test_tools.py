@@ -526,3 +526,164 @@ def test_find_recordings_does_not_swallow_arbitrary_exceptions(
     find_fn = cast(Any, find_recordings).func
     with pytest.raises(TypeError, match="Unexpected bug"):
         find_fn(text="Meeting", runtime=runtime)
+
+
+def test_summarize_unknown_source_label_returns_unknown_error(container: Container) -> None:
+    registry = SourceRegistry()
+    steps: list[str] = []
+    ctx = ChatContext(
+        db_path=container.db_path,
+        embedder=container.embedder,
+        settings=container.settings,
+        models=container.models,
+        scope="both",
+        tag_ids=[],
+        today=date(2026, 10, 17),
+        sources=registry,
+    )
+    runtime: ToolRuntime[ChatContext, dict[str, Any]] = ToolRuntime(
+        state={"messages": []},
+        context=ctx,
+        config={},
+        stream_writer=steps.append,
+        tool_call_id="call_test",
+        store=None,
+    )
+
+    summarize_fn = cast(Any, summarize).func
+    result = str(summarize_fn(sources=["P99"], runtime=runtime))
+    assert result == "Unknown source label P99."
+
+
+def test_find_recordings_overview_search_does_not_match_all_recordings(container: Container) -> None:
+    conn = connect(container.db_path)
+    try:
+        meeting = MeetingSummary(
+            overview="Discussion on deployment budget.",
+            decisions=[],
+            action_items=[],
+            open_questions=[],
+        )
+        seed_recording(
+            conn,
+            kind="meeting",
+            title="Meeting without keyword in text",
+            analysis=meeting,
+            created_at="2026-10-17T10:00:00Z",
+        )
+    finally:
+        conn.close()
+
+    registry = SourceRegistry()
+    steps: list[str] = []
+    ctx = ChatContext(
+        db_path=container.db_path,
+        embedder=container.embedder,
+        settings=container.settings,
+        models=container.models,
+        scope="both",
+        tag_ids=[],
+        today=date(2026, 10, 17),
+        sources=registry,
+    )
+    runtime: ToolRuntime[ChatContext, dict[str, Any]] = ToolRuntime(
+        state={"messages": []},
+        context=ctx,
+        config={},
+        stream_writer=steps.append,
+        tool_call_id="call_test",
+        store=None,
+    )
+
+    find_fn = cast(Any, find_recordings).func
+    # "overview" is a JSON key in the analysis field, but not a text value or in title
+    result = str(find_fn(text="overview", runtime=runtime))
+    assert result == "<sources>\n</sources>"
+
+
+def test_find_recordings_limit_20_and_shows_summary_line(container: Container) -> None:
+    conn = connect(container.db_path)
+    try:
+        for i in range(21):
+            seed_recording(
+                conn,
+                kind="note",
+                title=f"Note {i:02d}",
+                created_at=f"2026-10-17T{i:02d}:00:00Z",
+            )
+    finally:
+        conn.close()
+
+    registry = SourceRegistry()
+    steps: list[str] = []
+    ctx = ChatContext(
+        db_path=container.db_path,
+        embedder=container.embedder,
+        settings=container.settings,
+        models=container.models,
+        scope="both",
+        tag_ids=[],
+        today=date(2026, 10, 17),
+        sources=registry,
+    )
+    runtime: ToolRuntime[ChatContext, dict[str, Any]] = ToolRuntime(
+        state={"messages": []},
+        context=ctx,
+        config={},
+        stream_writer=steps.append,
+        tool_call_id="call_test",
+        store=None,
+    )
+
+    find_fn = cast(Any, find_recordings).func
+    result = str(find_fn(runtime=runtime))
+    assert "<sources>" in result
+    assert "Showing 20 of 21; narrow by date or tags." in result
+    rec_lines = [line for line in result.splitlines() if line.startswith("[R")]
+    assert len(rec_lines) == 20
+
+
+def test_find_recordings_escapes_like_special_chars(container: Container) -> None:
+    conn = connect(container.db_path)
+    try:
+        seed_recording(conn, kind="note", title="100% pure", created_at="2026-10-17T01:00:00Z")
+        seed_recording(conn, kind="note", title="1000 pure", created_at="2026-10-17T02:00:00Z")
+        seed_recording(conn, kind="note", title="foo_bar", created_at="2026-10-17T03:00:00Z")
+        seed_recording(conn, kind="note", title="fooxbar", created_at="2026-10-17T04:00:00Z")
+        seed_recording(conn, kind="note", title="back\\slash", created_at="2026-10-17T05:00:00Z")
+    finally:
+        conn.close()
+
+    def do_find(text: str) -> str:
+        registry = SourceRegistry()
+        steps: list[str] = []
+        ctx = ChatContext(
+            db_path=container.db_path,
+            embedder=container.embedder,
+            settings=container.settings,
+            models=container.models,
+            scope="both",
+            tag_ids=[],
+            today=date(2026, 10, 17),
+            sources=registry,
+        )
+        runtime: ToolRuntime[ChatContext, dict[str, Any]] = ToolRuntime(
+            state={"messages": []},
+            context=ctx,
+            config={},
+            stream_writer=steps.append,
+            tool_call_id="call_test",
+            store=None,
+        )
+        return str(cast(Any, find_recordings).func(text=text, runtime=runtime))
+
+    res_pct = do_find("100%")
+    assert "100% pure" in res_pct
+    assert "1000 pure" not in res_pct
+
+    res_underscore = do_find("foo_bar")
+    assert "foo_bar" in res_underscore
+    assert "fooxbar" not in res_underscore
+
+    res_slash = do_find("back\\slash")
+    assert "back\\slash" in res_slash

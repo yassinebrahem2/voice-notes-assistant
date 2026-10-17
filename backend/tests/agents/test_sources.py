@@ -8,9 +8,6 @@ from app.rag.retrieve import Hit
 
 def test_registry_labels_and_resolve() -> None:
     registry = SourceRegistry()
-    assert registry.found_relevant is False
-    registry.found_relevant = True
-    assert registry.found_relevant is True
 
     hit1 = Hit(
         recording_id="rec_1",

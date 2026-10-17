@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, TextIO, cast, overload
 
 import yaml
-from pydantic import BaseModel, Field, ValidationError
+from pydantic import BaseModel, Field, ValidationError, model_validator
 
 from app.db.connection import connect
 from app.rag.protocols import Embedder
@@ -23,6 +23,14 @@ class QuestionItem(BaseModel):
     text: str = Field(min_length=1)
     expect_recording_title: str | None = None
     unrelated: bool = False
+
+    @model_validator(mode="after")
+    def validate_expect_or_unrelated(self) -> QuestionItem:
+        has_title = bool(self.expect_recording_title and self.expect_recording_title.strip())
+        is_unrelated = bool(self.unrelated)
+        if has_title == is_unrelated:
+            raise ValueError("QuestionItem must specify exactly one of expect_recording_title or unrelated: true")
+        return self
 
 
 class CalibrationYaml(BaseModel):
