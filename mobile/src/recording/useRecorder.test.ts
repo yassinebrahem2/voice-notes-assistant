@@ -377,7 +377,7 @@ describe('RecordScreen', () => {
     unmount();
   });
 
-  test('pressing Stop triggers medium haptic and navigates back', async () => {
+  test('pressing Stop triggers medium haptic and transitions to upload', async () => {
     const { unmount } = await renderRecordScreen();
     await act(async () => {
       await fireEvent.press(
@@ -387,7 +387,7 @@ describe('RecordScreen', () => {
     expect(Haptics.impactAsync).toHaveBeenCalledWith(
       Haptics.ImpactFeedbackStyle.Medium,
     );
-    expect(router.back).toHaveBeenCalled();
+    expect(screen.getByTestId('upload-progress-ring')).toBeTruthy();
     unmount();
   });
 

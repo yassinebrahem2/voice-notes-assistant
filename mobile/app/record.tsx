@@ -15,6 +15,16 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { isExpoGo } from '../src/recording/environment';
 import { closeFanOut } from '../src/recording/fanOutStore';
 import { LevelRing } from '../src/recording/LevelRing';
+import {
+  enqueue,
+  removePending,
+  type PendingUpload,
+} from '../src/recording/pending';
+import { uploadPending } from '../src/recording/upload';
+import {
+  UploadProgressRing,
+  type UploadStatus,
+} from '../src/recording/UploadProgressRing';
 import { useRecorder } from '../src/recording/useRecorder';
 import { Waveform } from '../src/recording/Waveform';
 import { fontFamilies } from '../src/theme/fonts';
@@ -34,6 +44,8 @@ function formatDuration(ms: number): string {
   return `${pad(minutes)}:${pad(seconds)}`;
 }
 
+type ScreenState = 'recording' | UploadStatus;
+
 export default function RecordScreen() {
   const { kind } = useLocalSearchParams<{ kind?: string }>();
   const recordingKind = kind === 'note' ? 'note' : 'meeting';
@@ -41,35 +53,92 @@ export default function RecordScreen() {
   const { tape } = useTheme<TapeTheme>();
   const [showDiscardDialog, setShowDiscardDialog] = useState(false);
   const [expoGoClient, setExpoGoClient] = useState(isExpoGo);
+  const [screenState, setScreenState] = useState<ScreenState>('recording');
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const pendingItemRef = useRef<PendingUpload | null>(null);
+  const isMountedRef = useRef(true);
   const mounted = useRef(false);
   const opacity = useSharedValue(1);
   const veil = useAnimatedStyle(() => ({ opacity: opacity.get() }));
+
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
+
+  const startUpload = useCallback(async (item: PendingUpload) => {
+    setScreenState('uploading');
+    setUploadProgress(0);
+    try {
+      const recording = await uploadPending(item, (fraction) => {
+        if (isMountedRef.current) {
+          setUploadProgress(fraction);
+        }
+      });
+      if (!isMountedRef.current) return;
+      setScreenState('success');
+      setTimeout(() => {
+        if (isMountedRef.current) {
+          router.replace(`/recording/${recording.id}` as never);
+        }
+      }, 500);
+    } catch (error) {
+      console.warn('Upload failed', error);
+      if (isMountedRef.current) {
+        setScreenState('error');
+      }
+    }
+  }, []);
 
   const handleStop = useCallback(async () => {
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() =>
       console.warn('Haptic feedback is unavailable.'),
     );
-    await recorder.stop();
-    router.back();
-  }, [recorder]);
+    try {
+      const { uri, durationMs } = await recorder.stop();
+      const item = await enqueue(uri, recordingKind, durationMs);
+      pendingItemRef.current = item;
+      await startUpload(item);
+    } catch (error) {
+      console.warn('Failed to stop or enqueue recording', error);
+      setScreenState('error');
+    }
+  }, [recorder, recordingKind, startUpload]);
+
+  const handleRetry = useCallback(() => {
+    if (pendingItemRef.current) {
+      void startUpload(pendingItemRef.current);
+    }
+  }, [startUpload]);
 
   const handleClose = useCallback(() => {
-    if (recorder.isRecording || recorder.elapsedMs > 0) {
+    if (
+      screenState === 'recording' &&
+      (recorder.isRecording || recorder.elapsedMs > 0)
+    ) {
       setShowDiscardDialog(true);
     } else {
       router.back();
     }
-  }, [recorder.isRecording, recorder.elapsedMs]);
+  }, [screenState, recorder.isRecording, recorder.elapsedMs]);
 
   const handleDiscard = useCallback(async () => {
     setShowDiscardDialog(false);
+    if (pendingItemRef.current) {
+      await removePending(pendingItemRef.current.clientUploadId);
+    }
     await recorder.discard();
     router.back();
   }, [recorder]);
 
   useEffect(() => {
     const onBackPress = () => {
-      if (recorder.isRecording || recorder.elapsedMs > 0) {
+      if (
+        screenState === 'recording' &&
+        (recorder.isRecording || recorder.elapsedMs > 0)
+      ) {
         setShowDiscardDialog(true);
         return true;
       }
@@ -77,7 +146,7 @@ export default function RecordScreen() {
     };
     const sub = BackHandler.addEventListener('hardwareBackPress', onBackPress);
     return () => sub.remove();
-  }, [recorder.isRecording, recorder.elapsedMs]);
+  }, [screenState, recorder.isRecording, recorder.elapsedMs]);
 
   return (
     <View
@@ -153,7 +222,7 @@ export default function RecordScreen() {
           <Waveform level={recorder.level} />
         </View>
 
-        {recorder.paused ? (
+        {screenState === 'recording' && recorder.paused ? (
           <View
             testID="paused-banner"
             style={[
@@ -201,25 +270,38 @@ export default function RecordScreen() {
         ) : null}
 
         <View style={styles.footer}>
-          <LevelRing level={recorder.level} />
-          <Pressable
-            testID="stop-button"
-            accessibilityRole="button"
-            accessibilityLabel="Stop recording"
-            onPress={handleStop}
-            android_ripple={{ color: tape.onSignal }}
-            style={({ pressed }) => [
-              styles.stopButton,
-              {
-                backgroundColor: tape.signal,
-                transform: [{ scale: pressed ? motion.press.scale : 1 }],
-              },
-            ]}
-          >
-            <View
-              style={[styles.stopSquare, { backgroundColor: tape.onSignal }]}
+          {screenState === 'recording' ? (
+            <>
+              <LevelRing level={recorder.level} />
+              <Pressable
+                testID="stop-button"
+                accessibilityRole="button"
+                accessibilityLabel="Stop recording"
+                onPress={handleStop}
+                android_ripple={{ color: tape.onSignal }}
+                style={({ pressed }) => [
+                  styles.stopButton,
+                  {
+                    backgroundColor: tape.signal,
+                    transform: [{ scale: pressed ? motion.press.scale : 1 }],
+                  },
+                ]}
+              >
+                <View
+                  style={[
+                    styles.stopSquare,
+                    { backgroundColor: tape.onSignal },
+                  ]}
+                />
+              </Pressable>
+            </>
+          ) : (
+            <UploadProgressRing
+              progress={uploadProgress}
+              status={screenState}
+              onRetry={handleRetry}
             />
-          </Pressable>
+          )}
         </View>
       </SafeAreaView>
 
