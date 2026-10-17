@@ -11,17 +11,31 @@ from pydantic import ValidationError
 
 from app.agents.chat_context import ChatContext
 from app.agents.prompts import load_prompt
-from app.agents.schemas import ChatSummary, ChatSummaryActionItem, ChatSummaryItem
+from app.agents.schemas import ChatSummary
+from app.agents.summarize_render import (
+    format_merge_recording_block,
+    get_speaker_display_map,
+    render_merged_summary,
+    render_single_recording_summary,
+)
 from app.agents.transcript_input import escape_untrusted
 from app.db.connection import connect
 from app.domain.analysis import MeetingSummary, NoteContent
-from app.domain.analysis_render import render_analysis
 from app.domain.speakers import render_speakers
 from app.llm.factory import build_agent
 from app.llm.force_output import ForceOutputToolMiddleware
-from app.rag.retrieve import Hit, search_chunks
+from app.rag.retrieve import search_chunks
 
 logger = logging.getLogger(__name__)
+
+
+def format_ms_to_mmss(ms: int | None) -> str:
+    """Format milliseconds into MM:SS string, defaulting to '00:00' if None."""
+    if ms is None:
+        return "00:00"
+    sec = int(ms) // 1000
+    return f"{sec // 60:02d}:{sec % 60:02d}"
+
 
 FIND_RECORDINGS_SQL = """
 SELECT
@@ -103,8 +117,7 @@ def search_transcripts(
         for hit in hits:
             label = runtime.context.sources.add_passage(hit)
             date_str = hit.created_at[:10]
-            sec = hit.start_ms // 1000
-            time_str = f"{sec // 60:02d}:{sec % 60:02d}"
+            time_str = format_ms_to_mmss(hit.start_ms)
             title = hit.recording_title or "Untitled recording"
             header = f"[{label}] {title} · {date_str} · {time_str}"
 
@@ -179,13 +192,7 @@ def find_recordings(
             label = runtime.context.sources.add_recording(row)
             title = str(row["title"])
             date_str = str(row["created_at"])[:10]
-
-            dur_ms = row["duration_ms"]
-            if dur_ms is not None:
-                sec = int(dur_ms) // 1000
-                dur_str = f"{sec // 60:02d}:{sec % 60:02d}"
-            else:
-                dur_str = "00:00"
+            dur_str = format_ms_to_mmss(row["duration_ms"])
 
             tag_rows = conn.execute(
                 """SELECT t.name FROM tags t
@@ -196,13 +203,7 @@ def find_recordings(
             tag_names = [str(tr["name"]) for tr in tag_rows]
             tags_str = ", ".join(tag_names) if tag_names else "none"
 
-            spk_rows = conn.execute(
-                "SELECT id, label, name FROM speakers WHERE recording_id = ?",
-                (row["id"],),
-            ).fetchall()
-            id_to_display = {
-                str(sr["id"]): (str(sr["name"]) if sr["name"] else f"Speaker {sr['label']}") for sr in spk_rows
-            }
+            id_to_display = get_speaker_display_map(conn, str(row["id"]))
 
             raw_analysis = row["analysis"]
             desc = ""
@@ -278,147 +279,16 @@ def summarize(
             rec_rows.append(row)
 
         if len(rec_rows) == 1:
-            row = rec_rows[0]
-            rec_id = str(row["id"])
-            title = str(row["title"])
-            created_at = str(row["created_at"])
-            spk_rows = conn.execute(
-                "SELECT id, label, name FROM speakers WHERE recording_id = ?",
-                (rec_id,),
-            ).fetchall()
-            id_to_display = {
-                str(sr["id"]): (str(sr["name"]) if sr["name"] else f"Speaker {sr['label']}") for sr in spk_rows
-            }
-
-            raw_analysis = str(row["analysis"])
-            lines: list[str] = []
-
-            if row["kind"] == "meeting":
-                meeting_summary = MeetingSummary.model_validate_json(raw_analysis)
-                rendered = render_analysis(meeting_summary, id_to_display)
-                lines.append(f"Overview:\n{rendered.overview}")
-
-                if rendered.decisions:
-                    lines.append("Decisions:")
-                    for item in rendered.decisions:
-                        first_seg = item.citations[0].segment_id if item.citations else str(row["first_segment_id"])
-                        start_ms = item.citations[0].start_ms if item.citations else 0
-                        hit = Hit(
-                            recording_id=rec_id,
-                            recording_title=title,
-                            kind="meeting",
-                            created_at=created_at,
-                            first_segment_id=first_seg,
-                            start_ms=start_ms,
-                            end_ms=start_ms,
-                            text=item.text,
-                            distance=0.0,
-                        )
-                        p_label = runtime.context.sources.add_passage(hit)
-                        lines.append(f"- [{p_label}] {item.text}")
-
-                if rendered.action_items:
-                    lines.append("Action items:")
-                    for a_item in rendered.action_items:
-                        first_seg = a_item.citations[0].segment_id if a_item.citations else str(row["first_segment_id"])
-                        start_ms = a_item.citations[0].start_ms if a_item.citations else 0
-                        hit = Hit(
-                            recording_id=rec_id,
-                            recording_title=title,
-                            kind="meeting",
-                            created_at=created_at,
-                            first_segment_id=first_seg,
-                            start_ms=start_ms,
-                            end_ms=start_ms,
-                            text=a_item.text,
-                            distance=0.0,
-                        )
-                        p_label = runtime.context.sources.add_passage(hit)
-                        owner_info = (
-                            f" (Owner: {id_to_display.get(a_item.owner_speaker_id, a_item.owner_speaker_id)})"
-                            if a_item.owner_speaker_id
-                            else ""
-                        )
-                        due_info = f" (Due: {a_item.due})" if a_item.due else ""
-                        lines.append(f"- [{p_label}] {a_item.text}{owner_info}{due_info}")
-
-                if rendered.open_questions:
-                    lines.append("Open questions:")
-                    for q_item in rendered.open_questions:
-                        first_seg = q_item.citations[0].segment_id if q_item.citations else str(row["first_segment_id"])
-                        start_ms = q_item.citations[0].start_ms if q_item.citations else 0
-                        hit = Hit(
-                            recording_id=rec_id,
-                            recording_title=title,
-                            kind="meeting",
-                            created_at=created_at,
-                            first_segment_id=first_seg,
-                            start_ms=start_ms,
-                            end_ms=start_ms,
-                            text=q_item.text,
-                            distance=0.0,
-                        )
-                        p_label = runtime.context.sources.add_passage(hit)
-                        lines.append(f"- [{p_label}] {q_item.text}")
-            else:
-                note_content = NoteContent.model_validate_json(raw_analysis)
-                rendered = render_analysis(note_content, id_to_display)
-                lines.append("Key points:")
-                for k_item in rendered.key_points:
-                    first_seg = k_item.citations[0].segment_id if k_item.citations else str(row["first_segment_id"])
-                    start_ms = k_item.citations[0].start_ms if k_item.citations else 0
-                    hit = Hit(
-                        recording_id=rec_id,
-                        recording_title=title,
-                        kind="note",
-                        created_at=created_at,
-                        first_segment_id=first_seg,
-                        start_ms=start_ms,
-                        end_ms=start_ms,
-                        text=k_item.text,
-                        distance=0.0,
-                    )
-                    p_label = runtime.context.sources.add_passage(hit)
-                    lines.append(f"- [{p_label}] {k_item.text}")
-                if rendered.clean_text:
-                    lines.append(f"Content:\n{rendered.clean_text}")
-
-            output_text = escape_untrusted("\n\n".join(lines))
-            return f"<sources>\n{output_text}\n</sources>"
+            return render_single_recording_summary(
+                row=rec_rows[0],
+                conn=conn,
+                sources=runtime.context.sources,
+            )
 
         # Several recordings: merge using chat_merge agent
-        per_recording_blocks: list[str] = []
-        for row in rec_rows:
-            rec_id = str(row["id"])
-            lbl = rec_id_to_label[rec_id]
-            title = str(row["title"])
-            spk_rows = conn.execute(
-                "SELECT id, label, name FROM speakers WHERE recording_id = ?",
-                (rec_id,),
-            ).fetchall()
-            id_to_display = {
-                str(sr["id"]): (str(sr["name"]) if sr["name"] else f"Speaker {sr['label']}") for sr in spk_rows
-            }
-            raw_analysis = str(row["analysis"])
-
-            rec_block_lines = [f"[{lbl}] {title}:"]
-            if row["kind"] == "meeting":
-                ms = render_analysis(MeetingSummary.model_validate_json(raw_analysis), id_to_display)
-                rec_block_lines.append(f"Overview: {ms.overview}")
-                if ms.decisions:
-                    rec_block_lines.append("Decisions: " + "; ".join(d.text for d in ms.decisions))
-                if ms.action_items:
-                    rec_block_lines.append("Action items: " + "; ".join(a.text for a in ms.action_items))
-                if ms.open_questions:
-                    rec_block_lines.append("Open questions: " + "; ".join(q.text for q in ms.open_questions))
-            else:
-                nc = render_analysis(NoteContent.model_validate_json(raw_analysis), id_to_display)
-                if nc.key_points:
-                    rec_block_lines.append("Key points: " + "; ".join(k.text for k in nc.key_points))
-                if nc.clean_text:
-                    rec_block_lines.append(f"Clean text: {nc.clean_text}")
-
-            per_recording_blocks.append("\n".join(rec_block_lines))
+        per_recording_blocks: list[str] = [
+            format_merge_recording_block(row, rec_id_to_label[str(row["id"])], conn) for row in rec_rows
+        ]
 
         merge_body = escape_untrusted("\n\n".join(per_recording_blocks))
         user_prompt = f"<sources>\n{merge_body}\n</sources>"
@@ -444,47 +314,6 @@ def summarize(
         if structured is None:
             return "not ready yet"
 
-        valid_decisions: list[ChatSummaryItem] = []
-        for d in structured.decisions:
-            valid_srcs = [s for s in d.sources if runtime.context.sources.resolve(s) is not None]
-            if valid_srcs:
-                d.sources = valid_srcs
-                valid_decisions.append(d)
-
-        valid_actions: list[ChatSummaryActionItem] = []
-        for a in structured.action_items:
-            valid_srcs = [s for s in a.sources if runtime.context.sources.resolve(s) is not None]
-            if valid_srcs:
-                a.sources = valid_srcs
-                valid_actions.append(a)
-
-        valid_questions: list[ChatSummaryItem] = []
-        for q in structured.open_questions:
-            valid_srcs = [s for s in q.sources if runtime.context.sources.resolve(s) is not None]
-            if valid_srcs:
-                q.sources = valid_srcs
-                valid_questions.append(q)
-
-        out_lines: list[str] = [f"Overview:\n{structured.overview}"]
-        if valid_decisions:
-            out_lines.append("Decisions:")
-            for d in valid_decisions:
-                src_labels = " ".join(f"[{re.sub(r'[\s\[\]]', '', s).upper()}]" for s in d.sources)
-                out_lines.append(f"- {src_labels} {d.text}")
-        if valid_actions:
-            out_lines.append("Action items:")
-            for a in valid_actions:
-                src_labels = " ".join(f"[{re.sub(r'[\s\[\]]', '', s).upper()}]" for s in a.sources)
-                owner_info = f" (Owner: {a.owner})" if a.owner else ""
-                due_info = f" (Due: {a.due})" if a.due else ""
-                out_lines.append(f"- {src_labels} {a.text}{owner_info}{due_info}")
-        if valid_questions:
-            out_lines.append("Open questions:")
-            for q in valid_questions:
-                src_labels = " ".join(f"[{re.sub(r'[\s\[\]]', '', s).upper()}]" for s in q.sources)
-                out_lines.append(f"- {src_labels} {q.text}")
-
-        merged_out = escape_untrusted("\n\n".join(out_lines))
-        return f"<sources>\n{merged_out}\n</sources>"
+        return render_merged_summary(structured, runtime.context.sources)
     finally:
         conn.close()
