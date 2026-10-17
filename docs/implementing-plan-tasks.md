@@ -27,7 +27,7 @@ The ledger lets a new session pick up where an interrupted one stopped. State ot
 ## Per-task loop
 
 ### 1. Set up
-1. Claim the task as `AGENTS.md` says (assign yourself; dependencies closed). Pull with rebase and re-read the plan.
+1. Do the checks in `AGENTS.md`, "Before you change anything": one claimed task with its dependencies closed, on the plan's branch (`git branch --show-current` shows `plan/<stage>-<topic>`, never a branch you created), scope limited to the task. Pull with rebase and re-read the plan. Put the branch name and the task's scope in the brief, and have the implementer and the reviewer check both: a commit on another branch or a change outside the task is a Critical finding.
 2. Pre-flight: read the plan task, the plan's Global Constraints and Review Focus, the stage overview and the spec sections the task cites. If the task is wrong, unclear or contradicts the spec or the code on the branch, stop here: open a Decision issue (see the last section).
 3. Record the base commit: `git rev-parse HEAD`. Every diff for this task is taken from this base, never from `HEAD~1` (the task may have several commits, and others push to the branch).
 4. Write the brief: the full task text copied from the plan (not a link), the plan's Global Constraints and Review Focus items that touch it, the spec excerpts it needs, the interfaces it consumes from earlier tasks (exact names and types, read from the code on the branch), the commands to run (from `AGENTS.md`), and the base commit.

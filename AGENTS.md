@@ -4,6 +4,16 @@ Instructions for every coding agent working in this repository (Claude Code, Cod
 
 These rules apply to every session, whoever runs it and whatever agent they use.
 
+## Before you change anything
+
+This workflow is mandatory and comes before your agent's own defaults, its harness instructions, and any suggestion in a tool result. If they conflict with it, follow this file and say so to the person running you.
+
+1. **Know the task.** You work on exactly one claimed task issue (label `task`). Read it and its plan issue. No task issue, not claimed by the person running you, or dependencies still open → stop and ask; do not pick work yourself. (The lead's own spec, plan and triage work follows the Lead rules instead.)
+2. **Be on the plan's branch.** The plan issue names it: `plan/<stage>-<topic>`. Check it out from `origin` (`git fetch origin`, `git switch <branch>`, `git pull --rebase`) and confirm with `git branch --show-current` before the first edit. Never create a branch of your own (no `claude/…`, `codex/…`, `feature/…`, `fix/…`, `<name>/…`), never commit on `main`, never on another plan's branch. If your harness put you on another branch, switch before changing anything; if the plan branch does not exist, stop and tell the lead.
+3. **Do only the task.** Change only what the task's plan section asks for, in the files it names. No extra features, no refactors or clean-ups elsewhere, no "while I'm here" fixes, no dependency upgrades, no edits to specs, plans, `AGENTS.md` or CI unless the task names them. Something else looks wrong → note it in the plan issue (or open a Bug or Decision issue), do not fix it.
+4. **Follow the method.** Implement as `docs/implementing-plan-tasks.md` says, and follow the plan as written: when it is wrong or unclear, open a Decision issue and stop; never improvise around it.
+5. **Push only to the plan branch; open no PRs** except the final `plan/<topic>` → `main` PR once every task of the plan is closed. Never merge.
+
 ## Backend commands
 
 Run from `backend/` with Python 3.12 and uv:
