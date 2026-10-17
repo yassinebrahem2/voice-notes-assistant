@@ -12,6 +12,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.api.app import create_app
+from app.audio.decode import DecodedAudio, decode_to_npy
 from app.audio.storage import audio_path
 from app.container import Container
 from app.db.connection import connect
@@ -36,10 +37,13 @@ class SignallingAsr:
         return FakeAsr().transcribe(audio_npy)
 
 
-class BlockingSpeech:
-    """Holds one speech step open until the test releases it, like a slow ASR or diarizer child."""
+SlowStep = Literal["decoding", "transcribing", "diarizing"]
 
-    def __init__(self, blocked: Literal["transcribing", "diarizing"]) -> None:
+
+class BlockingSpeech:
+    """Holds one slow step open until the test releases it, like a long decode or a slow ASR or diarizer child."""
+
+    def __init__(self, blocked: SlowStep) -> None:
         self.blocked = blocked
         self.entered = threading.Event()
         self.release = threading.Event()
@@ -48,6 +52,11 @@ class BlockingSpeech:
         self.entered.set()
         if not self.release.wait(timeout=WAIT_S):
             raise TimeoutError("The test never released the speech step.")
+
+    def decode(self, src: Path, dest: Path) -> DecodedAudio:
+        if self.blocked == "decoding":
+            self._hold()
+        return decode_to_npy(src, dest)
 
     def transcribe(self, audio_npy: Path) -> list[AsrSegment]:
         if self.blocked == "transcribing":
@@ -211,19 +220,40 @@ def test_one_failure_does_not_stop_the_queue(container: Container) -> None:
     assert worker.run_once() is False
 
 
-@pytest.mark.parametrize("blocked", ["transcribing", "diarizing"])
+def _blocking_speech(monkeypatch: pytest.MonkeyPatch, blocked: SlowStep) -> BlockingSpeech:
+    speech = BlockingSpeech(blocked)
+    # Decode is real PyAV even with fake speech, so it is held at the pipeline's own reference to it.
+    monkeypatch.setattr("app.processing.pipeline.decode_to_npy", speech.decode)
+    return speech
+
+
+def _join_worker_threads() -> None:
+    for thread in threading.enumerate():
+        if thread.name == "processing-worker":
+            thread.join(timeout=WAIT_S)
+            assert not thread.is_alive()
+
+
+@pytest.mark.parametrize(
+    ("blocked", "status_while_blocked"),
+    [("decoding", "transcribing"), ("transcribing", "transcribing"), ("diarizing", "diarizing")],
+)
 def test_worker_holds_no_write_lock_during_slow_step(
-    container: Container, client: TestClient, blocked: Literal["transcribing", "diarizing"]
+    container: Container,
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+    blocked: SlowStep,
+    status_while_blocked: str,
 ) -> None:
     claimed = _queue(container, created_at=T0)
     other = _queue(container, status="ready", created_at=T1)
-    speech = BlockingSpeech(blocked)
+    speech = _blocking_speech(monkeypatch, blocked)
     worker = Worker(dataclasses.replace(container, asr=speech, diarizer=speech))
 
     with _running(worker.run_once) as errors:
         try:
             assert speech.entered.wait(timeout=WAIT_S)
-            assert _row(container, claimed)["status"] == blocked
+            assert _row(container, claimed)["status"] == status_while_blocked
             started = time.monotonic()
             other_response = client.delete(f"/api/v1/recordings/{other}")
             other_elapsed = time.monotonic() - started
@@ -269,6 +299,25 @@ def test_stop_returns_promptly_when_idle(container: Container, monkeypatch: pyte
 
     assert time.monotonic() - started < 2.0
     assert "processing-worker" not in {thread.name for thread in threading.enumerate()}
+
+
+def test_stop_returns_promptly_while_a_step_is_running(container: Container, monkeypatch: pytest.MonkeyPatch) -> None:
+    rec_id = _queue(container)
+    speech = _blocking_speech(monkeypatch, "transcribing")
+    worker = Worker(dataclasses.replace(container, asr=speech, diarizer=speech))
+    worker.start()
+    try:
+        assert speech.entered.wait(timeout=WAIT_S)
+        started = time.monotonic()
+        worker.stop()
+        elapsed = time.monotonic() - started
+    finally:
+        # The abandoned thread finishes its recording once released; joined here so nothing outlives the test.
+        speech.release.set()
+        _join_worker_threads()
+
+    assert elapsed < 5.0
+    assert _row(container, rec_id)["status"] == "ready"
 
 
 def test_worker_thread_survives_an_unexpected_error(container: Container) -> None:
@@ -320,6 +369,7 @@ def test_app_with_worker_processes_an_upload_on_wake(
         assert served.worker is not None
         # The idle wait is far longer than WAIT_S, so from here only the upload's wake gets the worker going.
         assert found_empty.wait(timeout=WAIT_S)
+        found_empty.clear()
         response = client.post(
             "/api/v1/recordings",
             data={"kind": "meeting", "client_upload_id": "upload-1"},
@@ -327,7 +377,8 @@ def test_app_with_worker_processes_an_upload_on_wake(
         )
         assert response.status_code == 201
         assert asr.called.wait(timeout=WAIT_S)
+        # The worker looks at the queue again only once this recording is done.
+        assert found_empty.wait(timeout=WAIT_S)
+        assert _row(container, response.json()["id"])["status"] == "ready"
 
-    # Shutdown joined the worker, so the recording it was processing is finished.
     assert served.worker is None
-    assert _row(container, response.json()["id"])["status"] == "ready"

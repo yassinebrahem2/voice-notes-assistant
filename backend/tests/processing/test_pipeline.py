@@ -1,6 +1,7 @@
 import dataclasses
 import json
 import logging
+import sqlite3
 from collections.abc import Sequence
 from contextlib import closing
 from pathlib import Path
@@ -44,6 +45,19 @@ class SpyAnalyzer:
 class RaisingDiarizer:
     def diarize(self, audio_npy: Path) -> list[DiarTurn]:
         raise RuntimeError("private-value")
+
+
+class LitteringDiarizer:
+    """Leaves an extra file next to the decoded audio, as a speech child process may, then fails or succeeds."""
+
+    def __init__(self, *, fail: bool) -> None:
+        self.fail = fail
+
+    def diarize(self, audio_npy: Path) -> list[DiarTurn]:
+        (audio_npy.parent / "child-output.json").write_text("{}", encoding="utf-8")
+        if self.fail:
+            raise RuntimeError("diarizer crashed")
+        return FakeDiarizer().diarize(audio_npy)
 
 
 class EmptyDiarizer:
@@ -350,3 +364,29 @@ def test_process_recording_leaves_no_transaction_open(container: Container) -> N
         process_recording(container, conn, rec_id)
         assert not conn.in_transaction
     assert _recording(container, rec_id)["status"] == "ready"
+
+
+def test_tmp_dir_with_extra_files_is_removed_when_ready(container: Container) -> None:
+    rec_id = _queue(container)
+
+    _run(dataclasses.replace(container, diarizer=LitteringDiarizer(fail=False)))
+
+    assert _recording(container, rec_id)["status"] == "ready"
+    assert not _tmp(container, rec_id).exists()
+
+
+def test_tmp_dir_is_removed_even_when_recording_the_failure_fails(container: Container) -> None:
+    rec_id = _queue(container)
+    _execute(container, "UPDATE recordings SET claimed = 1 WHERE id = ?", (rec_id,))
+    _execute(
+        container,
+        "CREATE TRIGGER block_failed BEFORE UPDATE OF status ON recordings WHEN NEW.status = 'failed' "
+        "BEGIN SELECT RAISE(ABORT, 'blocked'); END",
+    )
+    failing = dataclasses.replace(container, diarizer=LitteringDiarizer(fail=True))
+
+    with closing(connect(container.db_path)) as conn, pytest.raises(sqlite3.IntegrityError):
+        process_recording(failing, conn, rec_id)
+
+    assert not _tmp(container, rec_id).exists()
+    assert _recording(container, rec_id)["status"] == "diarizing"

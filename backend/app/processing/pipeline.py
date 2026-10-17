@@ -7,6 +7,7 @@ output is replaced together with its new output or not at all.
 
 import json
 import logging
+import shutil
 import sqlite3
 from pathlib import Path
 from typing import Literal
@@ -68,11 +69,8 @@ def _remove_tmp(container: Container, rec_id: str) -> None:
     if tmp.is_symlink():
         # Removing the link itself keeps whatever it points at untouched.
         tmp.unlink()
-        return
-    # Only the decoded audio is ever written here, so nothing wider than that file is removed.
-    (tmp / "audio.npy").unlink(missing_ok=True)
-    if tmp.is_dir():
-        tmp.rmdir()
+    elif tmp.is_dir():
+        shutil.rmtree(tmp)
 
 
 def _start_decoding(conn: sqlite3.Connection, rec_id: str) -> None:
@@ -210,5 +208,8 @@ def _run_steps(container: Container, conn: sqlite3.Connection, rec_id: str) -> N
 
 def process_recording(container: Container, conn: sqlite3.Connection, rec_id: str) -> None:
     """Takes a claimed recording from its current status to ready, or records which step failed and why."""
-    _run_steps(container, conn, rec_id)
-    _remove_tmp(container, rec_id)
+    try:
+        _run_steps(container, conn, rec_id)
+    finally:
+        # Also when recording a failure itself fails: that error still propagates, but no decoded audio is left.
+        _remove_tmp(container, rec_id)

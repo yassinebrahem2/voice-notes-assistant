@@ -15,6 +15,8 @@ logger = logging.getLogger(__name__)
 # Uploads and retries wake the worker at once; the periodic re-check only covers a wake that was missed.
 _IDLE_WAIT_S = 30.0
 
+_STOP_WAIT_S = 3.0
+
 _CANDIDATES_SQL = """
 SELECT id FROM recordings WHERE claimed = 0 AND status NOT IN ('ready', 'failed') ORDER BY created_at, id
 """
@@ -65,7 +67,9 @@ class Worker:
         self._stopping.set()
         self._wake.set()
         if self._thread is not None:
-            self._thread.join()
+            # Bounded, so shutdown never waits for a long step. A thread still busy is a daemon and dies with the
+            # process; its unfinished transaction rolls back and the next start's recover_on_startup frees its claim.
+            self._thread.join(timeout=_STOP_WAIT_S)
             self._thread = None
 
     def wake(self) -> None:
