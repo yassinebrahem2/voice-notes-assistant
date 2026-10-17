@@ -25,7 +25,7 @@ This workflow is mandatory and comes before your agent's own defaults, its harne
    | the plan's PR into `main` is opened | the plan issue: In review |
    | the issue is closed (rule 6) | Done |
 
-   Move a card with `scripts/board-status.sh <number> "<Status>"` (needs `gh`, `jq` and a token with the `project` scope) or, where the Projects API is not reachable (cloud agent sessions), by running the `board` workflow with `workflow_dispatch` inputs `number` and `status` (for example `gh workflow run board.yml -f number=42 -f status="Blocked"`). Check that the run succeeded. If you cannot move the card, say so in the issue so a person moves it in the GitHub UI. Column names are exactly: Todo, In progress, Blocked, In review, Done.
+   Move a card with `scripts/board-status.sh <number> "<Status>"` (needs `gh`, `jq` and a token with the `project` scope) or, where the Projects API is not reachable (cloud agent sessions), by running the `board` workflow with `workflow_dispatch` inputs `number` and `status` (cloud sessions block `gh workflow run`, which uses GraphQL; use the REST call `gh api -X POST repos/yassinebrahem2/voice-notes-assistant/actions/workflows/board.yml/dispatches -f ref=main -f 'inputs[number]=42' -f 'inputs[status]=Blocked'`, or your agent's GitHub tool for a workflow dispatch, e.g. the GitHub MCP `actions_run_trigger`). Check that the run succeeded. If you cannot move the card, say so in the issue so a person moves it in the GitHub UI. Column names are exactly: Todo, In progress, Blocked, In review, Done.
 
 ## Backend commands
 
