@@ -101,5 +101,5 @@
 This plan edits `app/_layout.tsx`, `TabBar.tsx` and `queryClient.ts`; the recording plan replaces `RecordAction` and owns the recording page. Both may define a `useTags` hook with query key `["tags"]`; on rebase keep one. Whichever merges second rebases and keeps both.
 
 ## Self-review notes
-- Spec coverage: UI §3 Chat (Tasks 1–2), Settings (Task 3), Everywhere banner (Task 4); §6 Chat run failures (Task 1), server unreachable (Task 4), error-code messages via `errorMessage` (foundation Task 6). Chat spec §6 states mapped in `nextRunView`.
+- Spec coverage: UI §3 Chat (Tasks 1–2), Settings (Task 3), Everywhere banner (Task 4); §6 Chat run failures (Task 1), server unreachable (Task 4), error-code messages via `errorMessage` (foundation Task 9). Chat spec §6 states mapped in `nextRunView`.
 - Dependencies: Task 1 none; Task 2 needs 1; Task 3 none; Task 4 needs 3 (no-server state uses the stored URL). Tasks 1 and 3 can run in parallel.
