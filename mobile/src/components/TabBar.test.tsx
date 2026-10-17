@@ -3,6 +3,12 @@ import { fireEvent, render, screen } from '@testing-library/react-native';
 import { StyleSheet } from 'react-native';
 import { PaperProvider } from 'react-native-paper';
 
+import {
+  reportNetworkError,
+  reportNoServer,
+  reportOk,
+  resetStatus,
+} from '../server/statusStore';
 import { paperTheme } from '../theme/paperTheme';
 import { TabBar } from './TabBar';
 
@@ -111,4 +117,64 @@ test('paints the band above the visible bar with the screen background colour', 
     StyleSheet.flatten(screen.getByTestId('tab-bar').props.style)
       .backgroundColor,
   ).toBe(paperTheme('dark').tape.bg);
+});
+
+describe('server status dot on the Settings tab', () => {
+  const tape = paperTheme('dark').tape;
+
+  function dot() {
+    return screen.queryByTestId('server-status-dot');
+  }
+
+  beforeEach(() => resetStatus());
+
+  test('has no dot while the status is unknown', async () => {
+    await setup();
+    expect(dot()).toBeNull();
+    expect(
+      screen.getByRole('tab', { name: 'Settings' }).props.accessibilityHint,
+    ).toBeUndefined();
+  });
+
+  test('shows an outline dot when the server is reachable', async () => {
+    reportOk();
+    await setup();
+    expect(StyleSheet.flatten(dot()?.props.style).backgroundColor).toBe(
+      tape.outline,
+    );
+    expect(
+      screen.getByRole('tab', { name: 'Settings' }).props.accessibilityHint,
+    ).toBe('Server connected');
+  });
+
+  test('shows a signal dot and says so when the server is unreachable', async () => {
+    reportNetworkError();
+    await setup();
+    expect(StyleSheet.flatten(dot()?.props.style).backgroundColor).toBe(
+      tape.signal,
+    );
+    expect(
+      screen.getByRole('tab', { name: 'Settings' }).props.accessibilityHint,
+    ).toBe('Server unreachable');
+  });
+
+  test('shows a signal dot when no server address is set', async () => {
+    reportNoServer();
+    await setup();
+    expect(StyleSheet.flatten(dot()?.props.style).backgroundColor).toBe(
+      tape.signal,
+    );
+    expect(
+      screen.getByRole('tab', { name: 'Settings' }).props.accessibilityHint,
+    ).toBe('No server address set');
+  });
+
+  test('puts the dot on no other tab', async () => {
+    reportNetworkError();
+    await setup();
+    expect(screen.getAllByTestId('server-status-dot')).toHaveLength(1);
+    expect(
+      screen.getByRole('tab', { name: 'Notes' }).props.accessibilityHint,
+    ).toBeUndefined();
+  });
 });

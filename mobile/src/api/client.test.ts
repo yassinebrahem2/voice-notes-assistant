@@ -1,4 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { renderHook } from '@testing-library/react-native';
+
+import { resetStatus, useServerStatusValue } from '../server/statusStore';
 
 import { apiFetch } from './client';
 import { ApiError } from './errors';
@@ -18,6 +21,7 @@ function response(status: number, body: unknown): Response {
 }
 
 beforeEach(() => {
+  resetStatus();
   jest
     .mocked(AsyncStorage.getItem)
     .mockResolvedValue('https://server.example/');
@@ -210,4 +214,17 @@ test('query defaults retry twice with backoff while mutations never retry', () =
   if (typeof delay !== 'function') throw new Error('Expected retry backoff.');
   expect(delay(0, new Error())).toBe(1000);
   expect(delay(1, new Error())).toBe(2000);
+});
+
+test('reports reachability to the server status store', async () => {
+  const { result } = await renderHook(() => useServerStatusValue());
+  const fetch = jest
+    .spyOn(global, 'fetch')
+    .mockRejectedValueOnce(new TypeError('Fetch failed'))
+    .mockResolvedValueOnce(response(200, {}));
+  await apiFetch('/health').catch(() => undefined);
+  expect(result.current).toBe('unreachable');
+  await apiFetch('/health');
+  expect(result.current).toBe('ok');
+  expect(fetch).toHaveBeenCalledTimes(2);
 });

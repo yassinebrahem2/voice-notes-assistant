@@ -9,6 +9,7 @@ import { PaperProvider } from 'react-native-paper';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { queryClient } from '../src/api/queryClient';
+import { ServerBanner } from '../src/server/ServerBanner';
 import { useThemePreference } from '../src/settings/themePreference';
 import { fontAssets } from '../src/theme/fonts';
 import { paperTheme } from '../src/theme/paperTheme';
@@ -34,6 +35,7 @@ export default function RootLayout() {
       <SafeAreaProvider>
         <PaperProvider theme={theme}>
           <StatusBar style={scheme === 'dark' ? 'light' : 'dark'} />
+          <ServerBanner />
           <Stack
             screenOptions={{
               headerShown: false,
