@@ -144,7 +144,9 @@ async function ask(text: string): Promise<void> {
 
 async function retry(index: number): Promise<void> {
   const turn = state.turns[index];
-  if (!turn || isActive(turn.run)) return;
+  // Same guard as ask: a second active run would be polled before the server
+  // registers the retried one (404 -> wrongly interrupted) and answers would interleave.
+  if (!turn || state.turns.some((t) => isActive(t.run))) return;
   const { chatId } = state;
   const runId = runIds[index];
   setRun(index, { phase: 'sending', steps: [] });

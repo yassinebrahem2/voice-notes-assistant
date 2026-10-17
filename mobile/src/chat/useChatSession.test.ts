@@ -170,3 +170,69 @@ test('newChat clears the turns and the next ask creates a new chat', async () =>
   expect(result.current.chatId).toBe('chat_2');
   expect(result.current.turns).toHaveLength(1);
 });
+
+test('retry is refused while another turn is running', async () => {
+  let asked = 0;
+  fetchMock.mockImplementation(async (path: string) => {
+    if (path === 'chats') return { id: 'chat_1', created_at: '' };
+    if (path.endsWith('/messages')) return { run_id: `run_${++asked}` };
+    if (path.endsWith('/runs/run_1'))
+      throw new ApiError(404, 'not_found', 'Run not found.');
+    return runOut({ steps: ['Searching'] });
+  });
+  const { result } = await renderHook(() => useChatSession());
+  await act(async () => {
+    await result.current.ask('One');
+  });
+  await act(() => jest.advanceTimersByTimeAsync(500));
+  expect(result.current.turns[0]?.run.phase).toBe('interrupted');
+  await act(async () => {
+    await result.current.ask('Two');
+  });
+  await act(() => jest.advanceTimersByTimeAsync(500));
+  expect(result.current.turns[1]?.run.phase).toBe('running');
+
+  const before = result.current.turns[0];
+  await act(async () => {
+    await result.current.retry(0);
+  });
+  expect(count('chats/chat_1/runs/run_1/retry')).toBe(0);
+  expect(result.current.turns[0]).toBe(before);
+});
+
+test('a network error while polling keeps polling', async () => {
+  route([
+    () => new ApiError(0, 'network_error', 'Could not reach the server.'),
+    () => runOut({ status: 'done', message }),
+  ]);
+  const { result } = await renderHook(() => useChatSession());
+  await act(async () => {
+    await result.current.ask('Q');
+  });
+  await act(() => jest.advanceTimersByTimeAsync(500));
+  expect(result.current.turns[0]?.run.phase).toBe('sending');
+  await act(() => jest.advanceTimersByTimeAsync(500));
+  expect(result.current.turns[0]?.run.phase).toBe('done');
+});
+
+test('a poll response arriving after newChat is dropped', async () => {
+  let release!: (run: Schemas['RunOut']) => void;
+  fetchMock.mockImplementation(async (path: string) => {
+    if (path === 'chats') return { id: 'chat_1', created_at: '' };
+    if (path.endsWith('/messages')) return { run_id: 'run_1' };
+    return new Promise<Schemas['RunOut']>((resolve) => {
+      release = resolve;
+    });
+  });
+  const { result } = await renderHook(() => useChatSession());
+  await act(async () => {
+    await result.current.ask('Q');
+  });
+  await act(() => jest.advanceTimersByTimeAsync(500));
+  await act(() => result.current.newChat());
+  await act(async () => {
+    release(runOut({ status: 'done', message }));
+  });
+  expect(result.current.turns).toEqual([]);
+  expect(result.current.chatId).toBeNull();
+});
