@@ -163,7 +163,7 @@
 
 **Files:**
 - Create: `backend/app/rag/fastembed_embedder.py`
-- Modify: `backend/pyproject.toml` (base adds `fastembed>=0.9,<0.10`), `backend/uv.lock`, `backend/app/container.py` (embedder binding point), `backend/app/api/routes/health.py` (local readiness of the embedder), `backend/tests/conftest.py` (the `container` fixture keeps fakes)
+- Modify: `backend/pyproject.toml` (base adds `fastembed>=0.9,<0.10`), `backend/uv.lock`, `backend/app/container.py` (embedder binding point), `backend/app/api/routes/health.py` (local readiness of the embedder), `backend/tests/conftest.py` (the `container` fixture keeps fakes), `backend/tests/test_demo_seed.py` (`cli_container` also patches `app.cli.build_container` with a typed function that calls the real `build_container` and `dataclasses.replace`s `embedder=FakeEmbedder(), analyzer=FakeAnalyzer()`, so `seed-demo` tests never download a model; Decision #58)
 - Test: `backend/tests/rag/test_fastembed_embedder.py`, `backend/tests/test_container.py` (extend)
 
 **Interfaces:**
