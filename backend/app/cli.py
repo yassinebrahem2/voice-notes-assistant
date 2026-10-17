@@ -22,6 +22,7 @@ def main(argv: list[str] | None = None) -> None:
     commands.add_parser("serve", help="Start the API on the configured host and port.")
     export = commands.add_parser("export-openapi", help="Export the stable API schema.")
     export.add_argument("--check", action="store_true", help="Fail if the committed schema is stale.")
+    commands.add_parser("seed-demo", help="Seed demo data for mobile development.")
     args = parser.parse_args(argv)
     settings = load_settings(load_app_config())
     container = build_container(settings)
@@ -34,6 +35,15 @@ def main(argv: list[str] | None = None) -> None:
                 raise SystemExit(1)
         else:
             OPENAPI_PATH.write_text(schema, encoding="utf-8", newline="\n")
+        return
+    if args.command == "seed-demo":
+        from app.demo_seed import DemoSeedError, seed_demo
+
+        try:
+            seed_demo(container)
+        except DemoSeedError as err:
+            print(f"Error: {err}", file=sys.stderr)
+            raise SystemExit(1) from err
         return
     settings.data_dir.mkdir(parents=True, exist_ok=True)
     connection = connect(container.db_path)

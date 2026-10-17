@@ -6,9 +6,9 @@ from pathlib import Path
 import sqlite_vec  # pyright: ignore[reportMissingTypeStubs] -- sqlite-vec does not publish type stubs.
 
 
-def connect(db_path: Path) -> sqlite3.Connection:
+def connect(db_path: Path, *, check_same_thread: bool = True) -> sqlite3.Connection:
     """Open the database with referential integrity and vector functions enabled."""
-    conn = sqlite3.connect(db_path)
+    conn = sqlite3.connect(db_path, check_same_thread=check_same_thread)
     try:
         conn.row_factory = sqlite3.Row
         conn.execute("PRAGMA foreign_keys=ON")
