@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Set the Status of an issue or PR on the project board.
-# Usage: scripts/board-status.sh <number> "<Todo|In progress|Blocked|In review|Done>"
+# Usage: scripts/board-status.sh <number> "<Todo|In Progress|Blocked|In Review|Done>"
 # Uses GraphQL directly: `gh project` needs the read:org scope, which most tokens lack.
 set -euo pipefail
 

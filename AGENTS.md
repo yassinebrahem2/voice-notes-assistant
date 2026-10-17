@@ -21,16 +21,16 @@ Lifecycle of a piece of work:
 2. The lead writes the implementation plans in `docs/superpowers/plans/` (see "How plans are written"). Each plan lives on its own branch `plan/<stage>-<topic>` (for example `plan/stage-1-backend-core`). Every plan task states which tasks it depends on.
 3. After a plan is on its branch, the lead opens a plan issue (template "Implementation plan", label `plan`, milestone = its stage). The lead's session then creates one sub-issue per plan task (label `task`, same milestone), each stating the task, its plan section and its dependencies. New issues land on the project board in "Todo" automatically.
 4. Implementers pick tasks, work on the plan branch, and move their task through the board.
-5. When every task is done, an implementer opens a PR from `plan/<topic>` into `main` (the PR template asks for `Closes #<plan issue>`), requests review from `yassinebrahem2`, and moves the plan issue to "In review".
+5. When every task is done, an implementer opens a PR from `plan/<topic>` into `main` (the PR template asks for `Closes #<plan issue>`), requests review from `yassinebrahem2`, and moves the plan issue to "In Review".
 6. The lead reviews. Merging the PR closes the plan issue and moves it to "Done".
 
-Project board: GitHub Projects (https://github.com/users/yassinebrahem2/projects/6), Status = Todo / In progress / Blocked / In review / Done. Milestones: one per roadmap stage ("Stage 1: Core MVP", "Stage 2: Stretch and polish"). Move a card with `scripts/board-status.sh <issue-or-PR number> "<Status>"` (needs `gh` and `jq`, and a token with the `project` scope).
-Most moves are automatic: the board's built-in workflows add items to Todo and set Done on close and merge, and `.github/workflows/board.yml` sets In progress when a `task` issue is assigned (Todo when its last assignee is removed), Blocked when a `decision` issue names the task under "Blocked task" (In progress again when that Decision closes), and In review when a PR into `main` says `Closes #<n>`. Cloud agent sessions cannot reach the board API; they move a card by running the `board` workflow manually (`workflow_dispatch` with `number` and `status`).
+Project board: GitHub Projects (https://github.com/users/yassinebrahem2/projects/6), Status = Todo / In Progress / Blocked / In Review / Done. Milestones: one per roadmap stage ("Stage 1: Core MVP", "Stage 2: Stretch and polish"). Move a card with `scripts/board-status.sh <issue-or-PR number> "<Status>"` (needs `gh` and `jq`, and a token with the `project` scope).
+Most moves are automatic: the board's built-in workflows add items to Todo and set Done on close and merge, and `.github/workflows/board.yml` sets In Progress when a `task` issue is assigned (Todo when its last assignee is removed), Blocked when a `decision` issue names the task under "Blocked task" (In Progress again when that Decision closes), and In Review when a PR into `main` says `Closes #<n>`. Cloud agent sessions cannot reach the board API; they move a card by running the `board` workflow manually (`workflow_dispatch` with `number` and `status`).
 
 ### Implementer rules
 - Work only on the plan's branch. Never push to `main`; never merge anything.
 - Claim a task by assigning yourself to its sub-issue before starting. Only take a task that is unassigned and whose dependencies are closed.
-- Assigning yourself moves your task's card to "In progress"; close the sub-issue when its work is pushed and its checks pass.
+- Assigning yourself moves your task's card to "In Progress"; close the sub-issue when its work is pushed and its checks pass.
 - Pull with rebase before you start and before you push, then re-read the plan (it may have changed). Commit small and push often, since several people share the branch.
 - Follow the plan as written. If the plan is wrong, unclear, or needs a decision, do not improvise: open a Decision issue linked to the blocked task, and move that task to "Blocked" until the lead answers.
 - Do not edit specs, plans, `docs/roadmap.md` or `project_knowledge.md`; those belong to the lead.
