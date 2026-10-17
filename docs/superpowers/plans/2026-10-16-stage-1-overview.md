@@ -34,10 +34,10 @@ Every must-have feature working end to end on a real Android phone talking to th
 ## Plans
 | # | Plan | Branch | Depends on | State |
 |---|---|---|---|---|
-| 1 | Foundation: backend skeleton, schema, all routes and models, openapi.json, protocols and fakes, mobile scaffold, theme, API client, CI, Tailscale setup, throwaway APK | `plan/stage-1-foundation` | none | issue #1 |
-| 2 | Processing: upload, audio and Range, worker (claim, resume, retry, delete), speech child processes, chunking and indexing, laptop setup command | `plan/stage-1-processing` | 1 | not written |
-| 3 | Agents: registry and agent factory, Summarizer, Orchestrator and tools, retrieval, Chat runs, provider smoke test, relevance calibration | `plan/stage-1-agents` | 1 | not written |
-| 4 | Mobile recording: record fan-out and recorder, waveform, upload queue, libraries, recording detail, player, Tier 2 polish | `plan/stage-1-mobile-recording` | 1 | not written |
-| 5 | Mobile Chat and Settings: Chat screen, Settings, server banner, error messages | `plan/stage-1-mobile-chat-settings` | 1 | not written |
+| 1 | Foundation: backend skeleton, schema, all routes and models, openapi.json, protocols and fakes, mobile scaffold, theme, API client, CI, Tailscale setup, throwaway APK; Task 8 shared backend helpers and demo seed; Task 9 mobile error messages and record menu store | `plan/stage-1-foundation` | none | issue #1 |
+| 2 | Processing: upload, audio and Range, worker (claim, resume, retry, delete), speech child processes, chunking and indexing, laptop setup command | `plan/stage-1-processing` | 1 | drafted: `2026-10-17-stage-1-processing.md` |
+| 3 | Agents: registry and agent factory, Summarizer, Orchestrator and tools, retrieval, Chat runs, provider smoke test, relevance calibration | `plan/stage-1-agents` | 1 | drafted: `2026-10-17-stage-1-agents.md` |
+| 4 | Mobile recording: record fan-out and recorder, waveform, upload queue, libraries, recording detail, player, Tier 2 polish | `plan/stage-1-mobile-recording` | 1 | drafted: `2026-10-17-stage-1-mobile-recording.md` |
+| 5 | Mobile Chat and Settings: Chat screen, Settings, server banner, error messages | `plan/stage-1-mobile-chat-settings` | 1 | drafted: `2026-10-17-stage-1-mobile-chat-settings.md` |
 
 After plans 2–5 merge, the lead runs the demo checklist (spec platform file §4) on the phone.
