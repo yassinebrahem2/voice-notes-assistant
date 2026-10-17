@@ -1,3 +1,4 @@
+import re
 from collections.abc import Sequence
 from contextlib import closing
 from pathlib import Path
@@ -5,9 +6,12 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
+from app.api.errors import ApiError, ErrorCode
+from app.audio.storage import audio_path, remove_recording_files, tmp_dir
 from app.container import Container
 from app.db.connection import connect
 from app.domain.types import RecordingStatus
+from app.recordings import edit
 from tests.seed import seed_chunk, seed_recording
 
 
@@ -316,6 +320,26 @@ def test_delete_claimed_is_409_and_keeps_everything(client: TestClient, containe
     assert (tmp / "audio.npy").read_bytes() == b"decoded"
 
 
+def test_delete_claimed_decides_on_the_guarded_delete_alone(container: Container) -> None:
+    data_dir = container.settings.data_dir
+    rec_id = _seed(container, status="transcribing", claimed=True)
+    audio, tmp = _make_files(data_dir, rec_id)
+    statements: list[str] = []
+
+    with closing(connect(container.db_path)) as conn:
+        conn.set_trace_callback(lambda sql: statements.append(" ".join(sql.split())))
+        with pytest.raises(ApiError) as raised:
+            edit.delete_recording(conn, data_dir, rec_id)
+
+    assert raised.value.code == ErrorCode.recording_busy
+    # A separate read of `claimed` before the delete would race the worker's claim.
+    touching = [sql for sql in statements if "recordings" in sql.lower()]
+    assert re.match(r"DELETE FROM recordings WHERE id = \S+ AND claimed = 0\b", touching[0], re.IGNORECASE)
+    assert not any("claimed" in sql.lower() for sql in touching[1:])
+    assert audio.read_bytes() == b"audio"
+    assert (tmp / "audio.npy").read_bytes() == b"decoded"
+
+
 def test_delete_unknown_is_404(client: TestClient) -> None:
     response = client.delete("/api/v1/recordings/rec_missing")
 
@@ -394,6 +418,13 @@ def test_retry_not_failed_is_409(
     client: TestClient, container: Container, status: RecordingStatus, claimed: bool
 ) -> None:
     rec_id = _seed(container, status=status, claimed=claimed)
+    # A leftover failed_step must not make a non-failed recording retryable: only status = 'failed' does.
+    _rows(
+        container,
+        "UPDATE recordings SET failed_step = 'transcribing', error_code = 'transcription_failed', "
+        "error_message = 'Old failure.' WHERE id = ?",
+        [rec_id],
+    )
     before = _recording_row(container, rec_id)
 
     response = client.post(f"/api/v1/recordings/{rec_id}/retry")
@@ -422,19 +453,15 @@ def test_retry_unknown_is_404(client: TestClient) -> None:
     _assert_error(response.json(), "not_found")
 
 
-# app.audio.storage (imported inside the tests so the endpoint tests above still run before the module exists)
+# app.audio.storage
 
 
 def test_storage_paths_follow_the_data_layout(tmp_path: Path) -> None:
-    from app.audio.storage import audio_path, tmp_dir
-
     assert audio_path(tmp_path, "rec_1", "m4a") == tmp_path / "audio" / "rec_1.m4a"
     assert tmp_dir(tmp_path, "rec_1") == tmp_path / "tmp" / "rec_1"
 
 
 def test_remove_recording_files_tolerates_missing_files(tmp_path: Path) -> None:
-    from app.audio.storage import remove_recording_files
-
     remove_recording_files(tmp_path, "rec_1", "m4a")
 
     assert list(tmp_path.iterdir()) == []
@@ -445,8 +472,6 @@ def test_remove_recording_files_tolerates_missing_files(tmp_path: Path) -> None:
     [("..", "m4a"), (".", "m4a"), ("", "m4a"), ("../x", "m4a"), ("a\\b", "m4a"), ("rec_1", "../m4a"), ("rec_1", "")],
 )
 def test_remove_recording_files_rejects_path_like_names(tmp_path: Path, rec_id: str, ext: str) -> None:
-    from app.audio.storage import remove_recording_files
-
     data_dir = tmp_path / "data"
     (data_dir / "tmp" / "rec_1").mkdir(parents=True)
     (data_dir / "tmp" / "rec_1" / "audio.npy").write_bytes(b"keep")
@@ -461,8 +486,6 @@ def test_remove_recording_files_rejects_path_like_names(tmp_path: Path, rec_id: 
 
 
 def test_remove_recording_files_does_not_follow_a_symlinked_tmp_dir(tmp_path: Path) -> None:
-    from app.audio.storage import remove_recording_files
-
     outside = tmp_path / "outside"
     outside.mkdir()
     (outside / "precious").write_bytes(b"keep")
