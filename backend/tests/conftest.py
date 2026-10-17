@@ -43,7 +43,11 @@ def container(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Container:
     monkeypatch.setenv("SPEECH_BACKEND", "fake")
     settings = load_settings(load_app_config(), env_file=env_file)
     result = build_container(settings)
-    result = dataclasses.replace(result, analyzer=FakeAnalyzer())
+    result = dataclasses.replace(result, analyzer=FakeAnalyzer(), chat_runs=None)
+    from app.agents.chat_graph import build_chat_graph
+    from app.chats.runs import ChatRuns
+
+    result.chat_runs = ChatRuns(result, build_chat_graph)
     result.settings.data_dir.mkdir(parents=True)
     connection = connect(result.db_path)
     try:

@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Literal
+from typing import TYPE_CHECKING, Literal
 
 from app.agents.summarizer import SummarizerAnalyzer
 from app.config.app_config import AppConfig, load_app_config
@@ -11,6 +11,9 @@ from app.rag.fakes import FakeEmbedder
 from app.rag.protocols import Embedder
 from app.speech.fakes import FakeAsr, FakeDiarizer
 from app.speech.protocols import Asr, Diarizer
+
+if TYPE_CHECKING:
+    from app.chats.runs import ChatRuns
 
 
 @dataclass
@@ -24,6 +27,7 @@ class Container:
     diarizer: Diarizer
     embedder: Embedder
     analyzer: Analyzer
+    chat_runs: "ChatRuns | None" = None
 
 
 def build_container(settings: Settings) -> Container:
@@ -34,6 +38,11 @@ def build_container(settings: Settings) -> Container:
     asr, diarizer, embedder = FakeAsr(), FakeDiarizer(), FakeEmbedder()
     # The agents plan binds the real analyzer here.
     analyzer = SummarizerAnalyzer(models)
-    return Container(
+    container = Container(
         settings, app_config, models, settings.data_dir / "app.db", "fake", asr, diarizer, embedder, analyzer
     )
+    from app.agents.chat_graph import build_chat_graph
+    from app.chats.runs import ChatRuns
+
+    container.chat_runs = ChatRuns(container, build_chat_graph)
+    return container
