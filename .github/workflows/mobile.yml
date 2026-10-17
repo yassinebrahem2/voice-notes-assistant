@@ -28,3 +28,5 @@ jobs:
       - run: npx eslint .
       - run: npx prettier --check .
       - run: npx jest --ci
+      - run: npm run gen:api
+      - run: git diff --exit-code src/api/schema.d.ts

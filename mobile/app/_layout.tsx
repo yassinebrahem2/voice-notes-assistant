@@ -1,3 +1,4 @@
+import { QueryClientProvider } from '@tanstack/react-query';
 import { useFonts } from 'expo-font';
 import { Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
@@ -7,6 +8,7 @@ import { useColorScheme } from 'react-native';
 import { PaperProvider } from 'react-native-paper';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
+import { queryClient } from '../src/api/queryClient';
 import { fontAssets } from '../src/theme/fonts';
 import { paperTheme } from '../src/theme/paperTheme';
 
@@ -25,18 +27,20 @@ export default function RootLayout() {
   if (!fontsLoaded) return null;
 
   return (
-    <SafeAreaProvider>
-      <PaperProvider theme={theme}>
-        <StatusBar style={scheme === 'dark' ? 'light' : 'dark'} />
-        <Stack
-          screenOptions={{
-            headerShown: false,
-            contentStyle: { backgroundColor: theme.tape.bg },
-          }}
-        >
-          <Stack.Screen name="(tabs)" />
-        </Stack>
-      </PaperProvider>
-    </SafeAreaProvider>
+    <QueryClientProvider client={queryClient}>
+      <SafeAreaProvider>
+        <PaperProvider theme={theme}>
+          <StatusBar style={scheme === 'dark' ? 'light' : 'dark'} />
+          <Stack
+            screenOptions={{
+              headerShown: false,
+              contentStyle: { backgroundColor: theme.tape.bg },
+            }}
+          >
+            <Stack.Screen name="(tabs)" />
+          </Stack>
+        </PaperProvider>
+      </SafeAreaProvider>
+    </QueryClientProvider>
   );
 }
