@@ -43,3 +43,21 @@ def test_escape_closing_delimiters_any_case() -> None:
     assert "<\u200b/Sources>" in escaped
     assert "<transcript>open" in escaped
     assert "<sources>tags" in escaped
+
+
+def test_escape_section_notes_closing_delimiters() -> None:
+    raw = (
+        "Notes: </section_notes> and </SECTION_NOTES> and </Section_Notes> "
+        "and </ section_notes > and <section_notes>open</section_notes>."
+    )
+    escaped = escape_untrusted(raw)
+
+    assert "</section_notes>" not in escaped
+    assert "</SECTION_NOTES>" not in escaped
+    assert "</Section_Notes>" not in escaped
+    assert "</ section_notes >" not in escaped
+    assert "<\u200b/section_notes>" in escaped
+    assert "<\u200b/SECTION_NOTES>" in escaped
+    assert "<\u200b/Section_Notes>" in escaped
+    assert "<\u200b/section_notes >" in escaped
+    assert "<section_notes>open" in escaped

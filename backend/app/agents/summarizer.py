@@ -18,7 +18,7 @@ from app.agents.schemas import (
     NoteAnalysis,
     NoteSectionNotes,
 )
-from app.agents.transcript_input import render_transcript
+from app.agents.transcript_input import escape_untrusted, render_transcript
 from app.config.models_registry import LlmEntry, ModelsRegistry
 from app.llm.factory import chat_model
 from app.llm.force_output import ForceOutputToolMiddleware
@@ -141,19 +141,19 @@ class SummarizerAnalyzer:
                 lines.append("Decisions:")
                 for d in s.decisions:
                     src = ", ".join(f"[S {x}]" for x in d.sources)
-                    lines.append(f"- {d.text} ({src})")
+                    lines.append(f"- {escape_untrusted(d.text)} ({src})")
             if s.action_items:
                 lines.append("Action Items:")
                 for a in s.action_items:
                     src = ", ".join(f"[S {x}]" for x in a.sources)
-                    owner = f"owner: {a.owner}" if a.owner else "no owner"
-                    due = f"due: {a.due}" if a.due else "no due"
-                    lines.append(f"- {a.text} ({owner}, {due}) ({src})")
+                    owner = f"owner: {escape_untrusted(a.owner)}" if a.owner else "no owner"
+                    due = f"due: {escape_untrusted(a.due)}" if a.due else "no due"
+                    lines.append(f"- {escape_untrusted(a.text)} ({owner}, {due}) ({src})")
             if s.open_questions:
                 lines.append("Open Questions:")
                 for q in s.open_questions:
                     src = ", ".join(f"[S {x}]" for x in q.sources)
-                    lines.append(f"- {q.text} ({src})")
+                    lines.append(f"- {escape_untrusted(q.text)} ({src})")
         lines.append("</section_notes>")
         lines.append("")
         lines.append(tags_text)
@@ -171,7 +171,7 @@ class SummarizerAnalyzer:
                 lines.append("Key Points:")
                 for kp in s.key_points:
                     src = ", ".join(f"[S {x}]" for x in kp.sources)
-                    lines.append(f"- {kp.text} ({src})")
+                    lines.append(f"- {escape_untrusted(kp.text)} ({src})")
         lines.append("</section_notes>")
         lines.append("")
         lines.append(tags_text)

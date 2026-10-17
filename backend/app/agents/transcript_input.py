@@ -7,12 +7,12 @@ from app.processing.protocols import TranscriptLine
 
 
 def escape_untrusted(text: str) -> str:
-    """Neutralise closing delimiters </transcript> and </sources> in untrusted text.
+    """Neutralise closing delimiters </transcript>, </sources>, and </section_notes> in untrusted text.
 
     Inserts a zero-width space after '<' regardless of case or whitespace.
     """
     return re.sub(
-        r"(?i)<\s*/\s*(transcript|sources)",
+        r"(?i)<\s*/\s*(transcript|sources|section_notes)",
         lambda m: f"<\u200b/{m.group(1)}",
         text,
     )
