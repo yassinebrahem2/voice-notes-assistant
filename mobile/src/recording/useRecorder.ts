@@ -7,58 +7,11 @@ import { audioModeFor, isExpoGo, shouldPauseOnReturn } from './environment';
 import type { RecordingKind } from './fanOut';
 import { dbfsToLevel } from './levels';
 
-// Third-party boundary: expo-audio evaluates AudioModule on load, requiring fallback stubs under Jest
-if (typeof globalThis !== 'undefined') {
-  const g = globalThis as unknown as {
-    expo?: { modules?: Record<string, unknown> };
-  };
-  g.expo = g.expo ?? {};
-  g.expo.modules = g.expo.modules ?? {};
-  if (!g.expo.modules.ExpoAudio) {
-    class MockAudioPlayer {
-      replace() {}
-      setPlaybackRate() {}
-    }
-    class MockAudioRecorder {
-      prepareToRecordAsync() {
-        return Promise.resolve();
-      }
-      record() {}
-      pause() {}
-      stop() {
-        return Promise.resolve();
-      }
-      getStatus() {
-        return {
-          canRecord: true,
-          isRecording: false,
-          durationMillis: 0,
-          metering: -160,
-          fileSize: 0,
-        };
-      }
-      addListener() {
-        return { remove: () => {} };
-      }
-      removeListener() {}
-      release() {}
-    }
-    g.expo.modules.ExpoAudio = {
-      AudioPlayer: MockAudioPlayer,
-      AudioRecorder: MockAudioRecorder,
-      setAudioModeAsync: async () => {},
-    };
-  }
-}
-
-// Third-party boundary: expo-audio requires the native module stub above before loading in Jest
-/* eslint-disable @typescript-eslint/no-require-imports */
-const {
+import {
   RecordingPresets,
   setAudioModeAsync,
   useAudioRecorder,
-} = require('expo-audio');
-/* eslint-enable @typescript-eslint/no-require-imports */
+} from 'expo-audio';
 
 export interface UseRecorderResult {
   level: SharedValue<number>;
