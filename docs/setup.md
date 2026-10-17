@@ -163,10 +163,10 @@ Stop Expo with Ctrl+C when finished.
 generation through `npm run gen:api`; the workspace has its own TypeScript 5
 dependency while the Expo app uses TypeScript 6.
 
-An APK is a separate manual lead check. The lead must first configure the EAS
-project/account: the dynamic `app.config.ts` currently has no `owner` or
-`extra.eas.projectId`. After `npx eas-cli init`, the lead must add those values
-to the dynamic configuration, preserving the existing app-name/version extras.
+An APK is a separate manual lead check. The dynamic `app.config.ts` now links the
+shared EAS project through `owner` and `extra.eas.projectId`, preserving the
+app-name/version extras. Sign in to an Expo account with access to that project
+and verify the link with `npx eas-cli project:info` before building.
 Then `npx eas-cli build -p android --profile preview` uses the committed internal
 APK profile. Install the result on Android and record startup, build time and any
 problems in the plan issue. Expo Go or CI passing does not verify APK installation.

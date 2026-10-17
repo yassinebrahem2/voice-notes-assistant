@@ -8,6 +8,7 @@ const slug = app.name
   .replace(/^-|-$/g, '');
 
 const config: ExpoConfig = {
+  owner: 'voicevoxas-team',
   name: app.name,
   slug,
   version: app.version,
@@ -18,7 +19,11 @@ const config: ExpoConfig = {
   web: { output: 'single' },
   plugins: ['expo-router', 'expo-font', 'expo-splash-screen'],
   experiments: { typedRoutes: true },
-  extra: { appName: app.name, appVersion: app.version },
+  extra: {
+    appName: app.name,
+    appVersion: app.version,
+    eas: { projectId: '40fe53f5-bcdc-43ab-9fe4-fa30367bea81' },
+  },
 };
 
 export default config;
