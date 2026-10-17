@@ -24,12 +24,13 @@ Lifecycle of a piece of work:
 5. When every task is done, an implementer opens a PR from `plan/<topic>` into `main` (the PR template asks for `Closes #<plan issue>`), requests review from `yassinebrahem2`, and moves the plan issue to "In review".
 6. The lead reviews. Merging the PR closes the plan issue and moves it to "Done".
 
-Project board: GitHub Projects (https://github.com/users/yassinebrahem2/projects/6), Status = Todo / In progress / Blocked / In review / Done. Milestones: one per roadmap stage ("Stage 1: Core MVP", "Stage 2: Stretch and polish"). Board cards are moved by people in the GitHub UI: agent sessions in this repo cannot reach the Projects API, so move your own card when your task changes state.
+Project board: GitHub Projects (https://github.com/users/yassinebrahem2/projects/6), Status = Todo / In progress / Blocked / In review / Done. Milestones: one per roadmap stage ("Stage 1: Core MVP", "Stage 2: Stretch and polish"). Move a card with `scripts/board-status.sh <issue-or-PR number> "<Status>"` (needs `gh` and `jq`, and a token with the `project` scope).
+Most moves are automatic: the board's built-in workflows add items to Todo and set Done on close and merge, and `.github/workflows/board.yml` sets In progress when a `task` issue is assigned (Todo when its last assignee is removed), Blocked when a `decision` issue names the task under "Blocked task" (In progress again when that Decision closes), and In review when a PR into `main` says `Closes #<n>`. Cloud agent sessions cannot reach the board API; they move a card by running the `board` workflow manually (`workflow_dispatch` with `number` and `status`).
 
 ### Implementer rules
 - Work only on the plan's branch. Never push to `main`; never merge anything.
 - Claim a task by assigning yourself to its sub-issue before starting. Only take a task that is unassigned and whose dependencies are closed.
-- Move your task's card: "In progress" when you start; close the sub-issue when its work is pushed and its checks pass.
+- Assigning yourself moves your task's card to "In progress"; close the sub-issue when its work is pushed and its checks pass.
 - Pull with rebase before you start and before you push, then re-read the plan (it may have changed). Commit small and push often, since several people share the branch.
 - Follow the plan as written. If the plan is wrong, unclear, or needs a decision, do not improvise: open a Decision issue linked to the blocked task, and move that task to "Blocked" until the lead answers.
 - Do not edit specs, plans, `docs/roadmap.md` or `project_knowledge.md`; those belong to the lead.
