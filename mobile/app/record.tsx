@@ -14,7 +14,9 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { isExpoGo } from '../src/recording/environment';
 import { closeFanOut } from '../src/recording/fanOutStore';
+import { LevelRing } from '../src/recording/LevelRing';
 import { useRecorder } from '../src/recording/useRecorder';
+import { Waveform } from '../src/recording/Waveform';
 import { fontFamilies } from '../src/theme/fonts';
 import { motion } from '../src/theme/motion';
 import type { TapeTheme } from '../src/theme/paperTheme';
@@ -148,13 +150,7 @@ export default function RecordScreen() {
             </Text>
           ) : null}
 
-          <View
-            testID="level-placeholder"
-            style={[
-              styles.levelPlaceholder,
-              { backgroundColor: tape.raised, borderColor: tape.line },
-            ]}
-          />
+          <Waveform level={recorder.level} />
         </View>
 
         {recorder.paused ? (
@@ -205,6 +201,7 @@ export default function RecordScreen() {
         ) : null}
 
         <View style={styles.footer}>
+          <LevelRing level={recorder.level} />
           <Pressable
             testID="stop-button"
             accessibilityRole="button"
@@ -304,13 +301,6 @@ const styles = StyleSheet.create({
   },
   expoGoNote: {
     marginBottom: spacing.md,
-  },
-  levelPlaceholder: {
-    width: '100%',
-    height: 96,
-    borderRadius: radius.card,
-    borderWidth: 1,
-    marginTop: spacing.md,
   },
   pausedBanner: {
     borderRadius: radius.card,
