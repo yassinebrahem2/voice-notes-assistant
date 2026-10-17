@@ -1,9 +1,11 @@
+import dataclasses
 import io
 from pathlib import Path
 from typing import Any
 from unittest.mock import MagicMock
 
 import httpx2 as httpx
+import openai
 import pytest
 from langchain_core.messages import AIMessage
 from pydantic import HttpUrl, TypeAdapter
@@ -19,7 +21,7 @@ from app.db.migrate import apply_migrations
 from app.llm.smoke import run_smoke_tests
 from app.rag.calibrate import CalibrationResult, calibrate_retrieval, run_calibration
 from app.rag.fakes import FakeEmbedder
-from tests.agents.fake_models import ScriptedChatModel
+from tests.agents.fake_models import FailingChatModel, ScriptedChatModel
 from tests.seed import seed_chunk, seed_recording
 
 
@@ -104,7 +106,7 @@ def test_cli_argument_parsing(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -
         main(["calibrate-retrieval"])
 
 
-def test_smoke_provider_models_check_success_and_failure(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_smoke_provider_models_check_success_and_failure(container: Container, monkeypatch: pytest.MonkeyPatch) -> None:
     registry = make_test_registry()
     monkeypatch.setenv("GROQ_API_KEY", "dummy-groq-key")
     monkeypatch.setenv("GEMINI_API_KEY", "dummy-gemini-key")
@@ -124,18 +126,17 @@ def test_smoke_provider_models_check_success_and_failure(monkeypatch: pytest.Mon
     out = io.StringIO()
 
     # Mock role checks so we isolate the provider models check
-    def mock_llm_entry(
-        entry: LlmEntry, registry: ModelsRegistry, *, check_type: str
-    ) -> tuple[bool, str, dict[str, int]]:
+    def mock_llm_entry(entry: LlmEntry, c: Container, *, check_type: str) -> tuple[bool, str, dict[str, int]]:
         return (True, "mocked", {})
 
-    def mock_analysis_entry(entry: LlmEntry, registry: ModelsRegistry) -> tuple[bool, str, dict[str, int]]:
+    def mock_analysis_entry(entry: LlmEntry, reg: ModelsRegistry) -> tuple[bool, str, dict[str, int]]:
         return (True, "mocked", {})
 
     monkeypatch.setattr("app.llm.smoke._check_llm_entry", mock_llm_entry)
     monkeypatch.setattr("app.llm.smoke._check_analysis_entry", mock_analysis_entry)
 
-    exit_code = run_smoke_tests(registry, client=mock_client, out_stream=out)
+    test_container = dataclasses.replace(container, models=registry)
+    exit_code = run_smoke_tests(test_container, client=mock_client, out_stream=out)
     output = out.getvalue()
 
     assert exit_code == 1
@@ -143,32 +144,31 @@ def test_smoke_provider_models_check_success_and_failure(monkeypatch: pytest.Mon
     assert "[FAIL] gemini: model 'gemini-flash-latest' not found" in output
 
 
-def test_smoke_provider_missing_key(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_smoke_provider_missing_key(container: Container, monkeypatch: pytest.MonkeyPatch) -> None:
     registry = make_test_registry()
     monkeypatch.delenv("GROQ_API_KEY", raising=False)
     monkeypatch.delenv("GEMINI_API_KEY", raising=False)
 
     out = io.StringIO()
 
-    def mock_llm_entry_missing(
-        entry: LlmEntry, registry: ModelsRegistry, *, check_type: str
-    ) -> tuple[bool, str, dict[str, int]]:
+    def mock_llm_entry_missing(entry: LlmEntry, c: Container, *, check_type: str) -> tuple[bool, str, dict[str, int]]:
         return (True, "mocked", {})
 
-    def mock_analysis_entry_missing(entry: LlmEntry, registry: ModelsRegistry) -> tuple[bool, str, dict[str, int]]:
+    def mock_analysis_entry_missing(entry: LlmEntry, reg: ModelsRegistry) -> tuple[bool, str, dict[str, int]]:
         return (True, "mocked", {})
 
     monkeypatch.setattr("app.llm.smoke._check_llm_entry", mock_llm_entry_missing)
     monkeypatch.setattr("app.llm.smoke._check_analysis_entry", mock_analysis_entry_missing)
 
-    exit_code = run_smoke_tests(registry, out_stream=out)
+    test_container = dataclasses.replace(container, models=registry)
+    exit_code = run_smoke_tests(test_container, out_stream=out)
     output = out.getvalue()
 
     assert exit_code == 1
     assert "Missing GROQ_API_KEY" in output or "missing API key in GROQ_API_KEY" in output.lower()
 
 
-def test_smoke_llm_entry_checks(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_smoke_llm_entry_checks(container: Container, monkeypatch: pytest.MonkeyPatch) -> None:
     registry = make_test_registry()
     monkeypatch.setenv("GROQ_API_KEY", "dummy-groq-key")
     monkeypatch.setenv("GEMINI_API_KEY", "dummy-gemini-key")
@@ -180,11 +180,24 @@ def test_smoke_llm_entry_checks(monkeypatch: pytest.MonkeyPatch) -> None:
         json={"data": [{"id": "openai/gpt-oss-20b"}, {"id": "gemini-flash-latest"}]},
     )
 
-    # Orchestrator tool turn returns search_transcripts tool call
-    tool_turn_msg = AIMessage(
+    # Orchestrator turn 1 returns search_transcripts tool call
+    orch_tool_msg = AIMessage(
         content="",
         tool_calls=[{"name": "search_transcripts", "args": {"query": "project status"}, "id": "call_1"}],
         usage_metadata={"input_tokens": 40, "output_tokens": 15, "total_tokens": 55},
+    )
+
+    # Orchestrator turn 2 returns ChatReply tool call
+    orch_reply_msg = AIMessage(
+        content="",
+        tool_calls=[
+            {
+                "name": "ChatReply",
+                "args": ChatReply(reply_type="answer", text="Project status update [P1]").model_dump(),
+                "id": "call_2",
+            }
+        ],
+        usage_metadata={"input_tokens": 50, "output_tokens": 20, "total_tokens": 70},
     )
 
     # Forced final turn returns ChatReply tool call
@@ -194,7 +207,7 @@ def test_smoke_llm_entry_checks(monkeypatch: pytest.MonkeyPatch) -> None:
             {
                 "name": "ChatReply",
                 "args": ChatReply(reply_type="answer", text="Project status update [P1]").model_dump(),
-                "id": "call_2",
+                "id": "call_3",
             }
         ],
         usage_metadata={"input_tokens": 65, "output_tokens": 20, "total_tokens": 85},
@@ -212,26 +225,30 @@ def test_smoke_llm_entry_checks(monkeypatch: pytest.MonkeyPatch) -> None:
                     key_points=[Item(text="Launch on track", sources=[1])],
                     clean_text="Clean note text",
                 ).model_dump(),
-                "id": "call_3",
+                "id": "call_4",
             }
         ],
         usage_metadata={"input_tokens": 120, "output_tokens": 50, "total_tokens": 170},
     )
 
-    call_index = 0
-    messages = [tool_turn_msg, final_turn_msg, analysis_msg]
+    orch_messages = [orch_tool_msg, orch_reply_msg]
+    groq_call = 0
 
     def fake_chat_model(entry: LlmEntry, reg: ModelsRegistry) -> ScriptedChatModel:
-        nonlocal call_index
-        msg = messages[call_index % len(messages)]
-        call_index += 1
-        return ScriptedChatModel(messages=iter([msg]))
+        nonlocal groq_call
+        if entry.provider == "gemini":
+            return ScriptedChatModel(messages=iter([analysis_msg]))
+        groq_call += 1
+        if groq_call == 1:
+            return ScriptedChatModel(messages=iter(orch_messages))
+        return ScriptedChatModel(messages=iter([final_turn_msg]))
 
     monkeypatch.setattr("app.llm.smoke.chat_model", fake_chat_model)
     monkeypatch.setattr("app.llm.factory.chat_model", fake_chat_model)
 
     out = io.StringIO()
-    exit_code = run_smoke_tests(registry, client=mock_client, out_stream=out)
+    test_container = dataclasses.replace(container, models=registry)
+    exit_code = run_smoke_tests(test_container, client=mock_client, out_stream=out)
     output = out.getvalue()
 
     assert exit_code == 0
@@ -242,17 +259,219 @@ def test_smoke_llm_entry_checks(monkeypatch: pytest.MonkeyPatch) -> None:
     assert "tokens:" in output
 
 
-def test_smoke_llm_never_prints_keys(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_smoke_orchestrator_check_passes_when_tool_called_then_reply(
+    container: Container, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    registry = make_test_registry()
+    monkeypatch.setenv("GROQ_API_KEY", "dummy-groq-key")
+    monkeypatch.setenv("GEMINI_API_KEY", "dummy-gemini-key")
+
+    mock_client = MagicMock()
+    mock_client.get.return_value = httpx.Response(
+        200,
+        request=httpx.Request("GET", "https://api.openai.com/v1/models"),
+        json={"data": [{"id": "openai/gpt-oss-20b"}, {"id": "gemini-flash-latest"}]},
+    )
+
+    orch_tool_msg = AIMessage(
+        content="",
+        tool_calls=[{"name": "search_transcripts", "args": {"query": "budget"}, "id": "call_1"}],
+        usage_metadata={"input_tokens": 30, "output_tokens": 10, "total_tokens": 40},
+    )
+    orch_reply_msg = AIMessage(
+        content="",
+        tool_calls=[
+            {
+                "name": "ChatReply",
+                "args": ChatReply(reply_type="answer", text="Found budget notes.").model_dump(),
+                "id": "call_2",
+            }
+        ],
+        usage_metadata={"input_tokens": 45, "output_tokens": 15, "total_tokens": 60},
+    )
+    final_turn_msg = AIMessage(
+        content="",
+        tool_calls=[
+            {
+                "name": "ChatReply",
+                "args": ChatReply(reply_type="answer", text="Answer").model_dump(),
+                "id": "call_3",
+            }
+        ],
+    )
+    analysis_msg = AIMessage(
+        content="",
+        tool_calls=[
+            {
+                "name": "NoteAnalysis",
+                "args": NoteAnalysis(
+                    title="Note",
+                    tags=["test"],
+                    key_points=[Item(text="Point", sources=[1])],
+                    clean_text="Clean",
+                ).model_dump(),
+                "id": "call_4",
+            }
+        ],
+    )
+
+    orch_messages = [orch_tool_msg, orch_reply_msg]
+    groq_call = 0
+
+    def fake_chat_model(entry: LlmEntry, reg: ModelsRegistry) -> ScriptedChatModel:
+        nonlocal groq_call
+        if entry.provider == "gemini":
+            return ScriptedChatModel(messages=iter([analysis_msg]))
+        groq_call += 1
+        if groq_call == 1:
+            return ScriptedChatModel(messages=iter(orch_messages))
+        return ScriptedChatModel(messages=iter([final_turn_msg]))
+
+    monkeypatch.setattr("app.llm.smoke.chat_model", fake_chat_model)
+    monkeypatch.setattr("app.llm.factory.chat_model", fake_chat_model)
+
+    out = io.StringIO()
+    test_container = dataclasses.replace(container, models=registry)
+    exit_code = run_smoke_tests(test_container, client=mock_client, out_stream=out)
+    output = out.getvalue()
+
+    assert exit_code == 0
+    assert "[PASS] groq (openai/gpt-oss-20b) tool call: called 'search_transcripts'" in output
+
+
+def test_smoke_orchestrator_check_fails_when_no_tool_called(
+    container: Container, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    registry = make_test_registry()
+    monkeypatch.setenv("GROQ_API_KEY", "dummy-groq-key")
+    monkeypatch.setenv("GEMINI_API_KEY", "dummy-gemini-key")
+
+    mock_client = MagicMock()
+    mock_client.get.return_value = httpx.Response(
+        200,
+        request=httpx.Request("GET", "https://api.openai.com/v1/models"),
+        json={"data": [{"id": "openai/gpt-oss-20b"}, {"id": "gemini-flash-latest"}]},
+    )
+
+    # Returns ChatReply directly without calling any search/orchestrator tool
+    direct_reply_msg = AIMessage(
+        content="",
+        tool_calls=[
+            {
+                "name": "ChatReply",
+                "args": ChatReply(reply_type="answer", text="Direct answer without tools").model_dump(),
+                "id": "call_1",
+            }
+        ],
+    )
+    final_turn_msg = AIMessage(
+        content="",
+        tool_calls=[
+            {
+                "name": "ChatReply",
+                "args": ChatReply(reply_type="answer", text="Answer").model_dump(),
+                "id": "call_2",
+            }
+        ],
+    )
+    analysis_msg = AIMessage(
+        content="",
+        tool_calls=[
+            {
+                "name": "NoteAnalysis",
+                "args": NoteAnalysis(
+                    title="Note",
+                    tags=["test"],
+                    key_points=[Item(text="Point", sources=[1])],
+                    clean_text="Clean",
+                ).model_dump(),
+                "id": "call_3",
+            }
+        ],
+    )
+
+    groq_call = 0
+
+    def fake_chat_model(entry: LlmEntry, reg: ModelsRegistry) -> ScriptedChatModel:
+        nonlocal groq_call
+        if entry.provider == "gemini":
+            return ScriptedChatModel(messages=iter([analysis_msg]))
+        groq_call += 1
+        if groq_call == 1:
+            return ScriptedChatModel(messages=iter([direct_reply_msg]))
+        return ScriptedChatModel(messages=iter([final_turn_msg]))
+
+    monkeypatch.setattr("app.llm.smoke.chat_model", fake_chat_model)
+    monkeypatch.setattr("app.llm.factory.chat_model", fake_chat_model)
+
+    out = io.StringIO()
+    test_container = dataclasses.replace(container, models=registry)
+    exit_code = run_smoke_tests(test_container, client=mock_client, out_stream=out)
+    output = out.getvalue()
+
+    assert exit_code == 1
+    assert "[FAIL] groq (openai/gpt-oss-20b) tool call: no tool call returned" in output
+
+
+def test_smoke_error_reporting_prints_status_and_message(container: Container, monkeypatch: pytest.MonkeyPatch) -> None:
+    registry = make_test_registry()
+    monkeypatch.setenv("GROQ_API_KEY", "dummy-groq-key")
+    monkeypatch.setenv("GEMINI_API_KEY", "dummy-gemini-key")
+
+    mock_client = MagicMock()
+    mock_client.get.return_value = httpx.Response(
+        200,
+        request=httpx.Request("GET", "https://api.openai.com/v1/models"),
+        json={"data": [{"id": "openai/gpt-oss-20b"}, {"id": "gemini-flash-latest"}]},
+    )
+
+    req = httpx.Request("POST", "https://api.groq.com/openai/v1/chat/completions")
+    resp = httpx.Response(400, request=req, json={"error": {"message": "Invalid model specified"}})
+    err = openai.BadRequestError(
+        "Invalid model specified",
+        response=resp,
+        body={"error": {"message": "Invalid model specified"}},
+    )
+
+    def fake_failing_chat_model(entry: LlmEntry, reg: ModelsRegistry) -> FailingChatModel:
+        return FailingChatModel(err)
+
+    monkeypatch.setattr("app.llm.smoke.chat_model", fake_failing_chat_model)
+    monkeypatch.setattr("app.llm.factory.chat_model", fake_failing_chat_model)
+
+    out = io.StringIO()
+    test_container = dataclasses.replace(container, models=registry)
+    exit_code = run_smoke_tests(test_container, client=mock_client, out_stream=out)
+    output = out.getvalue()
+
+    assert exit_code == 1
+    assert "[FAIL] groq (openai/gpt-oss-20b) tool call:" in output
+    assert "400" in output
+    assert "Invalid model specified" in output
+
+
+def test_smoke_llm_never_prints_keys(container: Container, monkeypatch: pytest.MonkeyPatch) -> None:
     sentinel = "DUMMY_SENSITIVE_SENTINEL_VAL_XYZZY_9999"
     monkeypatch.setenv("GROQ_API_KEY", sentinel)
     monkeypatch.setenv("GEMINI_API_KEY", sentinel)
 
     registry = make_test_registry()
     mock_client = MagicMock()
-    mock_client.get.side_effect = RuntimeError("Failed connection with key leak attempt")
+    mock_client.get.side_effect = RuntimeError(f"Failed connection with key leak attempt: {sentinel}")
+
+    req = httpx.Request("POST", "https://api.groq.com/openai/v1/chat/completions")
+    resp = httpx.Response(400, request=req, json={"error": {"message": f"Bad key: {sentinel}"}})
+    err = openai.BadRequestError(f"Bad key: {sentinel}", response=resp, body={"error": f"Bad key: {sentinel}"})
+
+    def fake_failing_chat_model(entry: LlmEntry, reg: ModelsRegistry) -> FailingChatModel:
+        return FailingChatModel(err)
+
+    monkeypatch.setattr("app.llm.smoke.chat_model", fake_failing_chat_model)
+    monkeypatch.setattr("app.llm.factory.chat_model", fake_failing_chat_model)
 
     out = io.StringIO()
-    run_smoke_tests(registry, client=mock_client, out_stream=out)
+    test_container = dataclasses.replace(container, models=registry)
+    run_smoke_tests(test_container, client=mock_client, out_stream=out)
     output = out.getvalue()
 
     assert sentinel not in output

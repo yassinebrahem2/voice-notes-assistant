@@ -2,24 +2,32 @@
 
 from __future__ import annotations
 
+import asyncio
+import dataclasses
 import sys
-from typing import TYPE_CHECKING, Any, TextIO, cast
+import tempfile
+from datetime import date
+from pathlib import Path
+from typing import Any, TextIO, cast
 
 import httpx2 as httpx
-from langchain.tools import tool
+import openai
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, ToolMessage
 
+from app.agents.chat_context import ChatContext
+from app.agents.chat_graph import build_chat_graph
 from app.agents.prompts import load_prompt
 from app.agents.schemas import ChatReply, NoteAnalysis
+from app.agents.sources import SourceRegistry
 from app.agents.transcript_input import render_transcript
 from app.config.models_registry import LlmEntry, ModelsRegistry, Provider
 from app.config.settings import provider_key
+from app.container import Container
+from app.db.connection import connect
+from app.db.migrate import apply_migrations
 from app.llm.factory import build_entry_agent, chat_model
 from app.processing.protocols import TranscriptLine
-
-if TYPE_CHECKING:
-    from app.container import Container
-
+from app.rag.fakes import FakeEmbedder
 
 SAMPLE_TRANSCRIPT_LINES: list[TranscriptLine] = [
     TranscriptLine(
@@ -35,10 +43,43 @@ SAMPLE_TRANSCRIPT_LINES: list[TranscriptLine] = [
 ]
 
 
-@tool
-def search_transcripts(query: str) -> str:
-    """Search recorded meeting and note transcripts for keywords."""
-    return "Passages found"
+def _redact_keys(text: str, registry: ModelsRegistry) -> str:
+    redacted = text
+    for p_name in registry.providers:
+        secret = provider_key(registry, p_name)
+        if secret is not None:
+            val = secret.get_secret_value()
+            if val and val in redacted:
+                redacted = redacted.replace(val, "[REDACTED]")
+    return redacted
+
+
+def _format_error(err: Exception, registry: ModelsRegistry | None = None) -> str:
+    target: Exception = err
+    if not isinstance(target, openai.APIStatusError) and isinstance(target.__cause__, openai.APIStatusError):
+        target = target.__cause__
+
+    if isinstance(target, openai.APIStatusError):
+        msg = target.message or (str(target.body) if target.body is not None else str(target))
+        detail = f"HTTP {target.status_code}: {msg}"
+    else:
+        err_str = str(target)
+        detail = f"{type(target).__name__}: {err_str}" if err_str else type(target).__name__
+    if registry is not None:
+        detail = _redact_keys(detail, registry)
+    return detail
+
+
+class _RedactingWriter:
+    def __init__(self, target: TextIO, registry: ModelsRegistry) -> None:
+        self._target = target
+        self._registry = registry
+
+    def write(self, s: str) -> int:
+        return self._target.write(_redact_keys(s, self._registry))
+
+    def flush(self) -> None:
+        self._target.flush()
 
 
 def _extract_token_usage(message_or_response: Any) -> dict[str, int]:
@@ -132,38 +173,96 @@ def _check_provider_models(
                 results.append((False, f"model '{model}' not found in provider models"))
         return results
     except Exception as err:
-        return [(False, f"GET /models failed ({type(err).__name__})")]
+        return [(False, f"GET /models failed ({_format_error(err, registry)})")]
+
+
+def _check_llm_orchestrator(
+    entry: LlmEntry,
+    container: Container,
+) -> tuple[bool, str, dict[str, int]]:
+    try:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            temp_db_path = Path(tmp_dir) / "smoke.sqlite3"
+            conn = connect(temp_db_path)
+            try:
+                apply_migrations(conn)
+            finally:
+                conn.close()
+
+            roles_copy = container.models.roles.model_copy(update={"llm": [entry]})
+            entry_registry = container.models.model_copy(update={"roles": roles_copy})
+            temp_container = dataclasses.replace(
+                container,
+                models=entry_registry,
+                db_path=temp_db_path,
+                embedder=FakeEmbedder(),
+            )
+            graph = build_chat_graph(temp_container)
+            ctx = ChatContext(
+                db_path=temp_db_path,
+                embedder=temp_container.embedder,
+                settings=temp_container.settings,
+                models=entry_registry,
+                scope="both",
+                tag_ids=[],
+                today=date.today(),
+                sources=SourceRegistry(),
+            )
+            res = cast(
+                dict[str, Any],
+                asyncio.run(
+                    graph.ainvoke(  # pyright: ignore[reportUnknownMemberType]
+                        {"messages": [HumanMessage(content="Search notes about budget")]},
+                        context=ctx,
+                    )
+                ),
+            )
+
+        messages_raw: Any = res.get("messages", [])
+        messages = cast(list[BaseMessage], messages_raw) if isinstance(messages_raw, list) else []
+
+        usage: dict[str, int] = {}
+        for msg in messages:
+            if isinstance(msg, AIMessage):
+                msg_usage = _extract_token_usage(msg)
+                for k, v in msg_usage.items():
+                    usage[k] = usage.get(k, 0) + v
+
+        tool_call_name: str | None = None
+        for msg in messages:
+            if isinstance(msg, AIMessage) and msg.tool_calls:
+                for tc in msg.tool_calls:
+                    tc_name = tc.get("name")
+                    if tc_name and tc_name != "ChatReply" and tool_call_name is None:
+                        tool_call_name = str(tc_name)
+
+        if not tool_call_name:
+            return (False, "no tool call returned", usage)
+
+        if res.get("structured_response") is None:
+            return (False, "no structured response returned", usage)
+
+        return (True, f"called '{tool_call_name}'", usage)
+    except Exception as err:
+        return (False, f"tool call failed ({_format_error(err, container.models)})", {})
 
 
 def _check_llm_entry(
     entry: LlmEntry,
-    registry: ModelsRegistry,
+    container: Container,
     *,
     check_type: str,
 ) -> tuple[bool, str, dict[str, int]]:
-    try:
-        model = chat_model(entry, registry)
-    except Exception as err:
-        return (False, f"model construction failed ({type(err).__name__})", {})
-
     if check_type == "tool_call":
-        try:
-            bound: Any = model.bind_tools([search_transcripts])  # pyright: ignore[reportUnknownMemberType]
-            res: Any = bound.invoke([HumanMessage(content="Search the recordings for project launch updates.")])
-            usage = _extract_token_usage(res)
-            tool_calls: Any = getattr(res, "tool_calls", [])
-            if tool_calls and isinstance(tool_calls, list):
-                tool_calls_list = cast(list[object], tool_calls)
-                raw_call = tool_calls_list[0]
-                if isinstance(raw_call, dict):
-                    call_dict = cast(dict[str, Any], raw_call)
-                    call_name = str(call_dict.get("name", ""))
-                    return (True, f"called '{call_name}'", usage)
-            return (False, "no tool call returned", usage)
-        except Exception as err:
-            return (False, f"tool call failed ({type(err).__name__})", {})
+        return _check_llm_orchestrator(entry, container)
 
     if check_type == "forced_final":
+        registry = container.models
+        try:
+            model = chat_model(entry, registry)
+        except Exception as err:
+            return (False, f"model construction failed ({_format_error(err, registry)})", {})
+
         try:
             bound: Any = model.bind_tools([ChatReply], tool_choice="required")  # pyright: ignore[reportUnknownMemberType]
             messages: list[BaseMessage] = [
@@ -191,7 +290,7 @@ def _check_llm_entry(
                     return (False, f"unexpected tool call '{call_name}'", usage)
             return (False, "no tool call returned for forced final turn", usage)
         except Exception as err:
-            return (False, f"forced final turn failed ({type(err).__name__})", {})
+            return (False, f"forced final turn failed ({_format_error(err, registry)})", {})
 
     return (False, f"unknown check type {check_type}", {})
 
@@ -226,11 +325,11 @@ def _check_analysis_entry(
             return (True, f"produced NoteAnalysis '{response.title}'", usage)
         return (False, "failed to produce NoteAnalysis", usage)
     except Exception as err:
-        return (False, f"summarizer failed ({type(err).__name__})", {})
+        return (False, f"summarizer failed ({_format_error(err, registry)})", {})
 
 
 def run_smoke_tests(
-    registry_or_container: ModelsRegistry | Container,
+    container: Container,
     *,
     client: httpx.Client | None = None,
     out_stream: TextIO | None = None,
@@ -239,11 +338,9 @@ def run_smoke_tests(
 
     Returns 0 if all checks pass, 1 if any check fails. Never logs or prints secrets.
     """
-    out = out_stream or sys.stdout
-    if isinstance(registry_or_container, ModelsRegistry):
-        registry = registry_or_container
-    else:
-        registry = registry_or_container.models
+    registry = container.models
+    raw_out = out_stream or sys.stdout
+    out = _RedactingWriter(raw_out, registry)
 
     all_passed = True
     total_checks = 0
@@ -271,7 +368,7 @@ def run_smoke_tests(
     for entry in registry.roles.llm:
         # 1. Tool call turn
         total_checks += 1
-        ok_tool, desc_tool, usage_tool = _check_llm_entry(entry, registry, check_type="tool_call")
+        ok_tool, desc_tool, usage_tool = _check_llm_entry(entry, container, check_type="tool_call")
         tokens_tool = _format_tokens(usage_tool)
         if ok_tool:
             passed_checks += 1
@@ -282,7 +379,7 @@ def run_smoke_tests(
 
         # 2. Forced final turn
         total_checks += 1
-        ok_final, desc_final, usage_final = _check_llm_entry(entry, registry, check_type="forced_final")
+        ok_final, desc_final, usage_final = _check_llm_entry(entry, container, check_type="forced_final")
         tokens_final = _format_tokens(usage_final)
         if ok_final:
             passed_checks += 1
