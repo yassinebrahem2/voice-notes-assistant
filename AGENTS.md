@@ -60,7 +60,7 @@ Lifecycle of a piece of work:
 6. The lead reviews. Merging the PR closes the plan issue and moves it to "Done".
 
 Project board: GitHub Projects (https://github.com/users/yassinebrahem2/projects/6), Status = Todo / In progress / Blocked / In review / Done. Milestones: one per roadmap stage ("Stage 1: Core MVP", "Stage 2: Stretch and polish"). Move a card with `scripts/board-status.sh <issue-or-PR number> "<Status>"` (needs `gh` and `jq`, and a token with the `project` scope).
-Most moves are automatic: the board's built-in workflows add items to Todo and set Done on close and merge, and `.github/workflows/board.yml` sets In progress when a `task` issue is assigned (Todo when its last assignee is removed), Blocked when a `decision` issue names the task under "Blocked task" (In progress again when that Decision closes), and In review when a PR into `main` says `Closes #<n>`. Cloud agent sessions cannot reach the board API; they move a card by running the `board` workflow manually (`workflow_dispatch` with `number` and `status`).
+Most moves are automatic: `.github/workflows/board.yml` adds every new issue to Todo, the board's built-in workflows set Done on close and merge, and `board.yml` sets In progress when a `task` issue is assigned (Todo when its last assignee is removed), Blocked when a `decision` issue names the task under "Blocked task" (In progress again when that Decision closes), and In review when a PR into `main` says `Closes #<n>`. Cloud agent sessions cannot reach the board API; they move a card by running the `board` workflow manually (`workflow_dispatch` with `number` and `status`).
 
 ### Implementer rules
 - Work only on the plan's branch. Never push to `main`; never merge anything.

@@ -1,5 +1,6 @@
-# Moves cards on the project board for the statuses GitHub's built-in project workflows do not
-# cover (they already handle Todo on add, and Done on close and merge).
+# Adds new issues to the project board and moves cards for the statuses GitHub's built-in project
+# workflows do not cover (they handle Done on close and merge). Adding is done here because the
+# board's built-in auto-add workflow did not add new issues.
 name: board
 
 on:
@@ -59,6 +60,7 @@ jobs:
               left=$(jq '.issue.assignees | length' "$GITHUB_EVENT_PATH")
               if has_label task && [ "$open" = open ] && [ "$left" = 0 ]; then move "$issue_number" "Todo"; fi ;;
             issues/opened|issues/closed)
+              if [ "$ACTION" = opened ]; then move "$issue_number" "Todo"; fi
               # A Decision issue names the task it blocks under "Blocked task".
               if has_label decision; then
                 task=$(jq -r '.issue.body // ""' "$GITHUB_EVENT_PATH" \
