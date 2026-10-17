@@ -1,10 +1,13 @@
 import os
+from collections.abc import Iterator
 from pathlib import Path
 from typing import cast
 
 import pytest
 import yaml
+from fastapi.testclient import TestClient
 
+from app.api.app import create_app
 from app.config.app_config import load_app_config
 from app.config.settings import Settings, load_settings
 from app.container import Container, build_container
@@ -45,3 +48,9 @@ def container(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Container:
     finally:
         connection.close()
     return result
+
+
+@pytest.fixture
+def client(container: Container) -> Iterator[TestClient]:
+    with TestClient(create_app(container)) as test_client:
+        yield test_client

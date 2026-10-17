@@ -4,9 +4,23 @@ Instructions for every coding agent working in this repository (Claude Code, Cod
 
 These rules apply to every session, whoever runs it and whatever agent they use.
 
-## Status
+## Backend commands
 
-Design phase: no code yet, so no build, lint or test commands exist. Add them here once the code is scaffolded (one "<Area> commands" section per area: Backend commands, Mobile commands), and delete this Status section then.
+Run from `backend/` with Python 3.12 and uv:
+- Install: `uv sync --locked`
+- Run: `uv run python -m app.cli serve`
+- Tests: `uv run pytest`
+- Lint: `uv run ruff check .`
+- Format check: `uv run ruff format --check .`
+- Types: `uv run pyright`
+- Export API: `uv run python -m app.cli export-openapi`
+- Check API: `uv run python -m app.cli export-openapi --check`
+
+The foundation binds fakes for speech, embeddings and analysis, including when the requested speech backend is `real`. `/api/v1/health` reports the bound backend. The processing plan adds the speech extra.
+
+## Mobile commands
+
+The mobile scaffold is not implemented yet. Add its commands when it is available.
 
 ## Team workflow
 
