@@ -97,6 +97,32 @@ Expect HTTP 200 and JSON containing `app_name`, `version`,
 `speech_backend: "fake"` and `roles`. A request to `/api/v1/recordings` currently
 returns HTTP 501; that is expected foundation behavior.
 
+## Provider smoke test and relevance calibration
+
+Once provider keys (`GROQ_API_KEY`, `GEMINI_API_KEY`) are set in `backend/.env`,
+you can run the LLM smoke tests from `backend/`:
+
+```powershell
+uv run python -m app.cli smoke-llm
+```
+
+This verifies that:
+1. Configured models exist on each provider's `GET /models` endpoint.
+2. The orchestrator can invoke tool calls for role `llm`.
+3. The forced final turn succeeds with tool history and `tool_choice="required"`.
+4. The summarizer produces valid analysis for role `llm_analysis`.
+
+To calibrate the retrieval distance cutoff (`retrieval_max_distance` in `backend/app/config/settings.py`)
+against seeded demo recordings:
+
+```powershell
+uv run python -m app.cli seed-demo
+uv run python -m app.cli calibrate-retrieval --questions ../docs/calibration-questions.example.yaml
+```
+
+The script reports the best cosine distance for expected and unrelated queries, detects any
+overlap between expected hits and unrelated hits, and suggests an optimal `retrieval_max_distance` threshold.
+
 ## Private HTTPS from the phone
 
 1. Connect both devices to Tailscale and confirm they appear in the same tailnet.

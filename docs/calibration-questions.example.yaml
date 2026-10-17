@@ -1,0 +1,45 @@
+# Example calibration questions file for relevance threshold tuning.
+#
+# Structure:
+#   questions: list of question entries
+#     - text: str (the query text)
+#       expect_recording_title: str (exact recording title expected to be retrieved)
+#       or
+#       unrelated: true (query is off-topic and should not match any recording)
+#
+# Run calibration with:
+#   python -m app.cli calibrate-retrieval --questions docs/calibration-questions.example.yaml
+
+questions:
+  # Expected queries matching "Weekly Project Standup"
+  - text: "What did we decide about storing sqlite-vec embeddings?"
+    expect_recording_title: "Weekly Project Standup"
+
+  - text: "Who is responsible for delivering the indexing pipeline next Friday?"
+    expect_recording_title: "Weekly Project Standup"
+
+  - text: "Do we need to benchmark search latencies on older Android phones?"
+    expect_recording_title: "Weekly Project Standup"
+
+  # Expected queries matching "Architecture Ideas for Offline Search"
+  - text: "Why do we keep all vector indexes in SQLite using sqlite-vec?"
+    expect_recording_title: "Architecture Ideas for Offline Search"
+
+  - text: "How should chunk boundaries be determined for speaker turns and token limits?"
+    expect_recording_title: "Architecture Ideas for Offline Search"
+
+  - text: "Which distance metric gives the best recall across short queries with normalized embeddings?"
+    expect_recording_title: "Architecture Ideas for Offline Search"
+
+  # Unrelated queries (should be filtered out by retrieval_max_distance)
+  - text: "What is the capital of France and what is its population?"
+    unrelated: true
+
+  - text: "How to bake a sourdough bread with crispy crust?"
+    unrelated: true
+
+  - text: "What was the score of the 1994 FIFA World Cup final?"
+    unrelated: true
+
+  - text: "Explain Einstein's theory of general relativity in simple terms."
+    unrelated: true
