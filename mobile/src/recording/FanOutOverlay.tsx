@@ -81,7 +81,8 @@ function FanOutMenu({
   const reveal = useSharedValue(0);
   const expansion = useSharedValue(1);
   const fade = useSharedValue(0);
-  const anchorBottom = Math.max(insets.bottom, spacing.sm);
+  // Tab rows are 72 dp tall; the 64 dp Record disc leaves an 8 dp gap above safe-area padding.
+  const anchorBottom = Math.max(insets.bottom, spacing.sm) + spacing.sm;
   const centerY = height - anchorBottom - spacing.xl - rise;
 
   const cancel = useCallback(() => {

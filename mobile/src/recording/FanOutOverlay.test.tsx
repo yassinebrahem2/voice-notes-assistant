@@ -7,13 +7,21 @@ import {
 } from '@testing-library/react-native';
 import * as Haptics from 'expo-haptics';
 import { router } from 'expo-router';
-import { BackHandler, Linking, StyleSheet, type ViewStyle } from 'react-native';
+import {
+  BackHandler,
+  Dimensions,
+  Linking,
+  StyleSheet,
+  type ViewStyle,
+} from 'react-native';
 import { PaperProvider } from 'react-native-paper';
 import * as Reanimated from 'react-native-reanimated';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import RecordScreen from '../../app/record';
+import { TabBar, type TabBarProps } from '../components/TabBar';
 import { paperTheme } from '../theme/paperTheme';
+import { spacing } from '../theme/tokens';
 import { closeFanOut, openFanOut, useFanOut } from './fanOutStore';
 import { FanOutOverlay } from './FanOutOverlay';
 import { ensureMicPermission } from './permissions';
@@ -120,6 +128,75 @@ test('opens labelled discs only after permission and cancels with the close disc
   expect(store.current).toBe(false);
   expect(screen.queryByRole('button', { name: 'Meeting' })).toBeNull();
 });
+
+test.each([0, 24, 48])(
+  'aligns the close disc and fan-out origin with Record at bottom inset %s',
+  async (bottom) => {
+    const insets = { ...metrics.insets, bottom };
+    await render(
+      <SafeAreaProvider initialMetrics={{ ...metrics, insets }}>
+        <PaperProvider theme={paperTheme('dark')}>
+          <TabBar
+            state={{
+              index: 0,
+              routes: ['meetings', 'notes', 'chat', 'settings'].map((name) => ({
+                name,
+                key: name,
+              })),
+            }}
+            emitter={{ emit: jest.fn() } as unknown as TabBarProps['emitter']}
+            navigateToTab={jest.fn()}
+            insets={insets}
+          />
+          <FanOutOverlay />
+        </PaperProvider>
+      </SafeAreaProvider>,
+    );
+    const barStyle = StyleSheet.flatten(
+      screen.getByTestId('tab-bar').props.style,
+    );
+    const tabStyle = StyleSheet.flatten(
+      screen.getByRole('tab', { name: 'Meetings' }).props.style,
+    );
+    const recordStyle = StyleSheet.flatten(
+      screen.getByRole('button', { name: 'Record' }).props.style,
+    );
+    const recordBottom =
+      barStyle.paddingBottom +
+      tabStyle.marginTop +
+      tabStyle.minHeight -
+      recordStyle.height;
+    await fireEvent.press(screen.getByRole('button', { name: 'Record' }));
+    const closeStyle = StyleSheet.flatten(
+      screen.getByRole('button', { name: 'Close recording menu' }).props.style,
+    );
+    expect(closeStyle.bottom).toBe(recordBottom);
+    expect(closeStyle.height).toBe(recordStyle.height);
+    const expectedCenterY =
+      Dimensions.get('window').height -
+      recordBottom -
+      recordStyle.height / 2 -
+      spacing.xxl * 2;
+    const positions = ['Meeting', 'Note'].map((name) => {
+      let node = screen.getByRole('button', { name });
+      const menuSize = StyleSheet.flatten(node.props.style).height;
+      while (
+        node.parent &&
+        StyleSheet.flatten(node.props.style)?.position !== 'absolute'
+      )
+        node = node.parent;
+      const style = StyleSheet.flatten(node.props.style);
+      expect(style.top + menuSize / 2).toBe(expectedCenterY);
+      return style;
+    });
+    await fireEvent.press(screen.getByRole('button', { name: 'Note' }));
+    const coverStyle = StyleSheet.flatten(
+      screen.getByTestId('fan-out-transition').props.style,
+    );
+    expect(coverStyle.top).toBe(positions[1].top);
+    expect(coverStyle.left).toBe(positions[1].left);
+  },
+);
 
 test('ignores a permission result after cancelling and reopening', async () => {
   let resolveFirst!: (value: 'granted') => void;
