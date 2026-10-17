@@ -13,14 +13,14 @@
 
 **Spec:** `docs/superpowers/specs/2026-10-16-stage-1-design-processing.md` (pipeline, speech, analysis storage, chunking, failures), `…-design-data-api.md` (schema, routes, errors), `…-design-platform.md` §1–§2 (config, installs).
 
-**Stage overview:** `docs/superpowers/plans/2026-10-16-stage-1-overview.md`. **Builds on:** the foundation code on `main` (`Container`, `create_app`, `ApiError`/`ErrorCode`, API models, `app.domain.speakers`, `app.domain.tags`, protocols and fakes, `tests/conftest.py` fixtures `container` and `client`).
+**Stage overview:** `docs/superpowers/plans/2026-10-16-stage-1-overview.md`. **Builds on:** the foundation code on `main` (`Container`, `create_app`, `ApiError`/`ErrorCode`, API models, `app.domain.speakers`, `app.domain.tags`, protocols and fakes, `tests/conftest.py` fixtures `container` and `client`) and the shared helpers from foundation Task 8: `connect(check_same_thread=…)`, `get_db`, `tests.seed` (`seed_recording`, `seed_chunk`), `app.rag.vectors.pack_embedding`, `app.domain.analysis_render.render_analysis`.
 
 ## Global Constraints (this plan)
 - Everything in the overview's Global constraints.
 - Only the backend touches `app.db`. Every thread uses its own connection from `app.db.connection.connect`.
 - Audio lives at `<data_dir>/audio/<rec_id>.<ext>`; decoded audio at `<data_dir>/tmp/<rec_id>/audio.npy`, deleted when processing ends and on delete.
 - The API returns rendered text (current speaker names); stored analysis text keeps `{{spk_…}}` tokens.
-- Embeddings are stored as little-endian float32 BLOBs (`struct.pack(f"<{dim}f", *vec)`), the format sqlite-vec's `vec_distance_cosine` reads; the agents plan's retrieval depends on it.
+- Embeddings are stored with `pack_embedding` (foundation Task 8: little-endian float32, the format sqlite-vec's `vec_distance_cosine` reads); the agents plan's retrieval reads the same format.
 - No migration after `001`.
 
 ## Review Focus
@@ -35,27 +35,26 @@
 ### Task 1: Read endpoints (library, detail, tags)
 
 **Files:**
-- Create: `backend/app/recordings/__init__.py`, `backend/app/recordings/read.py`, `backend/tests/seed.py`
-- Modify: `backend/app/db/connection.py` (`connect(db_path, *, check_same_thread: bool = True)`), `backend/app/api/deps.py` (add `get_db`), `backend/app/api/routes/recordings.py` (`list_recordings`, `get_recording`), `backend/app/api/routes/tags.py` (`list_tags`)
+- Create: `backend/app/recordings/__init__.py`, `backend/app/recordings/read.py`
+- Modify: `backend/app/api/routes/recordings.py` (`list_recordings`, `get_recording`), `backend/app/api/routes/tags.py` (`list_tags`)
 - Test: `backend/tests/recordings/test_read.py`
 
 **Interfaces:**
 - Produces:
-  - `get_db(container: Container = Depends(get_container)) -> Iterator[sqlite3.Connection]`: one connection per request opened with `check_same_thread=False` (FastAPI may run the dependency's setup and the sync handler on different threadpool threads; the request uses the connection sequentially, so this is safe), closed after. The worker keeps the default.
+  - Consumes `get_db` (foundation Task 8: one connection per request, `check_same_thread=False`).
   - `recording_out(conn, row: sqlite3.Row) -> RecordingOut` (tags, `processing = bool(claimed)`, `waveform_peaks` parsed).
   - `list_recordings(conn, kind: RecordingKind | None, q: str | None, tag_ids: list[str]) -> list[RecordingOut]`: newest first; `q` matches title, tag names or any segment text (case-insensitive `LIKE`, `%` and `_` in `q` escaped); several `tag_id`s mean all of them.
-  - `get_recording_detail(conn, rec_id: str) -> RecordingDetailOut`: segments in `idx` order; speakers with `display_name`; `summary` or `note` from `recordings.analysis` with `render_speakers` applied to every text; 404 `not_found` if missing.
+  - `get_recording_detail(conn, rec_id: str) -> RecordingDetailOut`: segments in `idx` order; speakers with `display_name`; `summary` or `note` from `recordings.analysis` rendered with `render_analysis` (foundation Task 8); 404 `not_found` if missing.
   - `list_tags(conn) -> list[TagOut]`: name order, `count` = recordings using it.
-  - `tests/seed.py` (imported as `from tests.seed import seed_recording`; reused by later tasks and by the agents plan): `seed_recording(conn, *, kind="meeting", status="ready", title="Budget sync", segments: list[tuple[int, int, str | None, str]] = …, tags: list[str] = [], analysis: dict | None = None) -> str`.
+  - Tests seed rows with `tests.seed.seed_recording` (foundation Task 8).
 
 - [ ] **Step 1: Write the failing tests** (`client` fixture, seeded DB):
   - `test_list_newest_first_and_kind_filter`; `test_list_search_matches_title_tag_and_transcript` (three recordings, one match each); `test_search_escapes_like_wildcards` (`q="50%"` does not match everything); `test_list_tag_filter_requires_all_tags`.
   - `test_detail_renders_speaker_names_in_summary`: analysis text `"{{spk_X}} will send it"` with speaker renamed "Sarah" → `"Sarah will send it"`; unnamed → `"Speaker A will send it"`.
   - `test_detail_unknown_id_is_404_contract_shape`.
-  - `test_get_db_connection_usable_across_threads`: a connection from `get_db` used in another thread raises nothing.
   - `test_tags_with_counts`.
 - [ ] **Step 2: Run** `uv run pytest tests/recordings -v` → FAIL.
-- [ ] **Step 3: Implement** `get_db`, `app/recordings/read.py`, and the three handlers.
+- [ ] **Step 3: Implement** `app/recordings/read.py` and the three handlers.
 - [ ] **Step 4: Run** → PASS; `uv run ruff check . && uv run ruff format --check . && uv run pyright` clean; `uv run python -m app.cli export-openapi --check` still passes (no API shape change).
 - [ ] **Step 5: Commit** `feat(backend): add library, detail and tags endpoints`.
 
@@ -141,12 +140,12 @@
 - Test: `backend/tests/processing/test_analysis_store.py`, `backend/tests/rag/test_chunker.py`, `backend/tests/rag/test_index.py`
 
 **Interfaces:**
-- Consumes: Task 4; `container.analyzer`, `container.embedder`; `app.domain.speakers`, `app.domain.tags`.
+- Consumes: Task 4; `container.analyzer`, `container.embedder`; `app.domain.speakers`, `app.domain.tags`; `pack_embedding` (foundation Task 8).
 - Produces:
   - `build_analysis_request(conn, rec_id) -> AnalysisRequest` (lines numbered `s = 1..n` in segment order, `speaker_label` for meetings, the 40 most used tags as vocabulary).
   - `store_analysis(conn, rec_id, analysis: MeetingAnalysis | NoteAnalysis) -> None`: S numbers → `Citation(recording_id, segment_id, start_ms)`; unknown S numbers removed and logged; items left without a citation removed and logged; `owner` label → `owner_speaker_id` (unknown → `None`, logged); `tokenize_speakers` on every text; tags normalised and reused (`match_existing_tag` against existing tag names), at most 4; writes `title`, tags and `recordings.analysis` (`MeetingSummary` / `NoteContent` JSON).
   - `ChunkDraft(first_idx: int, last_idx: int, start_ms: int, end_ms: int, text: str)`; `chunk_segments(segments: list[SegmentRow], kind: RecordingKind, max_tokens: int, min_tokens_at_speaker_change: int) -> list[ChunkDraft]` per processing spec §5 (≈ chars/4 tokens, never split a segment, end at a speaker change once ≥ min, one-segment overlap, `Speaker B: …` lines for meetings, plain text for notes).
-  - `pack_embedding(vec: Sequence[float]) -> bytes`; `index_recording(conn, embedder, rec_id, settings) -> int` (deletes the recording's chunks, chunks, `embed_passages` in one batch, inserts; returns the count).
+  - `index_recording(conn, embedder, rec_id, settings) -> int` (deletes the recording's chunks, chunks, `embed_passages` in one batch, inserts; returns the count).
 
 - [ ] **Step 1: Write the failing tests:**
   - `test_store_maps_s_numbers_to_citations`; `test_store_drops_unknown_s_and_empty_items_and_logs` (`caplog`); `test_store_owner_label_to_speaker_id_unknown_null`; `test_store_tokenizes_speakers_then_detail_renders_names`; `test_store_tags_reuse_and_cap_4`.
