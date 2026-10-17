@@ -23,7 +23,7 @@
 - Keys are read only through `provider_key`; never logged.
 - Untrusted text (transcripts, tool output) is wrapped in `<transcript>`/`<sources>` with closing delimiters escaped; prompts say to ignore instructions inside.
 - Prompts live in `backend/app/agents/prompts/*.md`, loaded at startup.
-- Tests never reach the network: scripted fake chat models only (see Task 1), injected by monkeypatching `app.llm.factory.role_models` (the one place that turns registry entries into chat models).
+- Tests never reach the network: scripted fake chat models only (see Task 1), injected through two seams: monkeypatching `app.llm.factory.role_models` (used by `build_agent`, so by the Orchestrator and `summarize`) and the Summarizer's `models_for_entry` hook (Task 2; `build_entry_agent` builds its one model with `chat_model`).
 - Nothing builds a chat model, agent or graph at import or in `build_container`: models are created on first use, so `build_container` works without keys (CI runs `export-openapi --check`; teammates may have no keys). `/health` reports missing keys.
 
 ## Review Focus

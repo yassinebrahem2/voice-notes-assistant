@@ -36,7 +36,7 @@
 **Files:**
 - Create: `mobile/src/recording/FanOutOverlay.tsx`, `mobile/src/recording/fanOut.ts`, `mobile/src/recording/permissions.ts`, `mobile/app/record.tsx` (placeholder: kind label, ✕ goes back, the full-screen colour fading out; Task 2 makes it the recorder, so the route and its typed path exist from this task on)
 - Modify: `mobile/app/_layout.tsx` (render `<FanOutOverlay />` at root level above the tabs; `record` screen options: no animation, gestures off, no header), `mobile/jest.config.js` and a new `mobile/jest.setup.ts` (Reanimated and worklets test setup; the foundation has no setup file), `mobile/package.json` and lock file (via `npx expo install expo-audio expo-haptics expo-keep-awake expo-file-system expo-crypto react-native-reanimated react-native-worklets`; SDK 58 pins reanimated 4.7.1 and worklets 0.13.0; the foundation's `mobile/package.json` has neither reanimated nor worklets at the time of writing, so install them here if not already present, and let `npx expo install` choose every version)
-- Test: `mobile/src/recording/fanOut.test.ts`, `mobile/src/recording/permissions.test.ts`
+- Test: `mobile/src/recording/fanOut.test.ts`, `mobile/src/recording/permissions.test.ts`, `mobile/src/recording/FanOutOverlay.test.tsx`
 
 **Interfaces:**
 - Consumes: the foundation's `openFanOut`/`closeFanOut`/`useFanOut()` (`mobile/src/recording/fanOutStore.ts`): the single source of open/closed. `RecordAction` already calls `openFanOut()` and is not modified.
