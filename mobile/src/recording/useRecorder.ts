@@ -65,8 +65,17 @@ export function useRecorder(_kind: RecordingKind): UseRecorderResult {
   }, [recorder, clearIntervalTimer, level]);
 
   const prepare = useCallback(async () => {
-    await setAudioModeAsync(audioModeFor(isExpoGo()));
-    await recorder.prepareToRecordAsync();
+    try {
+      await setAudioModeAsync(audioModeFor(isExpoGo()));
+      await recorder.prepareToRecordAsync();
+    } catch (err) {
+      if (err instanceof Error && err.message.includes('recording service')) {
+        await setAudioModeAsync(audioModeFor(true));
+        await recorder.prepareToRecordAsync();
+      } else {
+        throw err;
+      }
+    }
   }, [recorder]);
 
   const start = useCallback(async () => {

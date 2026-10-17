@@ -5,7 +5,15 @@ import Constants, { ExecutionEnvironment } from 'expo-constants';
  * Returns true if the app is currently executing inside the Expo Go app.
  */
 export function isExpoGo(): boolean {
-  return Constants.executionEnvironment === ExecutionEnvironment.StoreClient;
+  const c = Constants as unknown as {
+    executionEnvironment?: ExecutionEnvironment | string;
+    appOwnership?: string;
+  };
+  return (
+    c.executionEnvironment === ExecutionEnvironment.StoreClient ||
+    c.executionEnvironment === 'storeClient' ||
+    c.appOwnership === 'expo'
+  );
 }
 
 /**
