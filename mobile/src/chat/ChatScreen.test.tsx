@@ -1,6 +1,7 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, fireEvent, render, screen } from '@testing-library/react-native';
 import { router } from 'expo-router';
+import { DeviceEventEmitter, Platform, StyleSheet } from 'react-native';
 import { PaperProvider } from 'react-native-paper';
 
 import { apiFetch } from '../api/client';
@@ -19,6 +20,25 @@ jest.mock('expo-router', () => ({ router: { push: jest.fn() } }));
 jest.mock('../api/client', () => ({ apiFetch: jest.fn() }));
 jest.mock('../recording/fanOutStore', () => ({ openFanOut: jest.fn() }));
 jest.mock('./useChatSession', () => ({ useChatSession: jest.fn() }));
+
+const mockMeasureInWindow = jest.fn();
+jest.mock('react-native-safe-area-context', () => {
+  const React = jest.requireActual<typeof import('react')>('react');
+  const { View } =
+    jest.requireActual<typeof import('react-native')>('react-native');
+  return {
+    ...jest.requireActual('react-native-safe-area-context'),
+    SafeAreaView: React.forwardRef(function SafeAreaView(
+      props: React.ComponentProps<typeof View>,
+      ref,
+    ) {
+      React.useImperativeHandle(ref, () => ({
+        measureInWindow: mockMeasureInWindow,
+      }));
+      return React.createElement(View, { ...props, testID: 'chat-viewport' });
+    }),
+  };
+});
 
 const fetchMock = jest.mocked(apiFetch);
 const sessionMock = jest.mocked(useChatSession);
@@ -83,6 +103,103 @@ beforeEach(() => {
   jest.clearAllMocks();
   recordings('ready');
   session([]);
+});
+
+describe('Android keyboard overlap', () => {
+  let windowY: number;
+  let height: number;
+
+  beforeEach(() => {
+    jest.replaceProperty(Platform, 'OS', 'android');
+    windowY = 120;
+    height = 680;
+    mockMeasureInWindow.mockImplementation(
+      (
+        callback: (x: number, y: number, width: number, height: number) => void,
+      ) => callback(0, windowY, 400, height),
+    );
+  });
+
+  afterEach(async () => {
+    await act(() => DeviceEventEmitter.emit('keyboardDidHide', {}));
+    jest.restoreAllMocks();
+  });
+
+  async function layout() {
+    await fireEvent(screen.getByTestId('chat-viewport'), 'layout', {
+      nativeEvent: { layout: { x: 0, y: 24, width: 400, height } },
+    });
+    await fireEvent(avoidingView(), 'layout', {
+      persist: () => {},
+      nativeEvent: {
+        layout: { x: 0, y: 24, width: 400, height: height - 24 },
+      },
+    });
+  }
+
+  function avoidingView() {
+    const view = screen.getByTestId('chat-viewport').children[0];
+    if (typeof view === 'string') throw new Error('Expected the keyboard view');
+    return view;
+  }
+
+  async function showKeyboard() {
+    await act(() =>
+      DeviceEventEmitter.emit('keyboardDidShow', {
+        duration: 0,
+        easing: 'keyboard',
+        endCoordinates: { screenX: 0, screenY: 500, width: 400, height: 400 },
+      }),
+    );
+  }
+
+  function contentBottom() {
+    const style = StyleSheet.flatten(
+      screen.getByTestId('chat-viewport').props.style,
+    );
+    const keyboardStyle = StyleSheet.flatten(avoidingView().props.style);
+    return (
+      windowY +
+      (keyboardStyle.height !== undefined
+        ? 24 + keyboardStyle.height
+        : height) -
+      (style.paddingBottom ?? 0)
+    );
+  }
+
+  test('keeps the composer above the keyboard using window coordinates', async () => {
+    await setup();
+    await layout();
+    await showKeyboard();
+    expect(contentBottom()).toBe(500);
+    expect(screen.getByLabelText('Message')).toBeTruthy();
+
+    await act(() => DeviceEventEmitter.emit('keyboardDidHide', {}));
+    expect(contentBottom()).toBe(800);
+  });
+
+  test('remeasures when a banner changes the parent offset while typing', async () => {
+    await setup();
+    await layout();
+    await showKeyboard();
+    windowY = 180;
+    height = 650;
+    await layout();
+    expect(contentBottom()).toBe(500);
+  });
+
+  test('does not avoid the keyboard twice when Android resizes the viewport', async () => {
+    await setup();
+    await layout();
+    await showKeyboard();
+    height = 300;
+    await layout();
+    expect(contentBottom()).toBe(420);
+
+    height = 680;
+    await layout();
+    expect(contentBottom()).toBe(500);
+  });
 });
 
 test('shows the starter questions when the chat is empty', async () => {

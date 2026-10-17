@@ -1,6 +1,7 @@
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
-import { useRef, useState } from 'react';
+import { type ComponentRef, useEffect, useRef, useState } from 'react';
 import {
+  Keyboard,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -76,6 +77,33 @@ export function ChatScreen() {
   const [draft, setDraft] = useState('');
   const reduceMotion = useReduceMotion();
   const scroll = useRef<ScrollViewInstance>(null);
+  const screen = useRef<ComponentRef<typeof View>>(null);
+  const [screenBottom, setScreenBottom] = useState(0);
+  const [keyboardTop, setKeyboardTop] = useState<number | null>(
+    () => Keyboard.metrics()?.screenY ?? null,
+  );
+
+  useEffect(() => {
+    if (Platform.OS !== 'android') return;
+    const show = Keyboard.addListener('keyboardDidShow', (event) => {
+      setKeyboardTop(event.endCoordinates.screenY);
+    });
+    const hide = Keyboard.addListener('keyboardDidHide', () => {
+      setKeyboardTop(null);
+    });
+    return () => {
+      show.remove();
+      hide.remove();
+    };
+  }, []);
+
+  // Parent-local layout coordinates omit the safe area and server banner.
+  // Measure the full screen in the keyboard's window coordinates; unlike a
+  // cached initial height this also handles Android resizing the app window.
+  const keyboardOverlap =
+    Platform.OS === 'android' && keyboardTop !== null
+      ? Math.max(0, screenBottom - keyboardTop)
+      : 0;
 
   const running = chat.turns.some((turn) => isActive(turn.run));
   const canSend = !running && draft.trim() !== '';
@@ -87,11 +115,22 @@ export function ChatScreen() {
 
   return (
     <SafeAreaView
+      ref={screen}
       edges={['top', 'left', 'right']}
-      style={[styles.screen, { backgroundColor: tape.bg }]}
+      onLayout={() => {
+        if (Platform.OS === 'android') {
+          screen.current?.measureInWindow((_x, y, _width, height) => {
+            setScreenBottom(y + height);
+          });
+        }
+      }}
+      style={[
+        styles.screen,
+        { backgroundColor: tape.bg, paddingBottom: keyboardOverlap },
+      ]}
     >
       <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         style={styles.flex}
       >
         <View style={styles.header}>
