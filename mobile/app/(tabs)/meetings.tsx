@@ -1,5 +1,5 @@
-import { PlaceholderScreen } from '../../src/components/PlaceholderScreen';
+import { LibraryScreen } from '../../src/library/LibraryScreen';
 
 export default function Meetings() {
-  return <PlaceholderScreen title="Meetings" />;
+  return <LibraryScreen kind="meeting" />;
 }
