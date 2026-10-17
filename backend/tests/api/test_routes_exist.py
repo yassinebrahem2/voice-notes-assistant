@@ -33,7 +33,23 @@ def test_routes_exist(container: Container) -> None:
     assert len(set(operation_ids)) == len(ROUTES)
 
 
-@pytest.mark.parametrize(("method", "path"), [route for route in ROUTES if route[1] != "/health"])
+# One route per line: later plans remove routes from this list as they implement them.
+STUBS = [
+    ("post", "/recordings"),
+    ("patch", "/recordings/{id}"),
+    ("delete", "/recordings/{id}"),
+    ("patch", "/recordings/{id}/speakers/{speaker_id}"),
+    ("post", "/recordings/{id}/retry"),
+    ("get", "/recordings/{id}/audio"),
+    ("post", "/chats"),
+    ("get", "/chats/{chat_id}"),
+    ("post", "/chats/{chat_id}/messages"),
+    ("get", "/chats/{chat_id}/runs/{run_id}"),
+    ("post", "/chats/{chat_id}/runs/{run_id}/retry"),
+]
+
+
+@pytest.mark.parametrize(("method", "path"), STUBS)
 def test_every_stub_returns_501(client: TestClient, method: str, path: str) -> None:
     url = "/api/v1" + path.format(id="rec_x", chat_id="cht_x", speaker_id="spk_x", run_id="msg_x")
     if method == "post" and path == "/recordings":
