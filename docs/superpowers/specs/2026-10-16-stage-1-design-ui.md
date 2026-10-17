@@ -55,7 +55,7 @@ Routes (expo-router): `(tabs)/meetings`, `(tabs)/notes`, `(tabs)/chat`, `(tabs)/
 A studio instrument, not a chatbot. Typography-led, one saturated colour, monospace numbers.
 - Tokens (semantic, both themes from the same names):
   - dark: bg `#121110`, surface `#1C1A18`, raised `#26231F`, ink `#F2EDE4`, ink-muted `#A39B90`, line `#34302B` (decorative only), outline `#6E665C`, signal `#FF4D2E`, on-signal `#121110`.
-  - light: bg `#F6F3EE`, surface `#FFFFFF`, ink `#161412`, ink-muted `#6B645B`, line `#E3DDD3` (decorative only), outline `#8C8378`, signal `#C4351A`, on-signal `#FFFFFF`.
+  - light: bg `#F6F3EE`, surface `#FFFFFF`, raised `#EDE8E0`, ink `#161412`, ink-muted `#6B645B`, line `#E3DDD3` (decorative only), outline `#8C8378`, signal `#C4351A`, on-signal `#FFFFFF`.
   - speaker hues, dark: clay `#D98A6C`, sage `#8FB394`, slate `#8EA4C8`, ochre `#D4B05E`, plum `#C495C0`, teal `#6FB8B0`; light: `#A4532F`, `#48724F`, `#4A6694`, `#8A6A12`, `#87507F`, `#2F7A72`.
   - Contrast checked with a WCAG script: all text pairs ≥ 4.5:1 on bg and surface; outlines and speaker hues ≥ 3:1 (speaker hues ≥ 4.5:1, so they can colour names).
 - Type: IBM Plex Sans (400, 600) for UI; IBM Plex Mono (500) for timer, timestamps, durations, counts; at most 4 sizes. Loaded with `@expo-google-fonts` packages and expo-font.
