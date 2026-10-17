@@ -5,6 +5,7 @@ import { useTheme } from 'react-native-paper';
 import { motion } from '../theme/motion';
 import type { TapeTheme } from '../theme/paperTheme';
 import { radius } from '../theme/tokens';
+import { openFanOut } from './fanOutStore';
 
 export function RecordAction() {
   const { tape } = useTheme<TapeTheme>();
@@ -12,9 +13,7 @@ export function RecordAction() {
     <Pressable
       accessibilityRole="button"
       accessibilityLabel="Record"
-      onPress={() => {
-        // The recording plan supplies the permission check and recorder action.
-      }}
+      onPress={openFanOut}
       android_ripple={{ color: tape.onSignal, borderless: false }}
       style={({ pressed }) => [
         styles.disc,
