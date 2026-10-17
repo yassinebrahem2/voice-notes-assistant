@@ -220,3 +220,36 @@ test('a done run without a message shows a label and no Retry', async () => {
   expect(await screen.findByText('No answer came back')).toBeTruthy();
   expect(screen.queryByRole('button', { name: 'Retry' })).toBeNull();
 });
+
+function recordingCalls(): number {
+  return fetchMock.mock.calls.filter(([path]) => path === 'recordings').length;
+}
+
+test('polling stops when the server goes down after a good load', async () => {
+  jest.useFakeTimers();
+  try {
+    recordings('transcribing');
+    await setup();
+    expect(await screen.findByText(NO_RECORDING)).toBeTruthy();
+    fetchMock.mockRejectedValue(new Error('offline'));
+    await act(() => jest.advanceTimersByTimeAsync(5_000));
+    const calls = recordingCalls();
+    await act(() => jest.advanceTimersByTimeAsync(60_000));
+    expect(recordingCalls()).toBe(calls);
+  } finally {
+    jest.useRealTimers();
+  }
+});
+
+test('polling stops once a recording is ready', async () => {
+  jest.useFakeTimers();
+  try {
+    await setup();
+    expect(await screen.findAllByTestId('starter')).not.toHaveLength(0);
+    const calls = recordingCalls();
+    await act(() => jest.advanceTimersByTimeAsync(60_000));
+    expect(recordingCalls()).toBe(calls);
+  } finally {
+    jest.useRealTimers();
+  }
+});

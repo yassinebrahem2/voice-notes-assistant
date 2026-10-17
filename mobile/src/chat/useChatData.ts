@@ -16,9 +16,10 @@ export function useHasReadyRecording(): boolean | undefined {
   const { data, isError } = useQuery({
     queryKey: ['recordings', 'chat-ready'],
     queryFn: () => apiFetch<Schemas['RecordingOut'][]>('recordings'),
-    // The Chat tab stays mounted, so poll while a loaded list has nothing ready. The data guard stops
-    // the polling when the list never loaded (no server set, unreachable).
+    // The Chat tab stays mounted, so poll while a loaded list has nothing ready. A failed refetch keeps
+    // the old data, so the status guard (not data alone) stops polling when the server goes away.
     refetchInterval: (query) =>
+      query.state.status === 'success' &&
       query.state.data !== undefined &&
       !query.state.data.some((recording) => recording.status === 'ready')
         ? READY_POLL_MS
