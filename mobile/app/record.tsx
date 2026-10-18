@@ -90,7 +90,12 @@ export default function RecordScreen() {
               const file = new File(recorder.uri);
               if (file.exists) file.delete();
             }
-          } catch {}
+          } catch (err) {
+            console.warn(
+              'Could not delete cache file after failed recording',
+              err,
+            );
+          }
           setScreenState('recording_failed');
         }
       })();

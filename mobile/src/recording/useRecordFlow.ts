@@ -126,7 +126,9 @@ export function useRecordFlow(
         const file = new File(recorder.uri);
         if (file.exists) file.delete();
       }
-    } catch {}
+    } catch (err) {
+      console.warn('Could not delete cache file on discard', err);
+    }
     router.back();
   }, [recorder.uri]);
 

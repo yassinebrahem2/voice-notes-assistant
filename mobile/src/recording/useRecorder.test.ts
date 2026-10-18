@@ -221,6 +221,59 @@ describe('useRecorder', () => {
 
     expect(mockRecorder.pause).toHaveBeenCalledTimes(1);
     expect(result.current.paused).toBe(true);
+    expect(result.current.level.get()).toBe(0);
+    unmount();
+  });
+
+  test('returning to active after background in Expo Go with isRecording false calls pause and sets level to 0', async () => {
+    jest.mocked(mockRecorder.getStatus).mockReturnValue({
+      canRecord: true,
+      isRecording: false,
+      durationMillis: 1000,
+      metering: -15,
+      mediaServicesDidReset: false,
+      url: 'file:///data/recording.m4a',
+      fileSize: 0,
+    });
+
+    const { result, unmount } = await renderHook(() => useRecorder('meeting'));
+    await act(async () => {
+      await result.current.start();
+    });
+
+    await act(async () => {
+      changeListener?.('background');
+    });
+
+    await act(async () => {
+      changeListener?.('active');
+    });
+
+    expect(mockRecorder.pause).toHaveBeenCalledTimes(1);
+    expect(result.current.paused).toBe(true);
+    expect(result.current.level.get()).toBe(0);
+    unmount();
+  });
+
+  test('when pause throws on returning to active, paused is still set to true', async () => {
+    jest.mocked(mockRecorder.pause).mockImplementationOnce(() => {
+      throw new Error('pause failed');
+    });
+
+    const { result, unmount } = await renderHook(() => useRecorder('meeting'));
+    await act(async () => {
+      await result.current.start();
+    });
+
+    await act(async () => {
+      changeListener?.('background');
+    });
+
+    await act(async () => {
+      changeListener?.('active');
+    });
+
+    expect(result.current.paused).toBe(true);
     unmount();
   });
 
