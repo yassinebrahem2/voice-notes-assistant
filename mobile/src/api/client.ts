@@ -1,6 +1,11 @@
 import { reportNetworkError, reportOk } from '../server/statusStore';
 import { getServerUrl } from '../settings/serverUrl';
-import { ApiError, parseApiError } from './errors';
+import {
+  ApiError,
+  isApiErrorEnvelope,
+  isGatewayStatus,
+  parseApiError,
+} from './errors';
 
 export type { ErrorCode, Schemas } from './errors';
 export { ApiError } from './errors';
@@ -16,23 +21,6 @@ function isAbortError(error: unknown): boolean {
     'name' in error &&
     error.name === 'AbortError'
   );
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
-
-export function isApiErrorEnvelope(body: unknown): boolean {
-  return (
-    isRecord(body) &&
-    isRecord(body.error) &&
-    typeof body.error.code === 'string' &&
-    typeof body.error.message === 'string'
-  );
-}
-
-export function isGatewayStatus(status: number): boolean {
-  return status === 502 || status === 503 || status === 504;
 }
 
 export async function apiFetch<T>(

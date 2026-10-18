@@ -1,5 +1,8 @@
-import { isApiErrorEnvelope, isGatewayStatus } from '../api/client';
-import type { Schemas } from '../api/errors';
+import {
+  isApiErrorEnvelope,
+  isGatewayStatus,
+  type Schemas,
+} from '../api/errors';
 import { appInfo } from '../config/appInfo';
 import { normalizeServerUrl } from './serverUrl';
 
