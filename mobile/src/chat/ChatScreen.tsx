@@ -23,7 +23,8 @@ import { ScopeBar } from './ScopeBar';
 import { isActive, type RunView } from './runMachine';
 import { Starters } from './Starters';
 import { StatusLine } from './StatusLine';
-import { useHasReadyRecording, useTags } from './useChatData';
+import { useTags } from '../library/useTags';
+import { useHasReadyRecording } from './useChatData';
 import { useChatSession } from './useChatSession';
 
 export const NO_RECORDING =
