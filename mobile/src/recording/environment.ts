@@ -1,11 +1,11 @@
 import type { AudioMode } from 'expo-audio';
-import Constants, { ExecutionEnvironment } from 'expo-constants';
+import { isRunningInExpoGo } from 'expo';
 
 /**
  * Returns true if the app is currently executing inside the Expo Go app.
  */
 export function isExpoGo(): boolean {
-  return Constants.executionEnvironment === ExecutionEnvironment.StoreClient;
+  return isRunningInExpoGo();
 }
 
 /**

@@ -1,6 +1,6 @@
 import { act, fireEvent, render, screen } from '@testing-library/react-native';
 import React from 'react';
-import Constants, { ExecutionEnvironment } from 'expo-constants';
+import { isRunningInExpoGo } from 'expo';
 import { router } from 'expo-router';
 import { PaperProvider } from 'react-native-paper';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
@@ -9,6 +9,11 @@ import RecordScreen from '../../app/record';
 import { paperTheme } from '../theme/paperTheme';
 import { enqueue } from './pending';
 import { uploadPending } from './upload';
+
+jest.mock('expo', () => ({
+  ...jest.requireActual('expo'),
+  isRunningInExpoGo: jest.fn(),
+}));
 
 jest.mock('expo-font', () => ({
   ...jest.requireActual('expo-font'),
@@ -124,7 +129,7 @@ describe('RecordScreen failure paths and controls', () => {
     mockFiles.clear();
     mockPlayerStatus = { isLoaded: true, duration: 5 };
     mockPlayerRelease.mockClear();
-    Constants.executionEnvironment = ExecutionEnvironment.StoreClient;
+    jest.mocked(isRunningInExpoGo).mockReturnValue(true);
 
     const g = globalThis as unknown as MockGlobal;
     const proto = g.expo?.modules?.ExpoAudio?.AudioRecorder?.prototype;

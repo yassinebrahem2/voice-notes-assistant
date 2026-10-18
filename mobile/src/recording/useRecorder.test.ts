@@ -1,10 +1,13 @@
 import { act, renderHook } from '@testing-library/react-native';
+import { isRunningInExpoGo } from 'expo';
 import { setAudioModeAsync, useAudioRecorder } from 'expo-audio';
 import Constants, { ExecutionEnvironment } from 'expo-constants';
 import { activateKeepAwakeAsync, deactivateKeepAwake } from 'expo-keep-awake';
 import { AppState, type AppStateStatus } from 'react-native';
 
 import { useRecorder } from './useRecorder';
+
+jest.mock('expo', () => ({ isRunningInExpoGo: jest.fn() }));
 
 type AppStateListener = (state: AppStateStatus) => void;
 
@@ -49,8 +52,9 @@ describe('useRecorder', () => {
   beforeEach(() => {
     jest.useFakeTimers();
     jest.clearAllMocks();
-    // Default to Expo Go environment
-    Constants.executionEnvironment = ExecutionEnvironment.StoreClient;
+    // The phone reports bare even inside Expo Go.
+    Constants.executionEnvironment = ExecutionEnvironment.Bare;
+    jest.mocked(isRunningInExpoGo).mockReturnValue(true);
     mockRecorder = useAudioRecorder({} as never);
     jest
       .spyOn(AppState, 'addEventListener')
@@ -76,9 +80,45 @@ describe('useRecorder', () => {
       await result.current.prepare();
     });
     expect(setAudioModeAsync).toHaveBeenCalledTimes(1);
+    expect(setAudioModeAsync).toHaveBeenCalledWith(
+      expect.objectContaining({ allowsBackgroundRecording: false }),
+    );
     expect(mockRecorder.prepareToRecordAsync).toHaveBeenCalledTimes(1);
     unmount();
   });
+
+  test.each([
+    [true, false],
+    [false, true],
+  ])(
+    'prepare waits for audio mode with Expo Go=%p before preparing with background recording=%p',
+    async (expoGo, allowsBackgroundRecording) => {
+      jest.mocked(isRunningInExpoGo).mockReturnValue(expoGo);
+      let resolveAudioMode: () => void = () => {};
+      const audioModeReady = new Promise<void>((resolve) => {
+        resolveAudioMode = resolve;
+      });
+      jest.mocked(setAudioModeAsync).mockReturnValueOnce(audioModeReady);
+
+      const { result, unmount } = await renderHook(() =>
+        useRecorder('meeting'),
+      );
+      const preparation = result.current.prepare();
+
+      expect(setAudioModeAsync).toHaveBeenCalledWith(
+        expect.objectContaining({ allowsBackgroundRecording }),
+      );
+      expect(mockRecorder.prepareToRecordAsync).not.toHaveBeenCalled();
+
+      await act(async () => {
+        resolveAudioMode();
+        await preparation;
+      });
+
+      expect(mockRecorder.prepareToRecordAsync).toHaveBeenCalledTimes(1);
+      unmount();
+    },
+  );
 
   test('after start, advancing 50ms polls getStatus and updates level.value', async () => {
     jest.mocked(mockRecorder.getStatus).mockReturnValue({
@@ -278,7 +318,7 @@ describe('useRecorder', () => {
   });
 
   test('outside Expo Go, returning to active after background does not pause', async () => {
-    Constants.executionEnvironment = ExecutionEnvironment.Standalone;
+    jest.mocked(isRunningInExpoGo).mockReturnValue(false);
 
     jest.mocked(mockRecorder.getStatus).mockReturnValue({
       canRecord: true,

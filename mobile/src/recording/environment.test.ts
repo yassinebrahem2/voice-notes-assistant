@@ -1,28 +1,44 @@
+import { isRunningInExpoGo } from 'expo';
 import Constants, { ExecutionEnvironment } from 'expo-constants';
 
 import { audioModeFor, isExpoGo, shouldPauseOnReturn } from './environment';
 
+jest.mock('expo', () => ({ isRunningInExpoGo: jest.fn() }));
+
 describe('environment', () => {
   describe('isExpoGo', () => {
     const originalEnv = Constants.executionEnvironment;
+    const originalOwnership = Constants.appOwnership;
+
+    beforeEach(() => {
+      jest.mocked(isRunningInExpoGo).mockReset();
+    });
 
     afterEach(() => {
       Constants.executionEnvironment = originalEnv;
+      Constants.appOwnership = originalOwnership;
     });
 
-    test('returns true when executionEnvironment is storeClient', () => {
-      Constants.executionEnvironment = ExecutionEnvironment.StoreClient;
+    test('detects Expo Go even when native constants report bare and no ownership', () => {
+      jest.mocked(isRunningInExpoGo).mockReturnValue(true);
+      Constants.executionEnvironment = ExecutionEnvironment.Bare;
+      Constants.appOwnership = null;
       expect(isExpoGo()).toBe(true);
+      expect(audioModeFor(isExpoGo()).allowsBackgroundRecording).toBe(false);
     });
 
-    test('returns false when executionEnvironment is bare', () => {
+    test('returns false in a development build', () => {
+      jest.mocked(isRunningInExpoGo).mockReturnValue(false);
       Constants.executionEnvironment = ExecutionEnvironment.Bare;
       expect(isExpoGo()).toBe(false);
+      expect(audioModeFor(isExpoGo()).allowsBackgroundRecording).toBe(true);
     });
 
-    test('returns false when executionEnvironment is standalone', () => {
+    test('returns false in a standalone build', () => {
+      jest.mocked(isRunningInExpoGo).mockReturnValue(false);
       Constants.executionEnvironment = ExecutionEnvironment.Standalone;
       expect(isExpoGo()).toBe(false);
+      expect(audioModeFor(isExpoGo()).allowsBackgroundRecording).toBe(true);
     });
   });
 

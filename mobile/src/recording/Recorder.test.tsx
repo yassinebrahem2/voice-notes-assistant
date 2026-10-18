@@ -1,6 +1,6 @@
 import { act, fireEvent, render, screen } from '@testing-library/react-native';
 import React from 'react';
-import Constants, { ExecutionEnvironment } from 'expo-constants';
+import { isRunningInExpoGo } from 'expo';
 import * as Haptics from 'expo-haptics';
 import { router } from 'expo-router';
 import { AppState, type AppStateStatus } from 'react-native';
@@ -12,6 +12,11 @@ import { paperTheme } from '../theme/paperTheme';
 
 type AppStateListener = (state: AppStateStatus) => void;
 let changeListener: AppStateListener | undefined;
+
+jest.mock('expo', () => ({
+  ...jest.requireActual('expo'),
+  isRunningInExpoGo: jest.fn(),
+}));
 
 jest.mock('expo-font', () => ({
   ...jest.requireActual('expo-font'),
@@ -86,7 +91,7 @@ describe('RecordScreen', () => {
   beforeEach(() => {
     jest.useFakeTimers();
     jest.clearAllMocks();
-    Constants.executionEnvironment = ExecutionEnvironment.StoreClient;
+    jest.mocked(isRunningInExpoGo).mockReturnValue(true);
     jest
       .spyOn(AppState, 'addEventListener')
       .mockImplementation((event, listener) => {
