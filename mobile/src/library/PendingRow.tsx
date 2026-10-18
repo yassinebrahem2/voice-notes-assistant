@@ -16,7 +16,8 @@ export interface PendingRowProps {
 }
 
 export function formatDuration(ms: number | null | undefined): string {
-  if (!ms || ms < 0) return '00:00';
+  if (ms === null || ms === undefined) return '—';
+  if (ms < 0) return '00:00';
   const totalSeconds = Math.floor(ms / 1000);
   const hours = Math.floor(totalSeconds / 3600);
   const minutes = Math.floor((totalSeconds % 3600) / 60);

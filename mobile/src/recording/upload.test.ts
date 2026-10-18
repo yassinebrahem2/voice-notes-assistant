@@ -1,7 +1,9 @@
 import { ApiError, type Schemas } from '../api/client';
+import { queryClient } from '../api/queryClient';
+import { getServerStatus } from '../server/statusStore';
 import { getServerUrl } from '../settings/serverUrl';
 import { enqueue, removePending, type PendingUpload } from './pending';
-import { enqueueAndUpload, uploadPending } from './upload';
+import { uploadPending } from './upload';
 
 jest.mock('../settings/serverUrl', () => ({
   getServerUrl: jest.fn(),
@@ -202,33 +204,35 @@ describe('uploadPending', () => {
     expect(removePending).toHaveBeenCalledWith(sampleItem.clientUploadId);
   });
 
-  test('enqueueAndUpload enqueues then uploads', async () => {
-    jest.mocked(enqueue).mockResolvedValue(sampleItem);
-
-    const onProgress = jest.fn();
-    const promise = enqueueAndUpload(
-      'file:///cache/audio.m4a',
-      'note',
-      5000,
-      onProgress,
-    );
-
-    for (let i = 0; i < 5; i++) {
-      await nextTick();
-    }
-
+  test('a 502 with an HTML body -> network_error and status unreachable', async () => {
+    const uploadPromise = uploadPending(sampleItem);
+    await nextTick();
     const xhr = MockXMLHttpRequest.instances[0];
-    expect(enqueue).toHaveBeenCalledWith(
-      'file:///cache/audio.m4a',
-      'note',
-      5000,
-    );
+
+    xhr.status = 502;
+    xhr.responseText = '<html><body>502 Bad Gateway</body></html>';
+    xhr.onload?.();
+
+    await expect(uploadPromise).rejects.toMatchObject({
+      status: 0,
+      code: 'network_error',
+    });
+    expect(getServerStatus()).toBe('unreachable');
+  });
+
+  test('a successful upload invalidates recordings query', async () => {
+    const invalidateSpy = jest.spyOn(queryClient, 'invalidateQueries');
+    const uploadPromise = uploadPending(sampleItem);
+    await nextTick();
+    const xhr = MockXMLHttpRequest.instances[0];
 
     xhr.status = 201;
     xhr.responseText = JSON.stringify(mockRecordingOut);
     xhr.onload?.();
 
-    const result = await promise;
-    expect(result).toEqual(mockRecordingOut);
+    await uploadPromise;
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['recordings'] });
+    expect(getServerStatus()).toBe('ok');
+    invalidateSpy.mockRestore();
   });
 });

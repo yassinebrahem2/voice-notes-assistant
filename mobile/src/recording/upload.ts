@@ -1,12 +1,18 @@
-import { ApiError, parseApiError, type Schemas } from '../api/errors';
+import {
+  ApiError,
+  isApiErrorEnvelope,
+  isGatewayStatus,
+  parseApiError,
+  type Schemas,
+} from '../api/errors';
+import { queryClient } from '../api/queryClient';
+import { reportNetworkError, reportOk } from '../server/statusStore';
 import { getServerUrl } from '../settings/serverUrl';
-import type { RecordingKind } from './fanOut';
-import { enqueue, removePending, type PendingUpload } from './pending';
+import { removePending, type PendingUpload } from './pending';
 
 export async function uploadPending(
   item: PendingUpload,
   onProgress?: (fraction: number) => void,
-  signal?: AbortSignal,
 ): Promise<Schemas['RecordingOut']> {
   let serverUrl: string | null;
   try {
@@ -38,14 +44,6 @@ export async function uploadPending(
     const xhr = new XMLHttpRequest();
     xhr.open('POST', endpoint);
 
-    if (signal) {
-      if (signal.aborted) {
-        reject(new ApiError(0, 'timeout', 'Upload aborted'));
-        return;
-      }
-      signal.addEventListener('abort', () => xhr.abort(), { once: true });
-    }
-
     if (xhr.upload && onProgress) {
       xhr.upload.onprogress = (event) => {
         if (event.lengthComputable && event.total > 0) {
@@ -55,7 +53,8 @@ export async function uploadPending(
     }
 
     xhr.onload = async () => {
-      if (xhr.status === 200 || xhr.status === 201) {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        reportOk();
         try {
           await removePending(item.clientUploadId);
         } catch (error) {
@@ -64,6 +63,7 @@ export async function uploadPending(
 
         try {
           const body = JSON.parse(xhr.responseText) as Schemas['RecordingOut'];
+          void queryClient.invalidateQueries({ queryKey: ['recordings'] });
           resolve(body);
         } catch {
           reject(
@@ -81,33 +81,30 @@ export async function uploadPending(
         } catch {
           body = null;
         }
+
+        if (isGatewayStatus(xhr.status) && !isApiErrorEnvelope(body)) {
+          reportNetworkError();
+          reject(
+            new ApiError(0, 'network_error', 'Could not reach the server.'),
+          );
+          return;
+        }
+
+        reportOk();
         reject(parseApiError(xhr.status, body));
       }
     };
 
     xhr.onerror = () => {
+      reportNetworkError();
       reject(new ApiError(0, 'network_error', 'Network error during upload'));
     };
 
     xhr.ontimeout = () => {
+      reportNetworkError();
       reject(new ApiError(0, 'timeout', 'Upload timed out'));
-    };
-
-    xhr.onabort = () => {
-      reject(new ApiError(0, 'timeout', 'Upload aborted'));
     };
 
     xhr.send(formData);
   });
-}
-
-export async function enqueueAndUpload(
-  uri: string,
-  kind: RecordingKind,
-  durationMs: number,
-  onProgress?: (fraction: number) => void,
-  signal?: AbortSignal,
-): Promise<Schemas['RecordingOut']> {
-  const pending = await enqueue(uri, kind, durationMs);
-  return await uploadPending(pending, onProgress, signal);
 }
