@@ -35,7 +35,7 @@ Stage 1 delivers every must-have feature in `project_knowledge.md` on a real And
                                                  │ SQLite + sqlite-vec · audio files (data dir)│
                                                  └──────────────┬─────────────────────────────┘
                                                                 │ HTTPS
-                                                 Groq / Gemini free tiers (OpenAI-compatible)
+                                                 Groq / Gemini free tiers (OpenAI-compatible / native)
 ```
 
 Backend components (each a package under `backend/app/`; exact file layout is set by the plans):

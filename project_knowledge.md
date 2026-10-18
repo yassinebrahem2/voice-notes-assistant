@@ -1,7 +1,7 @@
 # Project Knowledge File: Voxa (working name)
 
 Current state of the project, rewritten 2026-10-16. Sections: brief, decided, open, ideas, changed, files.
-Sources: [BRIEF] the brief (`project_context.md`). [USER] stated by the user. [AGREED] proposed by Claude and explicitly accepted by the user.
+Sources: [BRIEF] the brief (`project_context.md`). [USER] stated by the user. [AGREED] proposed by Claude and explicitly accepted by the user. [PROPOSED] ruled by the lead's Claude session, not yet confirmed by the user.
 Anything not listed here is unknown.
 
 ## 1. Brief [BRIEF]
@@ -75,9 +75,9 @@ Versions checked 2026-10-16; majors are pinned.
 - Storage: SQLite with sqlite-vec 0.1.9 (vectors in the same file, exact search). Fallback if extensions cannot load: LanceDB 0.40.
 - Embedder: fastembed 0.9, `BAAI/bge-small-en-v1.5`, local on CPU.
 - Speech: faster-whisper 1.2.1 (`distil-large-v3`); pyannote.audio 4.0.7 `speaker-diarization-community-1` for meetings only (needs `HF_TOKEN`). Speech dependencies are an optional install group; ASR and diarizer sit behind interfaces with fakes, so CI never installs torch or needs a token.
-- LLMs: Groq free tier first, Gemini free tier as fallback (OpenAI-compatible endpoints).
+- LLMs: Groq free tier first, Gemini free tier as fallback. Each provider names its client in `models.yaml`: Groq through its OpenAI-compatible endpoint (`langchain-openai`), Gemini through its native API (`langchain-google-genai`), because Gemini 3 tool calling needs thought signatures that `langchain-openai` 1.7.2 does not handle (2026-10-17, user).
 - Agents: LangGraph 1.2 with LangChain 1.4 (1.x APIs such as `create_agent`; LangChain's model fallback for the LLM role, exact mechanism in the stage 1 spec). Not `langgraph-supervisor` (pre-1.0).
-- Model config: one `models.yaml` with providers (`base_url`, `key_env`) and models by role (`llm`, `llm_analysis`, `embedder`, `asr`, `diarizer`), each hosted (provider + model id) or local (model id, device, precision); each LLM role has a configurable failover order; code asks for a role, never a model name.
+- Model config: one `models.yaml` with providers (`client`, `base_url` for OpenAI-compatible ones, `key_env`) and models by role (`llm`, `llm_analysis`, `embedder`, `asr`, `diarizer`), each hosted (provider + model id) or local (model id, device, precision); each LLM role has a configurable failover order; code asks for a role, never a model name. [USER] Any configured model must work in every LLM role and at any position of the failover order: switching models is a config change, never a code change, and a provider-specific limitation is fixed in the client layer, not worked around in config (2026-10-17). Gemini model: `gemini-3.1-flash-lite` (2026-10-17, user).
 - Mobile: Expo SDK 58, expo-router, expo-audio, expo-keep-awake, TanStack Query 5, React Native Paper 5 (Material 3, dark mode). React Native version chosen by `npx expo install`.
 - Development on phones in Expo Go; the demo APK is built with EAS Build (cloud, free tier: 15 Android builds/month, low-priority queue with possible 90+ minute waits), by Monday 2026-10-19. Expo Go is the demo fallback.
 
@@ -92,6 +92,15 @@ Versions checked 2026-10-16; majors are pinned.
 - [USER] Stage 1 may cover every M feature, provided it is split into several plans when too big for one (playbook rule).
 - [USER] Project board: https://github.com/users/yassinebrahem2/projects/6.
 - [BRIEF] The coding assistant asks before choosing the stack for any open item.
+- [USER] 2026-10-17: CI (Backend, Mobile) and the `board` workflow run on the lead's homelab self-hosted runners (labels `self-hosted, linux, homelab`); the free GitHub-hosted minutes for this private repository ran out and paid minutes are not an option. The repository must stay private while those runners are connected (on a public repository anyone's pull request could run code on them).
+- [USER] 2026-10-17: no task, bug or plan issue is closed without green Backend and Mobile CI on a commit containing its work (AGENTS.md rule 6).
+- [AGREED] Decision issues are exempt from that rule: they carry no code and close when answered.
+- [USER] 2026-10-17: every agent and person moves their own issue's board card at every state change (claim, block, resume, unassign, close) and checks the move (AGENTS.md rule 7); the board automation is a backup.
+- [USER] 2026-10-17: plan tasks are implemented the subagent-driven way described in `docs/implementing-plan-tasks.md` (fresh implementer, fresh reviewer, fix loop), on the plan's branch only, within the task's scope.
+- [AGREED] Decision #46: a task that implements a stub route also updates the stub-route tests (explicit `STUBS` list in `backend/tests/api/test_routes_exist.py`).
+- [AGREED] Decision #48: Chat Retry recovers a lost run id from `GET /chats/{id}` (the run id is the stored user message id) and never sends a question twice; only a 4xx on the question's POST means it was not stored; a chat that is gone (404) is replaced by a new chat on Retry.
+- [AGREED] Decision #60: `/health` role readiness means "can process now"; fake speech reports `ready`, and the fake backend is reported only by `speech_backend`.
+- [USER] 2026-10-18: commits are authored and committed under the name and email of the person running the agent, never an AI identity (e.g. `Claude <noreply@anthropic.com>`); this counts as AI attribution. Earlier commits with that identity are not rewritten.
 
 ## 3. Open
 Each item is safe to decide later; the stage that decides it is named.
@@ -114,6 +123,7 @@ Each item is safe to decide later; the stage that decides it is named.
 - Live recording with live transcript (2026-10-16, user) → record live, process on stop; live transcript moved to Ideas (2026-10-16, user).
 - Timestamps and speaker labels "desirable, not decided" (brief) → diarization is in and provides timestamps (2026-10-16, user).
 - Automation platform vs. custom backend open (brief) → all code (2026-10-16, user).
+- Every LLM through `ChatOpenAI` on OpenAI-compatible endpoints (stage 1 spec) → a client per provider (`openai` or `google_genai`) (2026-10-17, user: Gemini 3 rejected multi-turn tool calls on the OpenAI-compatible endpoint; dropping Gemini from Chat was refused as a workaround).
 
 ## 6. Files
 - `project_knowledge.md`: this file.

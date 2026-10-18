@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import cast
+from typing import Literal, cast
 
 import yaml
 from pydantic import BaseModel, Field, HttpUrl, ValidationError, model_validator
@@ -13,7 +13,8 @@ from app.config.settings import Settings
 
 
 class Provider(BaseModel):
-    base_url: HttpUrl
+    client: Literal["openai", "google_genai"]
+    base_url: HttpUrl | None = None
     key_env: str = Field(min_length=1)
 
 
@@ -46,10 +47,15 @@ class ModelsRegistry(BaseModel):
     @model_validator(mode="after")
     def validate_providers(self) -> ModelsRegistry:
         for name, provider in self.providers.items():
-            if provider.base_url.username is not None or provider.base_url.password is not None:
-                raise ConfigError(f"Provider {name} base_url must not contain credentials")
-            if provider.base_url.query is not None or provider.base_url.fragment is not None:
-                raise ConfigError(f"Provider {name} base_url must not contain a query or fragment")
+            if provider.client == "openai" and provider.base_url is None:
+                raise ConfigError(f"Provider {name} requires base_url")
+            if provider.client == "google_genai" and provider.base_url is not None:
+                raise ConfigError(f"Provider {name} refuses base_url")
+            if provider.base_url is not None:
+                if provider.base_url.username is not None or provider.base_url.password is not None:
+                    raise ConfigError(f"Provider {name} base_url must not contain credentials")
+                if provider.base_url.query is not None or provider.base_url.fragment is not None:
+                    raise ConfigError(f"Provider {name} base_url must not contain a query or fragment")
         for role_name in ("llm", "llm_analysis"):
             entries: list[LlmEntry] = getattr(self.roles, role_name)
             for entry in entries:
