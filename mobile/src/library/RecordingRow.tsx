@@ -10,6 +10,7 @@ import type { TapeTheme } from '../theme/paperTheme';
 import { radius, spacing, typeScale } from '../theme/tokens';
 import { formatDate, formatDuration } from './PendingRow';
 import { rowStatus } from './rowStatus';
+import { WaveThumb } from './WaveThumb';
 
 export interface RecordingRowProps {
   recording: Schemas['RecordingOut'];
@@ -87,6 +88,10 @@ export function RecordingRow({ recording, onPress }: RecordingRowProps) {
           >
             {formatDate(recording.created_at)}
           </Text>
+        ) : null}
+
+        {recording.waveform_peaks && recording.waveform_peaks.length > 0 ? (
+          <WaveThumb peaks={recording.waveform_peaks} />
         ) : null}
 
         {recording.tags && recording.tags.length > 0 ? (

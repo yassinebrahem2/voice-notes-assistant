@@ -1,3 +1,4 @@
+import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import type React from 'react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
@@ -21,6 +22,9 @@ export interface TranscriptViewProps {
   recordingId?: string;
   onShowSnackbar?: (message: string) => void;
   onRenameSpeaker?: (speaker: Schemas['SpeakerOut']) => void;
+  onScrollBeginDrag?: () => void;
+  isFollowing?: boolean;
+  onFollow?: () => void;
 }
 
 export function TranscriptView({
@@ -32,6 +36,9 @@ export function TranscriptView({
   recordingId,
   onShowSnackbar,
   onRenameSpeaker,
+  onScrollBeginDrag,
+  isFollowing = true,
+  onFollow,
 }: TranscriptViewProps) {
   const { tape } = useTheme<TapeTheme>();
   const reducedMotion = useReducedMotion();
@@ -67,9 +74,11 @@ export function TranscriptView({
 
   useEffect(() => {
     if (activeSegmentId && scrolledSegmentId.current !== activeSegmentId) {
-      scrollToSegment(activeSegmentId);
+      if (isFollowing) {
+        scrollToSegment(activeSegmentId);
+      }
     }
-  }, [activeSegmentId, scrollToSegment]);
+  }, [activeSegmentId, scrollToSegment, isFollowing]);
 
   const showSpeakerChips = kind === 'meeting' && speakers.length > 0;
 
@@ -117,6 +126,7 @@ export function TranscriptView({
         ref={scrollViewRef}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.turnsContainer}
+        onScrollBeginDrag={onScrollBeginDrag}
       >
         {turns.map((turn, turnIdx) => {
           const speakerIdx = turn.speakerId
@@ -231,6 +241,39 @@ export function TranscriptView({
         })}
       </ScrollView>
 
+      {!isFollowing && onFollow ? (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Follow playback"
+          onPress={() => {
+            onFollow();
+            if (activeSegmentId) {
+              scrollToSegment(activeSegmentId);
+            }
+          }}
+          android_ripple={{ color: tape.line }}
+          style={[
+            styles.followButton,
+            { backgroundColor: tape.raised, borderColor: tape.line },
+          ]}
+        >
+          <MaterialCommunityIcons
+            name="crosshairs-gps"
+            size={18}
+            color={tape.signal}
+            accessible={false}
+          />
+          <Text
+            style={[
+              styles.followButtonText,
+              { color: tape.ink, fontFamily: fontFamilies.semibold },
+            ]}
+          >
+            Follow
+          </Text>
+        </Pressable>
+      ) : null}
+
       <SpeakerRenameDialog
         visible={selectedSpeaker !== null}
         speaker={selectedSpeaker}
@@ -284,7 +327,25 @@ const styles = StyleSheet.create({
   },
   turnsContainer: {
     gap: spacing.lg,
-    paddingBottom: spacing.xxl,
+    paddingBottom: spacing.xxl + 48,
+  },
+  followButton: {
+    position: 'absolute',
+    bottom: spacing.md,
+    alignSelf: 'center',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.xs,
+    paddingHorizontal: spacing.lg,
+    height: 48,
+    borderRadius: radius.round,
+    borderWidth: 1,
+    elevation: 4,
+    zIndex: 10,
+  },
+  followButtonText: {
+    fontSize: typeScale.small,
   },
   turnCard: {
     gap: spacing.xs,

@@ -19,6 +19,7 @@ import { TranscriptView } from '../../src/detail/TranscriptView';
 import { groupTurns } from '../../src/detail/turns';
 import { useRecording } from '../../src/detail/useRecording';
 import { LibrarySkeleton } from '../../src/library/LibrarySkeleton';
+import { activeSegmentIndex } from '../../src/player/activeSegment';
 import { PlayerBar } from '../../src/player/PlayerBar';
 import { usePlayer } from '../../src/player/usePlayer';
 import { fontFamilies } from '../../src/theme/fonts';
@@ -59,11 +60,12 @@ export function RecordingScreen(props: RecordingScreenProps = {}) {
 
   const player = usePlayer(id);
   const initialPlayed = useRef(false);
+  const [isFollowing, setIsFollowing] = useState(true);
 
   const [activeTab, setActiveTab] = useState<'primary' | 'transcript'>(() =>
     initialSegment ? 'transcript' : 'primary',
   );
-  const [activeSegmentId, setActiveSegmentId] = useState<string | null>(
+  const [selectedSegmentId, setSelectedSegmentId] = useState<string | null>(
     () => initialSegment ?? null,
   );
 
@@ -74,9 +76,22 @@ export function RecordingScreen(props: RecordingScreenProps = {}) {
     [segments, speakers],
   );
 
+  const activeIdx =
+    segments && player.isPlaying
+      ? activeSegmentIndex(segments, player.positionMs)
+      : -1;
+  const playbackActiveSegmentId =
+    activeIdx >= 0 && segments ? (segments[activeIdx]?.id ?? null) : null;
+
+  const activeSegmentId =
+    player.isPlaying && playbackActiveSegmentId
+      ? playbackActiveSegmentId
+      : selectedSegmentId;
+
   const handleSelectSegment = (segmentId: string) => {
-    setActiveSegmentId(segmentId);
+    setSelectedSegmentId(segmentId);
     setActiveTab('transcript');
+    setIsFollowing(true);
     const seg = segments?.find((s) => s.id === segmentId);
     if (seg) {
       void player.playFrom(seg.start_ms);
@@ -282,6 +297,15 @@ export function RecordingScreen(props: RecordingScreenProps = {}) {
                   kind={recording.kind}
                   recordingId={recording.id}
                   onShowSnackbar={setSnackbarMessage}
+                  onScrollBeginDrag={() => {
+                    if (player.isPlaying) {
+                      setIsFollowing(false);
+                    }
+                  }}
+                  isFollowing={isFollowing}
+                  onFollow={() => {
+                    setIsFollowing(true);
+                  }}
                 />
               )}
             </View>
