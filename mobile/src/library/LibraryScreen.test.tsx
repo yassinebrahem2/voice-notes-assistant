@@ -267,107 +267,41 @@ describe('LibraryScreen', () => {
     expect(serverText).toBeTruthy();
   });
 
-  describe('pending search', () => {
-    const pendingItems: PendingUpload[] = (['meeting', 'note'] as const).map(
-      (kind) => ({
-        clientUploadId: `pending-${kind}`,
-        kind,
-        path: `file:///pending/${kind}.m4a`,
-        createdAt: '2026-10-17T10:00:00Z',
-        durationMs: 45000,
-      }),
-    );
-    const retry = jest.fn();
-    const remove = jest.fn();
-
-    beforeEach(() => {
-      jest.useFakeTimers();
-      mockUsePendingUploads.mockReturnValue({
-        items: pendingItems,
-        retry,
-        remove,
-        refresh: jest.fn(),
-      });
-    });
-
-    afterEach(() => {
-      jest.useRealTimers();
-    });
-
-    test.each([
-      ['meeting', 'Meeting', 'Note', ' mEeT '],
-      ['note', 'Note', 'Meeting', ' nOt '],
-    ] as const)(
-      '%s searches its pending label after 300 ms and clearing restores the row',
-      async (kind, label, otherLabel, matchingQuery) => {
-        const queueBefore = pendingItems.map((item) => ({ ...item }));
-        await renderScreen(kind);
-        const searchInput = screen.getByRole('search');
-        expect(screen.getByText(label)).toBeTruthy();
-        expect(screen.queryByText(otherLabel)).toBeNull();
-
-        await act(async () => {
-          fireEvent.changeText(searchInput, matchingQuery);
-        });
-        await act(async () => jest.advanceTimersByTime(300));
-        expect(screen.getByText('Not uploaded')).toBeTruthy();
-
-        await act(async () => {
-          fireEvent.changeText(searchInput, `${kind}-test`);
-        });
-        await act(async () => jest.advanceTimersByTime(299));
-        expect(screen.getByText('Not uploaded')).toBeTruthy();
-        await act(async () => jest.advanceTimersByTime(1));
-        expect(screen.queryByText('Not uploaded')).toBeNull();
-        expect(screen.getByText('No matching recordings')).toBeTruthy();
-
-        await act(async () => {
-          fireEvent.press(
-            screen.getByRole('button', { name: 'Clear filters' }),
-          );
-        });
-        expect(searchInput.props.value).toBe('');
-        expect(screen.getByText(label)).toBeTruthy();
-        expect(screen.queryByText(otherLabel)).toBeNull();
-        expect(screen.queryByText('No matching recordings')).toBeNull();
-        await act(async () => {
-          fireEvent.changeText(searchInput, '   ');
-        });
-        await act(async () => jest.advanceTimersByTime(300));
-        expect(screen.getByText('Not uploaded')).toBeTruthy();
-        expect(pendingItems).toEqual(queueBefore);
-        expect(retry).not.toHaveBeenCalled();
-        expect(remove).not.toHaveBeenCalled();
-      },
-    );
-
-    test('keeps the server error when an unmatched pending row is hidden', async () => {
-      const refetch = jest.fn();
-      mockUseRecordings.mockReturnValue({
-        data: undefined,
-        isLoading: false,
-        error: new ApiError(501, 'not_implemented', 'Not implemented'),
-        refetch,
-      } as unknown as ReturnType<typeof useRecordings>);
-      await renderScreen('meeting');
-      await act(async () => {
-        fireEvent.changeText(screen.getByRole('search'), 'meeting-test');
-      });
-      await act(async () => jest.advanceTimersByTime(300));
-
-      expect(screen.queryByText('Not uploaded')).toBeNull();
-      expect(screen.getByText('Not available yet.')).toBeTruthy();
-      expect(screen.queryByText('No matching recordings')).toBeNull();
-      expect(
-        screen.queryByRole('button', { name: 'Clear filters' }),
-      ).toBeNull();
-      await act(async () => {
-        fireEvent.press(screen.getByRole('button', { name: 'Retry' }));
-      });
-      expect(refetch).toHaveBeenCalledTimes(1);
-      expect(retry).not.toHaveBeenCalled();
-      expect(remove).not.toHaveBeenCalled();
-    });
+  test('the library root is a SafeAreaView whose edges include top', async () => {
+    const { toJSON } = await renderScreen('meeting');
+    const tree = toJSON();
+    function findNode(
+      node: unknown,
+      type: string,
+    ): { type: string; props: { edges?: string[] } } | null {
+      if (!node || typeof node !== 'object') return null;
+      const n = node as {
+        type?: string;
+        children?: unknown[];
+        props?: { edges?: string[] };
+      };
+      if (n.type === type)
+        return n as { type: string; props: { edges?: string[] } };
+      if (Array.isArray(n.children)) {
+        for (const child of n.children) {
+          const found = findNode(child, type);
+          if (found) return found;
+        }
+      }
+      return null;
+    }
+    const safeArea = findNode(tree, 'RNCSafeAreaView');
+    expect(safeArea).toBeTruthy();
+    const edges = safeArea?.props.edges;
+    const hasTop = Array.isArray(edges)
+      ? edges.includes('top')
+      : Boolean(
+          edges &&
+          typeof edges === 'object' &&
+          (edges as Record<string, unknown>).top &&
+          (edges as Record<string, unknown>).top !== 'off',
+        );
+    expect(hasTop).toBe(true);
   });
 
   test('server row navigates on press and prefetches on press-in', async () => {

@@ -18,6 +18,8 @@ import { paperTheme } from '../src/theme/paperTheme';
 
 void SplashScreen.preventAutoHideAsync();
 
+export const unstable_settings = { anchor: '(tabs)' };
+
 export default function RootLayout() {
   const systemScheme = useColorScheme() === 'dark' ? 'dark' : 'light';
   const { preference, loaded: themeLoaded } = useThemePreference();

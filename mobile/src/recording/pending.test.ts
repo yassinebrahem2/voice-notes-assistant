@@ -22,6 +22,7 @@ jest.mock('expo-crypto', () => ({
 }));
 
 const mockFiles = new Map<string, boolean>();
+const mockDirectories = new Set<string>();
 
 function mockNormalizeUri(...parts: (string | { uri: string })[]): string {
   const raw = parts.map((p) => (typeof p === 'string' ? p : p.uri)).join('/');
@@ -37,18 +38,32 @@ jest.mock('expo-file-system', () => {
     constructor(...parts: (string | MockDirectory)[]) {
       this.uri = mockNormalizeUri(...parts);
     }
-    create = jest.fn();
+    get name(): string {
+      const parts = this.uri.split('/');
+      return parts[parts.length - 1];
+    }
+    create = jest.fn(() => {
+      mockDirectories.add(this.uri);
+    });
     get exists(): boolean {
       return true;
     }
     list = jest.fn(() => {
       const prefix = this.uri.endsWith('/') ? this.uri : `${this.uri}/`;
-      const result: MockFile[] = [];
+      const result: (MockFile | MockDirectory)[] = [];
       for (const uri of mockFiles.keys()) {
         if (uri.startsWith(prefix) && mockFiles.get(uri)) {
           const rest = uri.slice(prefix.length);
           if (!rest.includes('/')) {
             result.push(new MockFile(uri));
+          }
+        }
+      }
+      for (const uri of mockDirectories) {
+        if (uri.startsWith(prefix)) {
+          const rest = uri.slice(prefix.length);
+          if (rest && !rest.includes('/')) {
+            result.push(new MockDirectory(uri));
           }
         }
       }
@@ -98,6 +113,7 @@ jest.mock('expo-file-system', () => {
 describe('pending upload queue', () => {
   beforeEach(() => {
     mockFiles.clear();
+    mockDirectories.clear();
     jest.mocked(AsyncStorage.getItem).mockReset();
     jest.mocked(AsyncStorage.setItem).mockReset();
     jest.mocked(randomUUID).mockReset();
@@ -302,6 +318,14 @@ describe('pending upload queue', () => {
 
   test('legacy file without kind and no index entry is skipped', async () => {
     mockFiles.set('file:///mock-document/pending/legacy-unindexed.m4a', true);
+    jest.mocked(AsyncStorage.getItem).mockResolvedValue(JSON.stringify([]));
+
+    const list = await listPending();
+    expect(list).toEqual([]);
+  });
+
+  test('listPending ignores a sub-folder named like a pending file', async () => {
+    mockDirectories.add('file:///mock-document/pending/dir-123.meeting.m4a');
     jest.mocked(AsyncStorage.getItem).mockResolvedValue(JSON.stringify([]));
 
     const list = await listPending();

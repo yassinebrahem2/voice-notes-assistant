@@ -74,12 +74,10 @@ export function LibraryScreen({ kind }: LibraryScreenProps) {
     remove: removePending,
   } = usePendingUploads();
 
-  const filteredPending = useMemo(() => {
-    const query = debouncedSearch.trim().toLowerCase();
-    return pendingItems.filter(
-      (item) => item.kind === kind && item.kind.includes(query),
-    );
-  }, [pendingItems, kind, debouncedSearch]);
+  const filteredPending = useMemo(
+    () => pendingItems.filter((item) => item.kind === kind),
+    [pendingItems, kind],
+  );
 
   const {
     data: recordingsData,

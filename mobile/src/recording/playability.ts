@@ -8,7 +8,8 @@ export async function checkAudioPlayable(
   try {
     const file = new File(uri);
     if (!file.exists) return false;
-  } catch {
+  } catch (error) {
+    console.warn('Failed to verify recording file existence:', error);
     return false;
   }
 
@@ -24,10 +25,14 @@ export async function checkAudioPlayable(
         if (timer !== null) clearTimeout(timer);
         try {
           sub?.remove();
-        } catch {}
+        } catch (error) {
+          console.warn('Failed to remove player listener:', error);
+        }
         try {
           player?.release();
-        } catch {}
+        } catch (error) {
+          console.warn('Failed to release audio player:', error);
+        }
         resolve(result);
       }
     };
@@ -38,7 +43,11 @@ export async function checkAudioPlayable(
 
     try {
       player = createAudioPlayer(uri);
-    } catch {
+    } catch (error) {
+      console.warn(
+        'Failed to create audio player for playability check:',
+        error,
+      );
       finish(false);
       return;
     }
@@ -78,7 +87,11 @@ export async function checkAudioPlayable(
           }
         }
       });
-    } catch {
+    } catch (error) {
+      console.warn(
+        'Failed to add player listener for playability check:',
+        error,
+      );
       finish(false);
     }
   });

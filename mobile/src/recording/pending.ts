@@ -82,9 +82,7 @@ async function getOrRebuildIndex(
   const stored = await readRawIndex();
   if (stored !== null) return stored;
 
-  const files = pendingDir
-    .list()
-    .filter((e): e is File => e instanceof File || 'name' in e);
+  const files = pendingDir.list().filter((e): e is File => e instanceof File);
   const rebuilt = rebuildIndexFromDisk(files);
   await saveStoredList(rebuilt);
   return rebuilt;
@@ -122,7 +120,7 @@ export async function listPending(): Promise<PendingUpload[]> {
     const pendingDir = getPendingDir();
     const entries = pendingDir
       .list()
-      .filter((e): e is File => e instanceof File || 'name' in e);
+      .filter((e): e is File => e instanceof File);
     let index = await getOrRebuildIndex(pendingDir);
 
     const indexById = new Map<string, StoredIndexEntry>();
