@@ -24,9 +24,11 @@ export async function setThemePreference(
 
 export function useThemePreference(): {
   preference: ThemePreference;
+  loaded: boolean;
   setPreference: (preference: ThemePreference) => Promise<void>;
 } {
   const [preference, setLocal] = useState<ThemePreference>('system');
+  const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -39,9 +41,13 @@ export function useThemePreference(): {
     // A failed read keeps the system theme rather than blocking the app.
     void getThemePreference().then(
       (stored) => {
-        if (active && !updated) setLocal(stored);
+        if (!active) return;
+        if (!updated) setLocal(stored);
+        setLoaded(true);
       },
-      () => undefined,
+      () => {
+        if (active) setLoaded(true);
+      },
     );
     return () => {
       active = false;
@@ -53,5 +59,5 @@ export function useThemePreference(): {
     (next: ThemePreference) => setThemePreference(next),
     [],
   );
-  return { preference, setPreference };
+  return { preference, loaded, setPreference };
 }

@@ -43,3 +43,25 @@ test('the hook loads the stored value and follows changes', async () => {
   });
   expect(result.current.preference).toBe('dark');
 });
+
+test('the hook is loaded only once the stored value is read', async () => {
+  let resolve!: (value: string | null) => void;
+  jest.mocked(AsyncStorage.getItem).mockReturnValue(
+    new Promise((r) => {
+      resolve = r;
+    }),
+  );
+  const { result } = await renderHook(() => useThemePreference());
+  expect(result.current.loaded).toBe(false);
+  await act(async () => {
+    resolve('dark');
+  });
+  expect(result.current).toMatchObject({ preference: 'dark', loaded: true });
+});
+
+test('a failed read counts as loaded, with the system theme', async () => {
+  jest.mocked(AsyncStorage.getItem).mockRejectedValue(new Error('disk'));
+  const { result } = await renderHook(() => useThemePreference());
+  await waitFor(() => expect(result.current.loaded).toBe(true));
+  expect(result.current.preference).toBe('system');
+});

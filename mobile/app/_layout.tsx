@@ -18,17 +18,18 @@ void SplashScreen.preventAutoHideAsync();
 
 export default function RootLayout() {
   const systemScheme = useColorScheme() === 'dark' ? 'dark' : 'light';
-  const { preference } = useThemePreference();
+  const { preference, loaded: themeLoaded } = useThemePreference();
   const scheme = preference === 'system' ? systemScheme : preference;
   const theme = paperTheme(scheme);
   const [fontsLoaded, fontError] = useFonts(fontAssets);
 
   useEffect(() => {
     if (fontError) throw fontError;
-    if (fontsLoaded) void SplashScreen.hideAsync();
-  }, [fontsLoaded, fontError]);
+    // The stored theme can arrive a frame after the fonts; hiding the splash before it would flash the system theme.
+    if (fontsLoaded && themeLoaded) void SplashScreen.hideAsync();
+  }, [fontsLoaded, fontError, themeLoaded]);
 
-  if (!fontsLoaded) return null;
+  if (!fontsLoaded || !themeLoaded) return null;
 
   return (
     <QueryClientProvider client={queryClient}>
