@@ -201,6 +201,7 @@ export function RecordingHeader({
                   accessibilityRole="button"
                   accessibilityLabel={`Remove tag ${tag.name}`}
                   onPress={() => handleRemoveTag(tag.name)}
+                  hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
                   android_ripple={{ color: tape.line, borderless: true }}
                   style={styles.tagActionIcon}
                 >
@@ -239,6 +240,7 @@ export function RecordingHeader({
                 accessibilityRole="button"
                 accessibilityLabel="Save tag"
                 onPress={handleAddTag}
+                hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
                 android_ripple={{ color: tape.line, borderless: true }}
                 style={styles.tagActionIcon}
               >
@@ -255,6 +257,7 @@ export function RecordingHeader({
               accessibilityRole="button"
               accessibilityLabel="Add tag"
               onPress={() => setIsAddingTag(true)}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
               android_ripple={{ color: tape.line }}
               style={[
                 styles.tagChip,

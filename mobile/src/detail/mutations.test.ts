@@ -1,5 +1,10 @@
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { renderHook, waitFor } from '@testing-library/react-native';
+import {
+  QueryClient,
+  QueryClientProvider,
+  QueryObserver,
+  notifyManager,
+} from '@tanstack/react-query';
+import { act, renderHook, waitFor } from '@testing-library/react-native';
 import { router } from 'expo-router';
 import React from 'react';
 
@@ -29,11 +34,11 @@ function createWrapper() {
     defaultOptions: {
       queries: {
         retry: false,
-        gcTime: 60000,
+        gcTime: 0,
       },
       mutations: {
         retry: false,
-        gcTime: 60000,
+        gcTime: 0,
       },
     },
   });
@@ -75,6 +80,10 @@ const baseRecording: Schemas['RecordingDetailOut'] = {
 };
 
 describe('Recording mutations', () => {
+  beforeAll(() => {
+    notifyManager.setScheduler((cb) => cb());
+  });
+
   beforeEach(() => {
     jest.clearAllMocks();
   });
@@ -88,6 +97,10 @@ describe('Recording mutations', () => {
     test('optimistically updates speaker and rolls back on error showing "Couldn\'t save"', async () => {
       const { queryClient, Wrapper } = createWrapper();
       queryClient.setQueryData(['recording', 'rec_1'], baseRecording);
+      const observer = new QueryObserver(queryClient, {
+        queryKey: ['recording', 'rec_1'],
+      });
+      const unsubscribe = observer.subscribe(() => {});
 
       let rejectMutation!: (reason: unknown) => void;
       mockApiFetch.mockImplementation(
@@ -103,35 +116,34 @@ describe('Recording mutations', () => {
         { wrapper: Wrapper },
       );
 
-      const mutationPromise = result.current
-        .mutateAsync({ speakerId: 'spk_1', name: 'Alice' })
-        .catch(() => {});
-
-      // Optimistic update applied
-      await waitFor(() => {
-        const cached = queryClient.getQueryData<Schemas['RecordingDetailOut']>([
-          'recording',
-          'rec_1',
-        ]);
-        expect(cached?.speakers[0].name).toBe('Alice');
-        expect(cached?.speakers[0].display_name).toBe('Alice');
+      await act(async () => {
+        result.current.mutate({ speakerId: 'spk_1', name: 'Alice' });
       });
 
+      // Optimistic update applied
+      const cached = queryClient.getQueryData<Schemas['RecordingDetailOut']>([
+        'recording',
+        'rec_1',
+      ]);
+      expect(cached?.speakers[0].name).toBe('Alice');
+      expect(cached?.speakers[0].display_name).toBe('Alice');
+
       // API call fails
-      rejectMutation(new ApiError(500, 'internal_error', 'Server error'));
-      await mutationPromise;
+      await act(async () => {
+        rejectMutation(new ApiError(500, 'internal_error', 'Server error'));
+      });
 
       // Rolls back to original state and notifies
       await waitFor(() => {
-        const cached = queryClient.getQueryData<Schemas['RecordingDetailOut']>([
-          'recording',
-          'rec_1',
-        ]);
-        expect(cached?.speakers[0].name).toBeNull();
-        expect(cached?.speakers[0].display_name).toBe('Speaker 1');
+        const rolledBack = queryClient.getQueryData<
+          Schemas['RecordingDetailOut']
+        >(['recording', 'rec_1']);
+        expect(rolledBack?.speakers[0].name).toBeNull();
+        expect(rolledBack?.speakers[0].display_name).toBe('Speaker 1');
       });
 
       expect(onNotify).toHaveBeenCalledWith("Couldn't save");
+      unsubscribe();
     });
   });
 
@@ -139,6 +151,10 @@ describe('Recording mutations', () => {
     test('optimistically updates title and tags and rolls back on error', async () => {
       const { queryClient, Wrapper } = createWrapper();
       queryClient.setQueryData(['recording', 'rec_1'], baseRecording);
+      const observer = new QueryObserver(queryClient, {
+        queryKey: ['recording', 'rec_1'],
+      });
+      const unsubscribe = observer.subscribe(() => {});
 
       let rejectMutation!: (reason: unknown) => void;
       mockApiFetch.mockImplementation(
@@ -154,35 +170,37 @@ describe('Recording mutations', () => {
         { wrapper: Wrapper },
       );
 
-      const mutationPromise = result.current
-        .mutateAsync({ title: 'New Title', tags: ['Personal'] })
-        .catch(() => {});
-
-      // Optimistic update applied
-      await waitFor(() => {
-        const cached = queryClient.getQueryData<Schemas['RecordingDetailOut']>([
-          'recording',
-          'rec_1',
-        ]);
-        expect(cached?.title).toBe('New Title');
-        expect(cached?.tags.map((t) => t.name)).toEqual(['Personal']);
+      await act(async () => {
+        result.current.mutate({
+          title: 'New Title',
+          tags: ['Personal'],
+        });
       });
 
+      // Optimistic update applied
+      const cached = queryClient.getQueryData<Schemas['RecordingDetailOut']>([
+        'recording',
+        'rec_1',
+      ]);
+      expect(cached?.title).toBe('New Title');
+      expect(cached?.tags.map((t) => t.name)).toEqual(['Personal']);
+
       // API call fails
-      rejectMutation(new ApiError(500, 'internal_error', 'Server error'));
-      await mutationPromise;
+      await act(async () => {
+        rejectMutation(new ApiError(500, 'internal_error', 'Server error'));
+      });
 
       // Rolls back to original state and notifies
       await waitFor(() => {
-        const cached = queryClient.getQueryData<Schemas['RecordingDetailOut']>([
-          'recording',
-          'rec_1',
-        ]);
-        expect(cached?.title).toBe('Old Title');
-        expect(cached?.tags.map((t) => t.name)).toEqual(['Work']);
+        const rolledBack = queryClient.getQueryData<
+          Schemas['RecordingDetailOut']
+        >(['recording', 'rec_1']);
+        expect(rolledBack?.title).toBe('Old Title');
+        expect(rolledBack?.tags.map((t) => t.name)).toEqual(['Work']);
       });
 
       expect(onNotify).toHaveBeenCalledWith("Couldn't save");
+      unsubscribe();
     });
   });
 
@@ -196,12 +214,12 @@ describe('Recording mutations', () => {
       const onNotify = jest.fn();
       const { result } = await renderHook(
         () => useDeleteRecording({ onNotify }),
-        {
-          wrapper: Wrapper,
-        },
+        { wrapper: Wrapper },
       );
 
-      result.current.mutate('rec_1');
+      await act(async () => {
+        result.current.mutate('rec_1');
+      });
 
       await waitFor(() => {
         expect(onNotify).toHaveBeenCalledWith(
@@ -219,18 +237,20 @@ describe('Recording mutations', () => {
       const onNotify = jest.fn();
       const { result } = await renderHook(
         () => useDeleteRecording({ onNotify }),
-        {
-          wrapper: Wrapper,
-        },
+        { wrapper: Wrapper },
       );
 
-      result.current.mutate('rec_1');
+      await act(async () => {
+        result.current.mutate('rec_1');
+      });
 
       await waitFor(() => {
         expect(onNotify).toHaveBeenCalledWith('Deleted');
       });
       expect(router.back).toHaveBeenCalled();
-      expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['recordings'] });
+      expect(invalidateSpy).toHaveBeenCalledWith({
+        queryKey: ['recordings'],
+      });
     });
   });
 });

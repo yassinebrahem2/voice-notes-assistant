@@ -75,7 +75,7 @@ export function SpeakerRenameDialog({
       onRequestClose={onDismiss}
     >
       <Pressable
-        style={styles.backdrop}
+        style={[styles.backdrop, { backgroundColor: tape.bg, opacity: 0.95 }]}
         onPress={onDismiss}
         accessibilityRole="none"
         accessibilityLabel="Dismiss dialog backdrop"
@@ -183,7 +183,6 @@ export function SpeakerRenameDialog({
 const styles = StyleSheet.create({
   backdrop: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
     justifyContent: 'center',
     alignItems: 'center',
     padding: spacing.lg,
