@@ -1,3 +1,4 @@
+import dataclasses
 import os
 from collections.abc import Iterator
 from pathlib import Path
@@ -13,6 +14,7 @@ from app.config.settings import Settings, load_settings
 from app.container import Container, build_container
 from app.db.connection import connect
 from app.db.migrate import apply_migrations
+from app.processing.fakes import FakeAnalyzer
 
 
 @pytest.fixture(autouse=True)
@@ -30,6 +32,7 @@ def isolate_provider_keys(monkeypatch: pytest.MonkeyPatch) -> None:
     for provider in registry["providers"].values():
         monkeypatch.delenv(provider["key_env"], raising=False)
     monkeypatch.delenv("HF_TOKEN", raising=False)
+    monkeypatch.delenv("GOOGLE_API_KEY", raising=False)
 
 
 @pytest.fixture
@@ -41,6 +44,11 @@ def container(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Container:
     monkeypatch.setenv("SPEECH_BACKEND", "fake")
     settings = load_settings(load_app_config(), env_file=env_file)
     result = build_container(settings)
+    result = dataclasses.replace(result, analyzer=FakeAnalyzer(), chat_runs=None)
+    from app.agents.chat_graph import build_chat_graph
+    from app.chats.runs import ChatRuns
+
+    result.chat_runs = ChatRuns(result, build_chat_graph)
     result.settings.data_dir.mkdir(parents=True)
     connection = connect(result.db_path)
     try:
