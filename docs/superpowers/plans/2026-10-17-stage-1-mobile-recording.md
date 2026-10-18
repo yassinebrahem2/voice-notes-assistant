@@ -273,6 +273,31 @@ Follow-up from the lead's review of PR #68 (plan issue #19). The branch conflict
   - Delete a recording → back in the library with "Deleted" shown, and no "This recording was deleted" flash during the back animation.
 - [ ] **Step 8:** a final whole-branch review as `docs/implementing-plan-tasks.md` says, then fix the PR #68 description: "Not done, or done differently" lists anything left open, and "How it was tested" names the phone checks actually done.
 
+### Task 10: Phone checks after Task 9
+
+Tracked in #72: Task 9's Step 7 checks, run on the pushed branch against the processing plan's backend with `seed-demo` data.
+
+### Task 11: Phone-report and review fixes
+
+Follow-up from the lead's review of Task 9 (#69) and Stard-bch's phone reports on #38 and #39. (Task 10, #72, is the phone checks.)
+
+**Files:**
+- Modify: `mobile/src/library/LibraryScreen.tsx`, `mobile/app/_layout.tsx`, `mobile/src/recording/playability.ts`, `mobile/src/recording/pending.ts`
+- Test: `mobile/src/library/LibraryScreen.test.tsx`, `mobile/src/recording/pending.test.ts`
+
+**Fixes:**
+1. **Library under the status bar.** On Android the Meetings and Notes search bar sits under the status bar (phone report on #38). Stard-bch's local `447da11` fixed it but was never pushed. It also changed pending-row search, which is not part of this task: drop `447da11` instead of pushing it. Wrap the library in `SafeAreaView` with `edges={['top', 'left', 'right']}`, as `ChatScreen` does (the tab bar handles the bottom).
+2. **Back from a deep-linked recording leaves the app** (phone report on #39). In `app/_layout.tsx`, add `export const unstable_settings = { anchor: '(tabs)' };`, so a recording page opened directly has the tabs under it. This mirrors `(tabs)/_layout.tsx`'s `anchor: 'meetings'`.
+3. **`playability.ts` swallows errors** in four empty `catch {}` blocks. AGENTS.md: no swallowed errors. Log each one with `console.warn` (a short reason plus the error). The results stay the same.
+4. **`pending.ts` treats a folder as a file.** The `pendingDir.list()` filter is `(e): e is File => e instanceof File || 'name' in e`, and `Directory` has a `name` too. Use `e instanceof File` alone. The test mock already provides `File` as `MockFile`.
+
+- [ ] **Step 1: Write the failing tests:**
+  - the library's root is a `SafeAreaView` whose `edges` include `'top'` (with the jest mock the insets are 0; the real check is Step 5);
+  - `listPending()` ignores a sub-folder named like a pending file (`<id>.meeting.m4a`).
+- [ ] **Step 2: Run** → FAIL. **Step 3: Implement** 1–4. **Step 4: Run** jest, tsc, eslint, prettier → clean.
+- [ ] **Step 5 (phone, Expo Go):** the Meetings and Notes search bars are below the status bar; open `/recording/<id>` by deep link, press Back, and you land on Meetings.
+- [ ] **Step 6: Commit** `fix(mobile): library safe area, root anchor and logged playability errors`.
+
 ## Shared files with the chat-settings plan
 This plan adds `FanOutOverlay` and the `record` screen options to `app/_layout.tsx`, and owns `app/recording/[id].tsx` (the Chat plan only navigates to it). The chat-settings plan edits `TabBar` (status dot) and `app/_layout.tsx` (theme preference, server banner). Whichever merges second brings the other in and keeps both; for this plan that is a merge commit (Task 9), not a rebase, because the branch has other people's commits.
 
@@ -280,3 +305,4 @@ This plan adds `FanOutOverlay` and the `record` screen options to `app/_layout.t
 - Spec coverage: UI §1 routes and back behaviour (Tasks 1, 2, 4, 6); §2 recording (Tasks 1–4); §3 libraries and recording page (Tasks 5–7); §4 tokens used throughout; §5 Tier 1 motion (Tasks 1, 3, 5, 6), Tier 2 (Task 8); §6 app-side failures for uploads, edits, playback, deleted citations (Tasks 4, 6, 7, 8). Chat and Settings are plan 5.
 - Dependencies: Task 1 none; Task 2 needs 1; Task 3 needs 2; Task 4 needs 2; Task 5 needs 4 (pending rows); Task 6 needs 5; Task 7 needs 6; Task 8 needs 6. Tasks 3 and 4 can run in parallel, and so can Tasks 7 and 8.
 - Task 9 (from the lead's review of PR #68) needs Tasks 1–8; it is one task because its parts touch the same files and part A must land first.
+- Task 10 (#72, phone checks after Task 9) and Task 11 (phone-report and review fixes) both need Task 9 and can run in parallel.
