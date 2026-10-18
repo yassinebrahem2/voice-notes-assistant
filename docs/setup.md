@@ -1,12 +1,14 @@
 # Development setup
 
-This guide covers the current foundation. The backend has a working health
-endpoint and database migrations; feature routes return HTTP 501 with error code
-`not_implemented`. With `SPEECH_BACKEND=real` (the default) speech runs in child
+This guide covers setting up the backend and the mobile app. Every backend route
+is implemented. With `SPEECH_BACKEND=real` (the default) speech runs in child
 processes and needs the speech extra and downloaded models (see
 [Real speech and models](#real-speech-and-models)); `SPEECH_BACKEND=fake` binds
-canned speech for development. Analysis still uses a fake. Mobile screens are placeholders and Record does nothing.
-Successful setup does not yet mean recording, transcription or chat works.
+canned speech for development. Analysis always uses the real LLM summarizer, so a
+recording reaches `ready` only when `GROQ_API_KEY` or `GEMINI_API_KEY` is set in
+`backend/.env` (see [Backend dependencies and environment](#backend-dependencies-and-environment)).
+Mobile screens are placeholders and Record does nothing.
+Successful setup does not yet mean recording, transcription or chat works in the app.
 
 ## Prerequisites
 
@@ -96,8 +98,13 @@ curl.exe http://127.0.0.1:8000/api/v1/health
 
 Expect HTTP 200 and JSON containing `app_name`, `version`, `speech_backend`
 (`"real"` by default, `"fake"` with `SPEECH_BACKEND=fake`) and `roles`; each role
-is `ready` or the reason it is not, such as `Model not downloaded`. A request to `/api/v1/recordings` currently
-returns HTTP 501; that is expected foundation behavior.
+is `ready` or the reason it is not, such as `Model not downloaded`.
+
+Analysis tries the `llm_analysis` models in `config/models.yaml` in order (Gemini,
+then Groq); a model whose key is missing is skipped, so one of `GROQ_API_KEY` or
+`GEMINI_API_KEY` is enough. With neither, an upload that reaches analysis ends
+`failed` with `failed_step` `analyzing` and error code `analysis_failed`. This holds
+with `SPEECH_BACKEND=fake` too, since only speech is canned.
 
 ## Real speech and models
 
@@ -182,6 +189,15 @@ against seeded demo recordings:
 uv run python -m app.cli seed-demo
 uv run python -m app.cli calibrate-retrieval --questions ../docs/calibration-questions.example.yaml
 ```
+
+Run `seed-demo` only against a data directory seeded with the real embedder.
+Earlier versions embedded the demo chunks with a fake embedder; those vectors have
+the same size as real ones, so nothing errors, but chat search silently finds none of
+the seeded recordings. `seed-demo` refuses a non-empty database and there is no
+re-index command, so replace such a data directory: point `DATA_DIR` at a fresh
+folder outside the repository, run `uv run --extra speech python -m app.cli setup`
+there (the model cache follows `DATA_DIR` unless `MODEL_CACHE_DIR` is set), then run
+`seed-demo` again before `calibrate-retrieval`.
 
 The script reports the best cosine distance for expected and unrelated queries, detects any
 overlap between expected hits and unrelated hits, and suggests an optimal `retrieval_max_distance` threshold.
