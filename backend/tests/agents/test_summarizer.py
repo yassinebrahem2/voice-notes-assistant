@@ -21,6 +21,7 @@ from app.agents.schemas import (
 from app.agents.summarizer import (
     OUTPUT_ALLOWANCE,
     AnalysisFailed,
+    NoStructuredResponse,
     SummarizerAnalyzer,
     estimate_tokens,
 )
@@ -344,10 +345,68 @@ def test_all_entries_fail_propagates_cause_and_logs(caplog: pytest.LogCaptureFix
     assert exc_info.value.__cause__ is err2
     assert "groq" in caplog.text
     assert "entry-1" in caplog.text
-    assert "Groq API crashed" in caplog.text
     assert "gemini" in caplog.text
     assert "entry-2" in caplog.text
-    assert "Gemini API crashed" in caplog.text
+    assert "RuntimeError" in caplog.text
+    assert "fake_models.py" in caplog.text
+    assert "summarizer.py" in caplog.text
+
+
+def test_summarizer_error_logging_never_logs_exception_message(caplog: pytest.LogCaptureFixture) -> None:
+    caplog.set_level(logging.WARNING)
+    err = RuntimeError("secret-value-12345")
+    model = FailingChatModel(error=err)
+    entry = LlmEntry(provider="groq", model="entry-1", max_request_tokens=10000, timeout_s=30.0)
+    registry = make_test_registry([entry])
+
+    analyzer = SummarizerAnalyzer(registry)
+    analyzer.models_for_entry = lambda _entry: model  # type: ignore[assignment]
+
+    req = AnalysisRequest(
+        kind="meeting",
+        lines=[TranscriptLine(s=1, speaker_label="A", text="Meeting segment.")],
+        tag_vocabulary=[],
+    )
+
+    with pytest.raises(AnalysisFailed):
+        analyzer.analyze(req)
+
+    assert "secret-value-12345" not in caplog.text
+    assert "RuntimeError" in caplog.text
+    assert "fake_models.py" in caplog.text
+    assert "summarizer.py" in caplog.text
+
+
+def test_no_structured_response_raised_and_caught_via_isinstance(caplog: pytest.LogCaptureFixture) -> None:
+    caplog.set_level(logging.WARNING)
+    model = ScriptedChatModel(
+        messages=iter(
+            [
+                AIMessage(content="No tool calls 1"),
+                AIMessage(content="No tool calls 2"),
+            ]
+        )
+    )
+    entry = LlmEntry(provider="groq", model="entry-1", max_request_tokens=10000, timeout_s=30.0)
+    registry = make_test_registry([entry])
+
+    analyzer = SummarizerAnalyzer(registry)
+    analyzer.models_for_entry = lambda _entry: model  # type: ignore[assignment]
+
+    req = AnalysisRequest(
+        kind="meeting",
+        lines=[TranscriptLine(s=1, speaker_label="A", text="Meeting segment.")],
+        tag_vocabulary=[],
+    )
+
+    with pytest.raises(AnalysisFailed) as exc_info:
+        analyzer.analyze(req)
+
+    cause = exc_info.value.__cause__
+    assert isinstance(cause, NoStructuredResponse)
+    assert "groq" in str(cause)
+    assert "entry-1" in str(cause)
+    assert "Analysis model groq/entry-1 returned invalid or missing structured response" in caplog.text
 
 
 def test_all_entries_missing_structured_response_raises_analysis_failed_and_logs(
@@ -396,6 +455,8 @@ def test_all_entries_missing_structured_response_raises_analysis_failed_and_logs
     assert "entry-1" in caplog.text
     assert "gemini" in caplog.text
     assert "entry-2" in caplog.text
+    assert "Analysis model groq/entry-1 returned invalid or missing structured response" in caplog.text
+    assert "Analysis model gemini/entry-2 returned invalid or missing structured response" in caplog.text
 
 
 def test_second_entry_replans_with_its_own_budget() -> None:

@@ -1,5 +1,4 @@
 import asyncio
-import logging
 from datetime import date
 from typing import Any, cast
 
@@ -538,9 +537,7 @@ def test_find_recordings_filters_and_formats(container: Container) -> None:
 
 def test_find_recordings_unparseable_analysis_logs_warning_and_sets_empty_desc(
     container: Container,
-    caplog: pytest.LogCaptureFixture,
 ) -> None:
-    caplog.set_level(logging.WARNING)
     conn = connect(container.db_path)
     try:
         rec_id = seed_recording(
@@ -576,11 +573,15 @@ def test_find_recordings_unparseable_analysis_logs_warning_and_sets_empty_desc(
     )
 
     find_fn = cast(Any, find_recordings).func
-    result = str(find_fn(text="Corrupt", runtime=runtime))
+    from pydantic import ValidationError
 
-    assert "<sources>" in result
-    assert "[R1] Corrupt Recording · 2026-10-17 · 00:06 · none · " in result
-    assert rec_id in caplog.text
+    with pytest.raises(ValidationError):
+        find_fn(text="Corrupt", runtime=runtime)
+
+
+test_find_recordings_unparseable_analysis_raises_validation_error = (
+    test_find_recordings_unparseable_analysis_logs_warning_and_sets_empty_desc
+)
 
 
 def test_find_recordings_does_not_swallow_arbitrary_exceptions(

@@ -15,6 +15,7 @@ from app.agents.schemas import (
     NoteSectionNotes,
 )
 from app.agents.transcript_input import escape_untrusted, render_transcript
+from app.api.errors import describe_frames
 from app.config.models_registry import LlmEntry, ModelsRegistry
 from app.llm.factory import build_entry_agent, chat_model
 from app.processing.protocols import AnalysisRequest, TranscriptLine
@@ -33,6 +34,10 @@ def estimate_tokens(text: str) -> int:
 
 class AnalysisFailed(Exception):
     """Raised when all configured llm_analysis entries fail."""
+
+
+class NoStructuredResponse(Exception):
+    """Raised when an entry agent returns an invalid or missing structured response."""
 
 
 class SummarizerAnalyzer:
@@ -67,7 +72,9 @@ class SummarizerAnalyzer:
         response = output.get("structured_response")
         if isinstance(response, schema):
             return response
-        raise ValueError(f"Model {entry.provider}/{entry.model} returned invalid or missing structured response")
+        raise NoStructuredResponse(
+            f"Model {entry.provider}/{entry.model} returned invalid or missing structured response"
+        )
 
     def _format_tags_text(self, vocabulary: list[str]) -> str:
         if vocabulary:
@@ -244,7 +251,7 @@ class SummarizerAnalyzer:
 
             except Exception as exc:
                 last_error = exc
-                if isinstance(exc, ValueError) and "invalid or missing structured response" in str(exc):
+                if isinstance(exc, NoStructuredResponse):
                     logger.warning(
                         "Analysis model %s/%s returned invalid or missing structured response",
                         entry.provider,
@@ -252,10 +259,11 @@ class SummarizerAnalyzer:
                     )
                 else:
                     logger.warning(
-                        "Analysis failed for provider=%s model=%s: %s",
+                        "Analysis failed for provider=%s model=%s: %s at %s",
                         entry.provider,
                         entry.model,
-                        exc,
+                        type(exc).__name__,
+                        describe_frames(exc),
                     )
 
         raise AnalysisFailed("All analysis models failed") from last_error

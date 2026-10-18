@@ -1,6 +1,7 @@
 """Tests for chat runs lifecycle and API endpoints."""
 
 import asyncio
+import logging
 import time
 from collections.abc import Sequence
 from typing import Any, Self
@@ -692,3 +693,62 @@ def test_chat_runs_max_finished_runs_drops_oldest_finished_keeps_running(
     running_state = chat_runs.get("running_run")
     assert running_state is not None
     assert running_state.status == "running"
+
+
+def test_chat_run_unexpected_error_clean_logging_never_logs_secret(
+    container: Container,
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    caplog.set_level(logging.ERROR)
+
+    def buggy_search(*args: Any, **kwargs: Any) -> Any:
+        raise RuntimeError("Disk corruption error secret-value-67890")
+
+    monkeypatch.setattr("app.agents.tools.search_chunks", buggy_search)
+
+    scripted = ScriptedChatModel(
+        messages=iter(
+            [
+                AIMessage(
+                    content="",
+                    tool_calls=[{"name": "search_transcripts", "args": {"query": "crash"}, "id": "call_crash"}],
+                )
+            ]
+        )
+    )
+
+    def fake_role_models(_reg: object, _role: object) -> list[BaseChatModel]:
+        return [scripted]
+
+    monkeypatch.setattr("app.llm.factory.role_models", fake_role_models)
+
+    with TestClient(create_app(container)) as client:
+        create_res = client.post("/api/v1/chats")
+        chat_id = create_res.json()["id"]
+
+        ask_res = client.post(
+            f"/api/v1/chats/{chat_id}/messages",
+            json={"text": "Cause tool bug", "scope": "both"},
+        )
+        run_id = ask_res.json()["run_id"]
+
+        run_data: dict[str, Any] | None = None
+        for _ in range(100):
+            res = client.get(f"/api/v1/chats/{chat_id}/runs/{run_id}")
+            assert res.status_code == 200
+            data: dict[str, Any] = res.json()
+            if data["status"] == "failed":
+                run_data = data
+                break
+            time.sleep(0.05)
+
+        assert isinstance(run_data, dict)
+        assert run_data["status"] == "failed"
+        assert run_data["error"] == {
+            "code": "internal_error",
+            "message": "Internal error",
+        }
+        assert "secret-value-67890" not in caplog.text
+        assert "RuntimeError" in caplog.text
+        assert "test_runs_api.py" in caplog.text

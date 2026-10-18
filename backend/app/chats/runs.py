@@ -17,7 +17,7 @@ from langgraph.graph.state import CompiledStateGraph  # pyright: ignore[reportMi
 from app.agents.chat_context import ChatContext
 from app.agents.citations import FinalReply
 from app.agents.sources import SourceRegistry
-from app.api.errors import ApiError, ErrorBody, ErrorCode
+from app.api.errors import ApiError, ErrorBody, ErrorCode, describe_frames
 from app.api.models.chats import CitationOut, MessageOut
 from app.chats.store import add_assistant_message, history_for
 from app.config import ConfigError
@@ -176,7 +176,7 @@ class ChatRuns:
                 state.status = "failed"
                 state.error = ErrorBody(code=ErrorCode.ai_unavailable, message="Couldn't reach the AI right now.")
             else:
-                logger.exception("Chat run %s failed with unexpected error: %s", msg_id, exc)
+                logger.error("Chat run %s failed: %s at %s", msg_id, type(exc).__name__, describe_frames(exc))
                 state.status = "failed"
                 state.error = ErrorBody(code=ErrorCode.internal_error, message="Internal error")
             self.record_finished(msg_id)

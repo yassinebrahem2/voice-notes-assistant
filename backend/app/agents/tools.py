@@ -7,7 +7,6 @@ from typing import Any, cast
 
 from langchain.tools import ToolRuntime, tool
 from langchain_core.messages import HumanMessage
-from pydantic import ValidationError
 
 from app.agents.chat_context import ChatContext
 from app.agents.prompts import load_prompt
@@ -230,23 +229,15 @@ def find_recordings(
             raw_analysis = row["analysis"]
             desc = ""
             if raw_analysis:
-                try:
-                    if row["kind"] == "meeting":
-                        ms = MeetingSummary.model_validate_json(raw_analysis)
-                        desc = render_speakers(ms.overview, id_to_display)
+                if row["kind"] == "meeting":
+                    ms = MeetingSummary.model_validate_json(raw_analysis)
+                    desc = render_speakers(ms.overview, id_to_display)
+                else:
+                    nc = NoteContent.model_validate_json(raw_analysis)
+                    if nc.key_points:
+                        desc = render_speakers(nc.key_points[0].text, id_to_display)
                     else:
-                        nc = NoteContent.model_validate_json(raw_analysis)
-                        if nc.key_points:
-                            desc = render_speakers(nc.key_points[0].text, id_to_display)
-                        else:
-                            desc = render_speakers(nc.clean_text, id_to_display)
-                except (ValidationError, ValueError) as exc:
-                    logger.warning(
-                        "Failed to parse analysis for recording %s: %s",
-                        row["id"],
-                        exc,
-                    )
-                    desc = ""
+                        desc = render_speakers(nc.clean_text, id_to_display)
 
             escaped_desc = escape_untrusted(desc)
             lines.append(f"[{label}] {title} · {date_str} · {dur_str} · {tags_str} · {escaped_desc}")
