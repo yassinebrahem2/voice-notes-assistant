@@ -129,14 +129,20 @@ def test_smoke_provider_models_check_success_and_failure(container: Container, m
     out = io.StringIO()
 
     # Mock role checks so we isolate the provider models check
-    def mock_llm_entry(entry: LlmEntry, c: Container, *, check_type: str) -> tuple[bool, str, dict[str, int]]:
+    def mock_llm_entry_orchestrator(
+        entry: LlmEntry, c: Container
+    ) -> tuple[bool, str, dict[str, int], AIMessage | None]:
+        return (True, "mocked", {}, None)
+
+    def mock_llm_entry(entry: LlmEntry, c: Container) -> tuple[bool, str, dict[str, int]]:
         return (True, "mocked", {})
 
     def mock_analysis_entry(entry: LlmEntry, reg: ModelsRegistry) -> tuple[bool, str, dict[str, int]]:
         return (True, "mocked", {})
 
-    monkeypatch.setattr("app.llm.smoke._check_llm_entry", mock_llm_entry)
-    monkeypatch.setattr("app.llm.smoke._check_analysis_entry", mock_analysis_entry)
+    monkeypatch.setattr("app.llm.smoke_checks.check_orchestrator", mock_llm_entry_orchestrator)
+    monkeypatch.setattr("app.llm.smoke_checks.check_forced_final", mock_llm_entry)
+    monkeypatch.setattr("app.llm.smoke_checks.check_analysis", mock_analysis_entry)
 
     test_container = dataclasses.replace(container, models=registry)
     exit_code = run_smoke_tests(test_container, client=mock_client, genai_client=mock_genai_client, out_stream=out)
@@ -154,14 +160,20 @@ def test_smoke_provider_missing_key(container: Container, monkeypatch: pytest.Mo
 
     out = io.StringIO()
 
-    def mock_llm_entry_missing(entry: LlmEntry, c: Container, *, check_type: str) -> tuple[bool, str, dict[str, int]]:
+    def mock_llm_entry_missing_orchestrator(
+        entry: LlmEntry, c: Container
+    ) -> tuple[bool, str, dict[str, int], AIMessage | None]:
+        return (True, "mocked", {}, None)
+
+    def mock_llm_entry_missing(entry: LlmEntry, c: Container) -> tuple[bool, str, dict[str, int]]:
         return (True, "mocked", {})
 
     def mock_analysis_entry_missing(entry: LlmEntry, reg: ModelsRegistry) -> tuple[bool, str, dict[str, int]]:
         return (True, "mocked", {})
 
-    monkeypatch.setattr("app.llm.smoke._check_llm_entry", mock_llm_entry_missing)
-    monkeypatch.setattr("app.llm.smoke._check_analysis_entry", mock_analysis_entry_missing)
+    monkeypatch.setattr("app.llm.smoke_checks.check_orchestrator", mock_llm_entry_missing_orchestrator)
+    monkeypatch.setattr("app.llm.smoke_checks.check_forced_final", mock_llm_entry_missing)
+    monkeypatch.setattr("app.llm.smoke_checks.check_analysis", mock_analysis_entry_missing)
 
     test_container = dataclasses.replace(container, models=registry)
     exit_code = run_smoke_tests(test_container, out_stream=out)
@@ -263,7 +275,7 @@ def test_smoke_llm_entry_checks(container: Container, monkeypatch: pytest.Monkey
             return ScriptedChatModel(messages=iter([analysis_msg]))
         return ScriptedChatModel(messages=iter([final_turn_msg]))
 
-    monkeypatch.setattr("app.llm.smoke.chat_model", fake_chat_model)
+    monkeypatch.setattr("app.llm.smoke_checks.chat_model", fake_chat_model)
     monkeypatch.setattr("app.llm.factory.chat_model", fake_chat_model)
 
     out = io.StringIO()
@@ -364,7 +376,7 @@ def test_smoke_orchestrator_check_passes_when_tool_called_then_reply(
             return ScriptedChatModel(messages=iter([analysis_msg]))
         return ScriptedChatModel(messages=iter([final_turn_msg]))
 
-    monkeypatch.setattr("app.llm.smoke.chat_model", fake_chat_model)
+    monkeypatch.setattr("app.llm.smoke_checks.chat_model", fake_chat_model)
     monkeypatch.setattr("app.llm.factory.chat_model", fake_chat_model)
 
     out = io.StringIO()
@@ -443,7 +455,7 @@ def test_smoke_orchestrator_check_fails_when_no_tool_called(
     mock_genai_client = MagicMock()
     mock_genai_client.models.list.return_value = [mock_genai_item]
 
-    monkeypatch.setattr("app.llm.smoke.chat_model", fake_chat_model)
+    monkeypatch.setattr("app.llm.smoke_checks.chat_model", fake_chat_model)
     monkeypatch.setattr("app.llm.factory.chat_model", fake_chat_model)
 
     out = io.StringIO()
@@ -483,7 +495,7 @@ def test_smoke_error_reporting_prints_status_and_message(container: Container, m
     def fake_failing_chat_model(entry: LlmEntry, reg: ModelsRegistry) -> FailingChatModel:
         return FailingChatModel(err)
 
-    monkeypatch.setattr("app.llm.smoke.chat_model", fake_failing_chat_model)
+    monkeypatch.setattr("app.llm.smoke_checks.chat_model", fake_failing_chat_model)
     monkeypatch.setattr("app.llm.factory.chat_model", fake_failing_chat_model)
 
     out = io.StringIO()
@@ -516,7 +528,7 @@ def test_smoke_llm_never_prints_keys(container: Container, monkeypatch: pytest.M
     def fake_failing_chat_model(entry: LlmEntry, reg: ModelsRegistry) -> FailingChatModel:
         return FailingChatModel(err)
 
-    monkeypatch.setattr("app.llm.smoke.chat_model", fake_failing_chat_model)
+    monkeypatch.setattr("app.llm.smoke_checks.chat_model", fake_failing_chat_model)
     monkeypatch.setattr("app.llm.factory.chat_model", fake_failing_chat_model)
 
     out = io.StringIO()
@@ -547,9 +559,13 @@ def test_smoke_google_genai_fake_client_model_check(container: Container, monkey
     def _mock_check(*_args: object, **_kwargs: object) -> tuple[bool, str, dict[str, int]]:
         return (True, "mocked", {})
 
-    monkeypatch.setattr("app.llm.smoke._check_llm_entry", _mock_check)
-    monkeypatch.setattr("app.llm.smoke._check_analysis_entry", _mock_check)
-    monkeypatch.setattr("app.llm.smoke._check_cross_provider", _mock_check)
+    def _mock_orchestrator(*_args: object, **_kwargs: object) -> tuple[bool, str, dict[str, int], AIMessage | None]:
+        return (True, "mocked", {}, None)
+
+    monkeypatch.setattr("app.llm.smoke_checks.check_orchestrator", _mock_orchestrator)
+    monkeypatch.setattr("app.llm.smoke_checks.check_forced_final", _mock_check)
+    monkeypatch.setattr("app.llm.smoke_checks.check_analysis", _mock_check)
+    monkeypatch.setattr("app.llm.smoke_checks.check_cross_provider", _mock_check)
 
     out = io.StringIO()
     test_container = dataclasses.replace(container, models=registry)
@@ -659,7 +675,7 @@ def test_smoke_cross_provider_check_passes_in_both_directions(
         # Cross-provider gemini -> groq: groq is B
         return ScriptedChatModel(messages=iter([groq_reply_msg]))
 
-    monkeypatch.setattr("app.llm.smoke.chat_model", fake_chat_model)
+    monkeypatch.setattr("app.llm.smoke_checks.chat_model", fake_chat_model)
     monkeypatch.setattr("app.llm.factory.chat_model", fake_chat_model)
 
     out = io.StringIO()
@@ -758,7 +774,7 @@ def test_smoke_cross_provider_check_fails_when_b_raises(container: Container, mo
             return ScriptedChatModel(messages=iter([analysis_msg]))
         return ScriptedChatModel(messages=iter([groq_reply_msg]))
 
-    monkeypatch.setattr("app.llm.smoke.chat_model", fake_chat_model)
+    monkeypatch.setattr("app.llm.smoke_checks.chat_model", fake_chat_model)
     monkeypatch.setattr("app.llm.factory.chat_model", fake_chat_model)
 
     out = io.StringIO()

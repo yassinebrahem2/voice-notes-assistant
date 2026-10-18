@@ -1,7 +1,6 @@
 """Tools for the orchestrator agent: search_transcripts, find_recordings, and summarize."""
 
 import json
-import logging
 import re
 from typing import Any, cast
 
@@ -24,8 +23,6 @@ from app.domain.speakers import render_speakers
 from app.llm.factory import build_agent
 from app.llm.force_output import ForceOutputToolMiddleware
 from app.rag.retrieve import search_chunks
-
-logger = logging.getLogger(__name__)
 
 
 def format_ms_to_mmss(ms: int | None) -> str:
