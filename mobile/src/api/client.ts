@@ -1,5 +1,11 @@
+import { reportNetworkError, reportOk } from '../server/statusStore';
 import { getServerUrl } from '../settings/serverUrl';
-import { ApiError, parseApiError } from './errors';
+import {
+  ApiError,
+  isApiErrorEnvelope,
+  isGatewayStatus,
+  parseApiError,
+} from './errors';
 
 export type { ErrorCode, Schemas } from './errors';
 export { ApiError } from './errors';
@@ -41,12 +47,17 @@ export async function apiFetch<T>(
   const aborted = new Promise<never>((_resolve, reject) => {
     rejectAbort = reject;
   });
+  // Only the deadline counts as the server being unreachable; a caller cancelling its own request says nothing.
+  let deadlineHit = false;
   const abort = () => {
     controller.abort();
     rejectAbort(timeoutError());
   };
   callerSignal?.addEventListener('abort', abort, { once: true });
-  const timer = setTimeout(abort, timeoutMs);
+  const timer = setTimeout(() => {
+    deadlineHit = true;
+    abort();
+  }, timeoutMs);
 
   async function request(): Promise<T> {
     const response = await fetch(
@@ -56,19 +67,32 @@ export async function apiFetch<T>(
         signal: controller.signal,
       },
     );
-    if (response.ok && response.status === 204) return undefined as T;
+    if (response.ok && response.status === 204) {
+      reportOk();
+      return undefined as T;
+    }
     let body: unknown;
     try {
       body = await response.json();
     } catch (error: unknown) {
       if (controller.signal.aborted || isAbortError(error))
         throw timeoutError();
+      if (isGatewayStatus(response.status)) {
+        reportNetworkError();
+        throw new ApiError(0, 'network_error', 'Could not reach the server.');
+      }
+      reportOk();
       throw new ApiError(
         response.status,
         'internal_error',
         'The server returned an invalid response.',
       );
     }
+    if (isGatewayStatus(response.status) && !isApiErrorEnvelope(body)) {
+      reportNetworkError();
+      throw new ApiError(0, 'network_error', 'Could not reach the server.');
+    }
+    reportOk();
     if (!response.ok) throw parseApiError(response.status, body);
     return body as T;
   }
@@ -76,8 +100,11 @@ export async function apiFetch<T>(
   try {
     return await Promise.race([request(), aborted]);
   } catch (error: unknown) {
+    // Reported here, not by the query cache: that fires only after the last retry, 30 s or more later.
+    if (deadlineHit) reportNetworkError();
     if (error instanceof ApiError) throw error;
     if (controller.signal.aborted || isAbortError(error)) throw timeoutError();
+    reportNetworkError();
     throw new ApiError(0, 'network_error', 'Could not reach the server.');
   } finally {
     clearTimeout(timer);
