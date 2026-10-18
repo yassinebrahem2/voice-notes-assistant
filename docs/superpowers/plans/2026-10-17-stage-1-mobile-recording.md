@@ -298,6 +298,25 @@ Follow-up from the lead's review of Task 9 (#69) and Stard-bch's phone reports o
 - [ ] **Step 5 (phone, Expo Go):** the Meetings and Notes search bars are below the status bar; open `/recording/<id>` by deep link, press Back, and you land on Meetings.
 - [ ] **Step 6: Commit** `fix(mobile): library safe area, root anchor and logged playability errors`.
 
+### Task 12: Recording page keeps its data during an outage, and Retry shows progress
+
+Follow-up from Stard-bch's phone checks on #72.
+
+**Files:**
+- Modify: `mobile/app/recording/[id].tsx`, `mobile/src/detail/useRecording.ts`
+- Test: `mobile/src/detail/RecordingScreen.test.tsx`
+
+**Fixes:**
+1. **An open recording is replaced by the error screen when a refetch fails.** The page shows the full-page error whenever `error` is set, even with a recording already loaded. During an outage the transcript and player disappear, which is why the player's own "Couldn't load audio" could not be checked. Spec §6 says the app keeps the last loaded data during an outage, and the server banner already shows it. Show the full-page error only when there is no recording data (`error && !recording`). With data, keep rendering the recording.
+2. **Retry gives no feedback.** `useRecording` also returns `isFetching`. While a Retry refetch runs, the Retry button shows its loading state (Paper `Button` `loading`, disabled) instead of looking stuck.
+
+- [ ] **Step 1: Write the failing tests:**
+  - a loaded recording whose refetch then fails still shows its title and transcript, not the error screen;
+  - with no data and an error, the error screen shows; pressing Retry shows the button loading until the refetch settles.
+- [ ] **Step 2: Run** → FAIL. **Step 3: Implement.** **Step 4: Run** jest, tsc, eslint, prettier → clean.
+- [ ] **Step 5 (phone):** open a recording, stop the backend. The recording stays on screen with the banner, and the player shows "Couldn't load audio" with Retry. On a recording that never loaded, Retry shows it is working.
+- [ ] **Step 6: Commit** `fix(mobile): keep the recording on screen during an outage and show Retry progress`.
+
 ## Shared files with the chat-settings plan
 This plan adds `FanOutOverlay` and the `record` screen options to `app/_layout.tsx`, and owns `app/recording/[id].tsx` (the Chat plan only navigates to it). The chat-settings plan edits `TabBar` (status dot) and `app/_layout.tsx` (theme preference, server banner). Whichever merges second brings the other in and keeps both; for this plan that is a merge commit (Task 9), not a rebase, because the branch has other people's commits.
 
@@ -306,3 +325,4 @@ This plan adds `FanOutOverlay` and the `record` screen options to `app/_layout.t
 - Dependencies: Task 1 none; Task 2 needs 1; Task 3 needs 2; Task 4 needs 2; Task 5 needs 4 (pending rows); Task 6 needs 5; Task 7 needs 6; Task 8 needs 6. Tasks 3 and 4 can run in parallel, and so can Tasks 7 and 8.
 - Task 9 (from the lead's review of PR #68) needs Tasks 1–8; it is one task because its parts touch the same files and part A must land first.
 - Task 10 (#72, phone checks after Task 9) and Task 11 (phone-report and review fixes) both need Task 9 and can run in parallel.
+- Task 12 (outage display and Retry progress) needs Task 9.
