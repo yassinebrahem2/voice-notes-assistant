@@ -21,6 +21,7 @@ from app.api.app import create_app
 from app.api.models.chats import CitationOut
 from app.chats.runs import ChatRuns
 from app.chats.store import add_assistant_message, add_user_message, create_chat
+from app.config.models_registry import LlmEntry, ModelsRegistry
 from app.container import Container
 from app.db.connection import connect
 from tests.agents.fake_models import FailingChatModel, ScriptedChatModel
@@ -61,6 +62,7 @@ class SleepingChatModel(BaseChatModel):
 class CancellableSlowChatModel(BaseChatModel):
     delay: float = 10.0
     was_cancelled: bool = False
+    started: bool = False
 
     def _generate(
         self,
@@ -79,6 +81,7 @@ class CancellableSlowChatModel(BaseChatModel):
         run_manager: Any = None,
         **kwargs: Any,
     ) -> ChatResult:
+        self.started = True
         try:
             await asyncio.sleep(self.delay)
         except asyncio.CancelledError:
@@ -199,6 +202,64 @@ def test_ask_then_poll_done_with_steps_and_citations(container: Container, monke
         assert "[1]" in msg["text"]
         assert len(msg["citations"]) == 1
         assert msg["citations"][0]["recording_title"] == "Roadmap Sync"
+
+
+def ask_and_wait(client: TestClient, final_status: str) -> dict[str, Any]:
+    chat_id = client.post("/api/v1/chats").json()["id"]
+    run_id = client.post(f"/api/v1/chats/{chat_id}/messages", json={"text": "Hello?", "scope": "both"}).json()["run_id"]
+    for _ in range(100):
+        data: dict[str, Any] = client.get(f"/api/v1/chats/{chat_id}/runs/{run_id}").json()
+        if data["status"] == final_status:
+            return data
+        time.sleep(0.05)
+    raise AssertionError(f"run never reached {final_status}")
+
+
+def keyed_fake_chat_model(built: list[str]) -> Any:
+    """Stand in for the per-entry chat_model, so role_models' key filter still decides which entries are built."""
+    reply = ChatReply(reply_type="help", text="Help from the keyed model.")
+
+    def fake_chat_model(entry: LlmEntry, _registry: ModelsRegistry) -> BaseChatModel:
+        built.append(entry.provider)
+        return ScriptedChatModel(
+            messages=iter(
+                [AIMessage(content="", tool_calls=[{"name": "ChatReply", "args": reply.model_dump(), "id": "call_1"}])]
+            )
+        )
+
+    return fake_chat_model
+
+
+@pytest.mark.parametrize(("key_env", "provider"), [("GROQ_API_KEY", "groq"), ("GEMINI_API_KEY", "gemini")])
+def test_run_with_one_provider_key_is_done(
+    container: Container, monkeypatch: pytest.MonkeyPatch, key_env: str, provider: str
+) -> None:
+    for name in ("GROQ_API_KEY", "GEMINI_API_KEY"):
+        monkeypatch.delenv(name, raising=False)
+    monkeypatch.setenv(key_env, "present")
+    built: list[str] = []
+    monkeypatch.setattr("app.llm.factory.chat_model", keyed_fake_chat_model(built))
+
+    with TestClient(create_app(container)) as client:
+        run_data = ask_and_wait(client, "done")
+
+    assert run_data["message"]["reply_type"] == "help"
+    assert built == [provider]
+
+
+def test_run_without_any_provider_key_fails_ai_unavailable(
+    container: Container, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    for name in ("GROQ_API_KEY", "GEMINI_API_KEY"):
+        monkeypatch.delenv(name, raising=False)
+    built: list[str] = []
+    monkeypatch.setattr("app.llm.factory.chat_model", keyed_fake_chat_model(built))
+
+    with TestClient(create_app(container)) as client:
+        run_data = ask_and_wait(client, "failed")
+
+    assert run_data["error"] == {"code": "ai_unavailable", "message": "Couldn't reach the AI right now."}
+    assert built == []
 
 
 def test_all_models_fail_run_failed_ai_unavailable(container: Container, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -408,7 +469,7 @@ def test_deadline_times_out(container: Container, monkeypatch: pytest.MonkeyPatc
 
 
 def test_deadline_times_out_and_cancels_model(container: Container, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(container.settings, "chat_deadline_s", 0.2)
+    monkeypatch.setattr(container.settings, "chat_deadline_s", 1.0)
 
     model = CancellableSlowChatModel(delay=10.0)
 
@@ -426,6 +487,12 @@ def test_deadline_times_out_and_cancels_model(container: Container, monkeypatch:
             json={"text": "Wait forever", "scope": "both"},
         )
         run_id = ask_res.json()["run_id"]
+
+        for _ in range(100):
+            if model.started:
+                break
+            time.sleep(0.02)
+        assert model.started is True
 
         run_data: dict[str, Any] | None = None
         for _ in range(100):

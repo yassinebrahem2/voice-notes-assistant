@@ -33,35 +33,6 @@ def test_routes_exist(container: Container) -> None:
     assert len(set(operation_ids)) == len(ROUTES)
 
 
-STUBS = [
-    ("get", "/recordings"),
-    ("post", "/recordings"),
-    ("get", "/recordings/{id}"),
-    ("patch", "/recordings/{id}"),
-    ("delete", "/recordings/{id}"),
-    ("patch", "/recordings/{id}/speakers/{speaker_id}"),
-    ("post", "/recordings/{id}/retry"),
-    ("get", "/recordings/{id}/audio"),
-    ("get", "/tags"),
-]
-
-
-@pytest.mark.parametrize(("method", "path"), STUBS)
-def test_every_stub_returns_501(client: TestClient, method: str, path: str) -> None:
-    url = "/api/v1" + path.format(id="rec_x", speaker_id="spk_x")
-    if method == "post" and path == "/recordings":
-        response = client.post(
-            url, data={"kind": "meeting", "client_upload_id": "upload-x"}, files={"file": ("test.m4a", b"audio")}
-        )
-    elif method == "patch":
-        body = {"name": "Sarah"} if "speakers" in path else {"title": "Meeting"}
-        response = client.patch(url, json=body)
-    else:
-        response = client.request(method, url)
-    assert response.status_code == 501
-    assert response.json()["error"]["code"] == "not_implemented"
-
-
 def test_audio_and_upload_openapi(container: Container) -> None:
     paths = create_app(container).openapi()["paths"]
     upload = paths["/api/v1/recordings"]["post"]

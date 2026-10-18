@@ -10,12 +10,19 @@ from starlette.responses import StreamingResponse
 from starlette.types import Message, Receive, Scope, Send
 
 from app.api.app import create_app
-from app.api.errors import ApiError, ErrorCode, SafeErrorMiddleware
+from app.api.errors import ApiError, ErrorCode, SafeErrorMiddleware, not_implemented
 from app.container import Container
 
 
-def test_stub_route_returns_contract_shape(client: TestClient) -> None:
-    response = client.get("/api/v1/recordings")
+def test_stub_route_returns_contract_shape(container: Container) -> None:
+    app = create_app(container)
+
+    @app.get("/stub")
+    def stub() -> None:
+        not_implemented()
+
+    with TestClient(app) as client:
+        response = client.get("/stub")
     assert response.status_code == 501
     assert response.json()["error"]["code"] == "not_implemented"
     assert set(response.json()) == {"error"}

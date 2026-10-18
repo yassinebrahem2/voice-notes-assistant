@@ -1,10 +1,14 @@
 # Development setup
 
-This guide covers the current foundation. The backend has a working health
-endpoint and database migrations; feature routes return HTTP 501 with error code
-`not_implemented`. Speech, embeddings and analysis use fakes even when
-`SPEECH_BACKEND=real`. Mobile screens are placeholders and Record does nothing.
-Successful setup does not yet mean recording, transcription or chat works.
+This guide covers setting up the backend and the mobile app. Every backend route
+is implemented. With `SPEECH_BACKEND=real` (the default) speech runs in child
+processes and needs the speech extra and downloaded models (see
+[Real speech and models](#real-speech-and-models)); `SPEECH_BACKEND=fake` binds
+canned speech for development. Analysis always uses the real LLM summarizer, so a
+recording reaches `ready` only when `GROQ_API_KEY` or `GEMINI_API_KEY` is set in
+`backend/.env` (a recording in which no speech is found ends `ready` and Untitled
+without analysis; see
+[Backend dependencies and environment](#backend-dependencies-and-environment)).
 
 ## Prerequisites
 
@@ -43,24 +47,24 @@ files or logs. The file is git-ignored.
 
 | Variable | Current use |
 | --- | --- |
-| `GROQ_API_KEY` | Key for the configured Groq provider. |
-| `GEMINI_API_KEY` | Key for the configured Gemini provider. |
-| `HF_TOKEN` | Reserved for real diarization; may stay empty for the foundation. |
-| `SPEECH_BACKEND` | Optional `real` or `fake`; both currently bind fakes. Leave the example override commented to use the default. |
-| `ASR_DEVICE`, `DIARIZER_DEVICE` | Optional device overrides for later real speech; leave commented for this setup. |
+| `GROQ_API_KEY` | Key for the configured Groq provider. Either this key or `GEMINI_API_KEY` is enough for Chat and for analysis; with both, each role fails over to the other provider. |
+| `GEMINI_API_KEY` | Key for the configured Gemini provider. Either this key or `GROQ_API_KEY` is enough for Chat and for analysis; with both, each role fails over to the other provider. |
+| `HF_TOKEN` | Hugging Face token for the real diarizer and its model download; see [Hugging Face token](#hugging-face-token). |
+| `SPEECH_BACKEND` | Optional `real` (default) or `fake`. `fake` needs no speech extra, models or token; set it on machines that only develop the UI or API. |
+| `ASR_DEVICE`, `DIARIZER_DEVICE` | Optional device overrides; set both to `cpu` on a machine without a CUDA GPU (slower). `config/models.yaml` stays on `cuda`. |
 
-Keys can remain empty for the foundation smoke checks. Missing LLM keys appear
-in the health response as `Missing GROQ_API_KEY` or `Missing GEMINI_API_KEY`.
-`ready` only checks presence of the first configured provider's key; it does not
-validate credentials, contact providers, or verify model availability. Existing
+In the health response, an LLM role is `ready` when the key of at least one of
+its models is set. With none, the reason names every missing key in the role's
+order in `config/models.yaml`, such as `Missing GROQ_API_KEY and GEMINI_API_KEY`.
+`ready` only checks that a key is present; it does not validate credentials,
+contact providers, or verify model availability. Existing
 process environment variables take precedence over `.env`; restart the backend
 after changing configuration.
 
 The app name and version come from `config/app.json`; provider and model choices
 come from `config/models.yaml`. Keep secrets out of both. Real speech packages,
-Hugging Face access/token instructions and model downloads arrive with the
-processing plan. There is no `setup` CLI command or speech extra in this
-foundation. Later hosted-model demos must use demo recordings only, since free
+the Hugging Face token and model downloads are covered in
+[Real speech and models](#real-speech-and-models). Hosted-model demos must use demo recordings only, since free
 tiers may use inputs for training.
 
 The default database is `app.db` in the per-user data directory selected by
@@ -93,9 +97,76 @@ In a second terminal, check:
 curl.exe http://127.0.0.1:8000/api/v1/health
 ```
 
-Expect HTTP 200 and JSON containing `app_name`, `version`,
-`speech_backend: "fake"` and `roles`. A request to `/api/v1/recordings` currently
-returns HTTP 501; that is expected foundation behavior.
+Expect HTTP 200 and JSON containing `app_name`, `version`, `speech_backend`
+(`"real"` by default, `"fake"` with `SPEECH_BACKEND=fake`) and `roles`; each role
+is `ready` or the reason it is not, such as `Model not downloaded`.
+`"Speech extra not installed"` means `uv sync --extra speech` is needed.
+
+Analysis tries the `llm_analysis` models in order (currently Gemini, then Groq;
+the order is set in `config/models.yaml`); a model whose key is missing is
+skipped, so one of `GROQ_API_KEY` or `GEMINI_API_KEY` is enough. With neither,
+an upload that reaches analysis ends `failed` with `failed_step` `analyzing` and
+error code `analysis_failed`. This holds with `SPEECH_BACKEND=fake` too, since
+only speech is canned.
+
+## Real speech and models
+
+The real ASR (faster-whisper) and diarizer (pyannote) need torch and run only on
+machines that install the backend's `speech` extra. Each recording's ASR and
+diarization run in their own child process, so the GPU never holds both models.
+The models used are the `asr`, `diarizer` and `embedder` roles in
+`config/models.yaml`.
+
+### Speech extra (laptop)
+
+From `backend/`, install everything including torch (the CUDA 12.8 build on
+Windows and Linux, the PyPI build on macOS):
+
+```powershell
+uv sync --extra speech
+```
+
+Always pass `--extra speech` on this machine: a plain `uv sync` removes the speech
+packages again. Run the backend with
+`uv run --extra speech python -m app.cli serve`. Without a CUDA GPU, set
+`ASR_DEVICE=cpu` and `DIARIZER_DEVICE=cpu` in `backend/.env`. Dev and CI machines
+skip the extra and set `SPEECH_BACKEND=fake`.
+
+### Hugging Face token
+
+The diarizer model (`roles.diarizer` in `config/models.yaml`) is gated on
+Hugging Face:
+
+1. Sign in at [huggingface.co](https://huggingface.co), open the page of that
+   model (`https://huggingface.co/<model id>`) and accept its user conditions.
+2. Create a read token under
+   [Settings > Access Tokens](https://huggingface.co/settings/tokens).
+3. Put it in `backend/.env` as `HF_TOKEN=...`. Never commit it or paste it
+   anywhere else.
+
+Without the token, `/health` reports the diarizer as `Missing HF_TOKEN` and setup
+skips the diarizer download.
+
+### Downloading models
+
+From `backend/`, run once (and again after a model changes in
+`config/models.yaml`):
+
+```powershell
+uv run --extra speech python -m app.cli setup
+```
+
+Setup creates the data and model cache directories, downloads the embedder and,
+when the speech extra is installed, the ASR and diarizer models into the model
+cache directory. It then prints each role's readiness and the names of missing
+environment variables (never their values). Without the speech extra it
+downloads only the embedder and says so. `serve` sets `HF_HUB_OFFLINE=1`, so
+nothing downloads while it runs: a model setup did not download makes its role
+report `Model not downloaded` in `/health` and its processing step fail at once.
+
+Keep several GB free: the model cache (`MODEL_CACHE_DIR`, by default the `models`
+folder in the data directory) holds a few GB of models, and torch with CUDA adds
+several GB more to `backend/.venv`.
 
 ## Provider smoke test and relevance calibration
 
@@ -121,6 +192,15 @@ against seeded demo recordings:
 uv run python -m app.cli seed-demo
 uv run python -m app.cli calibrate-retrieval --questions ../docs/calibration-questions.example.yaml
 ```
+
+Run `calibrate-retrieval` only against demo data seeded with the real embedder.
+Earlier versions embedded the demo chunks with a fake embedder; those vectors have
+the same size as real ones, so nothing errors, but chat search silently finds none of
+the seeded recordings. `seed-demo` refuses a non-empty database and there is no
+re-index command, so replace such a data directory: point `DATA_DIR` at a fresh
+folder outside the repository, then run `seed-demo` again before
+`calibrate-retrieval`. The model cache follows `DATA_DIR` unless `MODEL_CACHE_DIR`
+is set, so the first `seed-demo` on a fresh folder downloads the embedder.
 
 The script reports the best cosine distance for expected and unrelated queries, detects any
 overlap between expected hits and unrelated hits, and suggests an optimal `retrieval_max_distance` threshold.
@@ -149,10 +229,11 @@ private to the tailnet; Funnel exposes a service to the public internet. See the
 official [Serve CLI reference](https://tailscale.com/docs/reference/tailscale-cli/serve).
 
 The app's server URL is the HTTPS base URL, without `/api/v1` or `/health`; its
-client adds `/api/v1` itself. The current Settings screen is a placeholder: there
-is no server URL input yet. URL storage and normalization helpers exist in
-`mobile/src/settings/serverUrl.ts`, but entering the URL through the app awaits
-the chat/settings plan. For this foundation, use the phone browser check below.
+client adds `/api/v1` itself. Enter it in the app's Settings screen under
+**Server**, tap **Test connection** (it shows `Connected` or what is wrong), then
+**Save**. Opening the health URL in the phone's browser first, as in
+[Manual phone check (lead)](#manual-phone-check-lead), is an optional check that
+separates network problems from app problems.
 
 Serve's `--bg` configuration persists after the terminal closes. On a laptop
 where this is the dedicated HTTPS Serve endpoint, disable it after the check:
@@ -204,7 +285,7 @@ problems in the plan issue. Expo Go or CI passing does not verify APK installati
 With the backend running and Serve enabled, connect the Android phone to
 Tailscale and open the actual URL
 `https://<machine>.<tailnet>.ts.net/api/v1/health` in its browser. Confirm HTTP 200
-with the expected health JSON and `speech_backend: "fake"`. Record the date,
+with the expected health JSON and the `speech_backend` you configured. Record the date,
 device, URL host, result and any problem in the plan issue, without credentials.
 This proves phone-to-backend connectivity; app configuration and feature behavior
 remain separate checks. This manual result is not established by automated CI.

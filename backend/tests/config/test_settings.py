@@ -35,6 +35,11 @@ def test_settings_defaults_bind_localhost(monkeypatch: pytest.MonkeyPatch) -> No
     assert Settings().bind_host == "127.0.0.1"
 
 
+def test_retrieval_max_distance_default_is_calibrated(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("RETRIEVAL_MAX_DISTANCE", raising=False)
+    assert Settings().retrieval_max_distance == 0.436
+
+
 def test_settings_uses_app_data_and_cache(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("DATA_DIR", str(tmp_path / "runtime"))
     monkeypatch.delenv("MODEL_CACHE_DIR", raising=False)
