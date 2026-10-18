@@ -9,7 +9,6 @@ recording reaches `ready` only when `GROQ_API_KEY` or `GEMINI_API_KEY` is set in
 `backend/.env` (a recording in which no speech is found ends `ready` and Untitled
 without analysis; see
 [Backend dependencies and environment](#backend-dependencies-and-environment)).
-Successful setup does not yet mean recording, transcription or chat works in the app.
 
 ## Prerequisites
 

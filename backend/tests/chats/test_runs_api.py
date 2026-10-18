@@ -62,6 +62,7 @@ class SleepingChatModel(BaseChatModel):
 class CancellableSlowChatModel(BaseChatModel):
     delay: float = 10.0
     was_cancelled: bool = False
+    started: bool = False
 
     def _generate(
         self,
@@ -80,6 +81,7 @@ class CancellableSlowChatModel(BaseChatModel):
         run_manager: Any = None,
         **kwargs: Any,
     ) -> ChatResult:
+        self.started = True
         try:
             await asyncio.sleep(self.delay)
         except asyncio.CancelledError:
@@ -467,7 +469,7 @@ def test_deadline_times_out(container: Container, monkeypatch: pytest.MonkeyPatc
 
 
 def test_deadline_times_out_and_cancels_model(container: Container, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(container.settings, "chat_deadline_s", 0.2)
+    monkeypatch.setattr(container.settings, "chat_deadline_s", 1.0)
 
     model = CancellableSlowChatModel(delay=10.0)
 
@@ -485,6 +487,12 @@ def test_deadline_times_out_and_cancels_model(container: Container, monkeypatch:
             json={"text": "Wait forever", "scope": "both"},
         )
         run_id = ask_res.json()["run_id"]
+
+        for _ in range(100):
+            if model.started:
+                break
+            time.sleep(0.02)
+        assert model.started is True
 
         run_data: dict[str, Any] | None = None
         for _ in range(100):
