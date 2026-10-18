@@ -1,6 +1,6 @@
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import { router, useLocalSearchParams } from 'expo-router';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Snackbar, useTheme } from 'react-native-paper';
 import Animated, {
@@ -19,6 +19,8 @@ import { TranscriptView } from '../../src/detail/TranscriptView';
 import { groupTurns } from '../../src/detail/turns';
 import { useRecording } from '../../src/detail/useRecording';
 import { LibrarySkeleton } from '../../src/library/LibrarySkeleton';
+import { PlayerBar } from '../../src/player/PlayerBar';
+import { usePlayer } from '../../src/player/usePlayer';
 import { fontFamilies } from '../../src/theme/fonts';
 import { motion } from '../../src/theme/motion';
 import type { TapeTheme } from '../../src/theme/paperTheme';
@@ -55,6 +57,9 @@ export function RecordingScreen(props: RecordingScreenProps = {}) {
   const { data: recording, isLoading, deleted } = useRecording(id);
   const [snackbarMessage, setSnackbarMessage] = useState<string | null>(null);
 
+  const player = usePlayer(id);
+  const initialPlayed = useRef(false);
+
   const [activeTab, setActiveTab] = useState<'primary' | 'transcript'>(() =>
     initialSegment ? 'transcript' : 'primary',
   );
@@ -72,7 +77,26 @@ export function RecordingScreen(props: RecordingScreenProps = {}) {
   const handleSelectSegment = (segmentId: string) => {
     setActiveSegmentId(segmentId);
     setActiveTab('transcript');
+    const seg = segments?.find((s) => s.id === segmentId);
+    if (seg) {
+      void player.playFrom(seg.start_ms);
+    }
   };
+
+  useEffect(() => {
+    if (
+      !initialPlayed.current &&
+      initialSegment &&
+      segments &&
+      segments.length > 0
+    ) {
+      const seg = segments.find((s) => s.id === initialSegment);
+      if (seg) {
+        initialPlayed.current = true;
+        void player.playFrom(seg.start_ms);
+      }
+    }
+  }, [initialSegment, segments, player]);
 
   if (deleted) {
     return (
@@ -231,7 +255,10 @@ export function RecordingScreen(props: RecordingScreenProps = {}) {
 
             <View style={styles.tabContent}>
               {activeTab === 'primary' ? (
-                <ScrollView showsVerticalScrollIndicator={false}>
+                <ScrollView
+                  showsVerticalScrollIndicator={false}
+                  contentContainerStyle={styles.scrollContent}
+                >
                   {recording.kind === 'meeting' && recording.summary ? (
                     <SummaryView
                       summary={recording.summary}
@@ -250,7 +277,7 @@ export function RecordingScreen(props: RecordingScreenProps = {}) {
                 <TranscriptView
                   turns={turns}
                   activeSegmentId={activeSegmentId}
-                  onSelectSegment={setActiveSegmentId}
+                  onSelectSegment={handleSelectSegment}
                   speakers={recording.speakers ?? []}
                   kind={recording.kind}
                   recordingId={recording.id}
@@ -261,6 +288,9 @@ export function RecordingScreen(props: RecordingScreenProps = {}) {
           </View>
         )}
       </Animated.View>
+      {recording.status === 'ready' && !empty ? (
+        <PlayerBar player={player} peaks={recording.waveform_peaks} />
+      ) : null}
       <Snackbar
         visible={Boolean(snackbarMessage)}
         onDismiss={() => setSnackbarMessage(null)}
@@ -278,6 +308,9 @@ const styles = StyleSheet.create({
   screen: { flex: 1 },
   content: { flex: 1 },
   body: { flex: 1, paddingHorizontal: spacing.md, gap: spacing.md },
+  scrollContent: {
+    paddingBottom: 96,
+  },
   segmentedContainer: {
     flexDirection: 'row',
     borderRadius: radius.card,

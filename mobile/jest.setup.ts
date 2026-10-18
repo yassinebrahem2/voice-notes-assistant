@@ -13,8 +13,36 @@ g.expo = g.expo ?? {};
 g.expo.modules = g.expo.modules ?? {};
 if (!g.expo.modules.ExpoAudio) {
   class MockAudioPlayer {
+    id = 'mock-audio-player';
+    currentStatus = {
+      id: 'mock-audio-player',
+      currentTime: 0,
+      duration: 0,
+      playing: false,
+      isLoaded: true,
+      isBuffering: false,
+      playbackState: 'idle',
+      timeControlStatus: 'paused',
+      reasonForWaitingToPlay: '',
+      mute: false,
+      loop: false,
+      didJustFinish: false,
+      playbackRate: 1,
+      shouldCorrectPitch: true,
+      isLive: false,
+    };
     replace() {}
     setPlaybackRate() {}
+    play() {}
+    pause() {}
+    seekTo() {
+      return Promise.resolve();
+    }
+    addListener() {
+      return { remove: () => {} };
+    }
+    removeListener() {}
+    release() {}
   }
   class MockAudioRecorder {
     prepareToRecordAsync() {
