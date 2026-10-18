@@ -13,14 +13,9 @@ import { useDeleteRecording } from './mutations';
 export interface HeaderMenuProps {
   recording: Schemas['RecordingDetailOut'];
   onShowSnackbar?: (message: string) => void;
-  onDelete?: () => void;
 }
 
-export function HeaderMenu({
-  recording,
-  onShowSnackbar,
-  onDelete,
-}: HeaderMenuProps) {
+export function HeaderMenu({ recording, onShowSnackbar }: HeaderMenuProps) {
   const { tape } = useTheme<TapeTheme>();
   const [menuOpen, setMenuOpen] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
@@ -38,13 +33,11 @@ export function HeaderMenu({
   };
 
   const handleConfirmDelete = () => {
-    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(
+      () => {},
+    );
     setConfirmOpen(false);
-    if (onDelete) {
-      onDelete();
-    } else {
-      deleteMutation.mutate(recording.id);
-    }
+    deleteMutation.mutate(recording.id);
   };
 
   return (

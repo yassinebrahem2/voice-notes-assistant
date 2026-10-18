@@ -9,7 +9,7 @@ import { fontFamilies } from '../theme/fonts';
 import { motion } from '../theme/motion';
 import type { TapeTheme } from '../theme/paperTheme';
 import { radius, spacing, typeScale } from '../theme/tokens';
-import { formatDate, formatDuration } from './PendingRow';
+import { formatDate, formatDuration } from '../format';
 import { rowStatus } from './rowStatus';
 import { WaveThumb } from './WaveThumb';
 

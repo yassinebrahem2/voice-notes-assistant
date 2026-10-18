@@ -96,6 +96,9 @@ describe('PlayerBar', () => {
       fireEvent(scrubber, 'responderGrant', {
         nativeEvent: { locationX: 100 },
       });
+      fireEvent(scrubber, 'responderRelease', {
+        nativeEvent: { locationX: 100 },
+      });
     });
 
     // 100 / 200 = 50% of 100000 = 50000

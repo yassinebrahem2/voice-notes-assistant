@@ -108,7 +108,7 @@ describe('RecordScreen', () => {
     const { unmount } = await renderRecordScreen();
     expect(screen.getByText('Meeting')).toBeTruthy();
     expect(screen.getByTestId('record-timer')).toBeTruthy();
-    expect(screen.getByTestId('level-placeholder')).toBeTruthy();
+    expect(screen.getByTestId('waveform')).toBeTruthy();
     expect(screen.getByText('Keep the app open while recording')).toBeTruthy();
     unmount();
   });

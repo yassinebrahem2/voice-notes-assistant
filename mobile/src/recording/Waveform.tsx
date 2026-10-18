@@ -2,6 +2,7 @@ import React, { useEffect, useMemo } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { useTheme } from 'react-native-paper';
 import Animated, {
+  interpolateColor,
   useAnimatedStyle,
   useReducedMotion,
   useSharedValue,
@@ -16,32 +17,6 @@ export interface WaveformProps {
   level: SharedValue<number>;
   count?: number;
   testID?: string;
-}
-
-function interpolateColor(
-  color1: string,
-  color2: string,
-  factor: number,
-): string {
-  if (factor <= 0) return color1;
-  if (factor >= 1) return color2;
-  const c1 = parseInt(color1.replace('#', ''), 16);
-  const c2 = parseInt(color2.replace('#', ''), 16);
-
-  const r1 = (c1 >> 16) & 255;
-  const g1 = (c1 >> 8) & 255;
-  const b1 = c1 & 255;
-
-  const r2 = (c2 >> 16) & 255;
-  const g2 = (c2 >> 8) & 255;
-  const b2 = c2 & 255;
-
-  const r = Math.round(r1 + (r2 - r1) * factor);
-  const g = Math.round(g1 + (g2 - g1) * factor);
-  const b = Math.round(b1 + (b2 - b1) * factor);
-
-  const hex = ((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1);
-  return `#${hex.toUpperCase()}`;
 }
 
 interface WaveformBarProps {
@@ -87,7 +62,7 @@ export function Waveform({
   const colors = useMemo(() => {
     if (count <= 1) return [tape.signal];
     return Array.from({ length: count }, (_, i) =>
-      interpolateColor(tape.inkMuted, tape.signal, i / (count - 1)),
+      interpolateColor(i / (count - 1), [0, 1], [tape.inkMuted, tape.signal]),
     );
   }, [count, tape.inkMuted, tape.signal]);
 
@@ -108,11 +83,6 @@ export function Waveform({
         { backgroundColor: tape.raised, borderColor: tape.line },
       ]}
     >
-      <View
-        testID="level-placeholder"
-        style={StyleSheet.absoluteFill}
-        pointerEvents="none"
-      />
       {reducedMotion ? (
         <View
           testID="waveform-track"

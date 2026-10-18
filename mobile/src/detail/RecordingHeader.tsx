@@ -16,8 +16,6 @@ export interface RecordingHeaderProps {
   recording?: Schemas['RecordingDetailOut'];
   tags?: Schemas['TagOut'][];
   onShowSnackbar?: (message: string) => void;
-  onUpdateTitle?: (title: string) => void;
-  onUpdateTags?: (tags: string[]) => void;
 }
 
 export function RecordingHeader({
@@ -26,8 +24,6 @@ export function RecordingHeader({
   recording,
   onBack,
   onShowSnackbar,
-  onUpdateTitle,
-  onUpdateTags,
 }: RecordingHeaderProps) {
   const { tape } = useTheme<TapeTheme>();
   const isUntitled = !recording?.title?.trim();
@@ -57,9 +53,7 @@ export function RecordingHeader({
     const val = typeof overrideTitle === 'string' ? overrideTitle : editedTitle;
     const trimmed = val.trim();
     if (trimmed && trimmed !== title) {
-      if (onUpdateTitle) {
-        onUpdateTitle(trimmed);
-      } else if (recording) {
+      if (recording) {
         updateMutation.mutate({ title: trimmed });
       }
     }
@@ -69,9 +63,7 @@ export function RecordingHeader({
   const handleRemoveTag = (tagName: string) => {
     const currentTags = (tags ?? []).map((t) => t.name);
     const updated = currentTags.filter((t) => t !== tagName);
-    if (onUpdateTags) {
-      onUpdateTags(updated);
-    } else if (recording) {
+    if (recording) {
       updateMutation.mutate({ tags: updated });
     }
   };
@@ -84,9 +76,7 @@ export function RecordingHeader({
       const isDuplicate = currentTags.some((t) => normalizeTag(t) === norm);
       if (!isDuplicate) {
         const updated = [...currentTags, trimmed];
-        if (onUpdateTags) {
-          onUpdateTags(updated);
-        } else if (recording) {
+        if (recording) {
           updateMutation.mutate({ tags: updated });
         }
       }

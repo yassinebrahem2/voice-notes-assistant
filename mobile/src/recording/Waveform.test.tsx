@@ -4,7 +4,6 @@ import { PaperProvider } from 'react-native-paper';
 import { makeMutable, useReducedMotion } from 'react-native-reanimated';
 
 import { paperTheme } from '../theme/paperTheme';
-import { tokens } from '../theme/tokens';
 import { Waveform } from './Waveform';
 
 jest.mock('react-native-reanimated', () => ({
@@ -46,12 +45,16 @@ describe('Waveform', () => {
 
     expect(firstBar.props.style).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ backgroundColor: tokens.dark.inkMuted }),
+        expect.objectContaining({
+          backgroundColor: 'rgba(163, 155, 144, 1)',
+        }),
       ]),
     );
     expect(lastBar.props.style).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ backgroundColor: tokens.dark.signal }),
+        expect.objectContaining({
+          backgroundColor: 'rgba(255, 77, 46, 1)',
+        }),
       ]),
     );
   });

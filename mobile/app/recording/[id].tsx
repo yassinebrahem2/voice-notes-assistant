@@ -1,7 +1,7 @@
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Button, Snackbar, useTheme } from 'react-native-paper';
 import Animated, {
   FadeIn,
@@ -15,6 +15,7 @@ import { errorMessage } from '../../src/api/errorMessages';
 import { NoteView } from '../../src/detail/NoteView';
 import { ProcessingTimeline } from '../../src/detail/ProcessingTimeline';
 import { RecordingHeader } from '../../src/detail/RecordingHeader';
+import { SegmentTabs } from '../../src/detail/SegmentTabs';
 import { SummaryView } from '../../src/detail/SummaryView';
 import { TranscriptView } from '../../src/detail/TranscriptView';
 import { groupTurns } from '../../src/detail/turns';
@@ -88,10 +89,22 @@ export function RecordingScreen(props: RecordingScreenProps = {}) {
   const playbackActiveSegmentId =
     activeIdx >= 0 && segments ? (segments[activeIdx]?.id ?? null) : null;
 
-  const activeSegmentId = playbackActiveSegmentId ?? selectedSegmentId;
+  const [lastPlayedSegmentId, setLastPlayedSegmentId] = useState<string | null>(
+    () => initialSegment ?? null,
+  );
+  const [prevPlaybackId, setPrevPlaybackId] = useState<string | null>(null);
+
+  if (playbackActiveSegmentId && playbackActiveSegmentId !== prevPlaybackId) {
+    setPrevPlaybackId(playbackActiveSegmentId);
+    setLastPlayedSegmentId(playbackActiveSegmentId);
+  }
+
+  const activeSegmentId =
+    playbackActiveSegmentId ?? lastPlayedSegmentId ?? selectedSegmentId;
 
   const handleSelectSegment = (segmentId: string) => {
     setSelectedSegmentId(segmentId);
+    setLastPlayedSegmentId(segmentId);
     setActiveTab('transcript');
     setIsFollowing(true);
     const seg = segments?.find((s) => s.id === segmentId);
@@ -244,72 +257,11 @@ export function RecordingScreen(props: RecordingScreenProps = {}) {
         ) : (
           <View style={styles.body}>
             {!primaryEmpty ? (
-              <View
-                style={[
-                  styles.segmentedContainer,
-                  { backgroundColor: tape.surface, borderColor: tape.line },
-                ]}
-              >
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel={primaryTabLabel}
-                  onPress={() => setActiveTab('primary')}
-                  android_ripple={{ color: tape.line }}
-                  style={[
-                    styles.segmentTab,
-                    currentTab === 'primary' && {
-                      backgroundColor: tape.raised,
-                    },
-                  ]}
-                >
-                  <Text
-                    style={[
-                      styles.tabText,
-                      {
-                        color:
-                          currentTab === 'primary' ? tape.ink : tape.inkMuted,
-                        fontFamily:
-                          currentTab === 'primary'
-                            ? fontFamilies.semibold
-                            : fontFamilies.regular,
-                      },
-                    ]}
-                  >
-                    {primaryTabLabel}
-                  </Text>
-                </Pressable>
-
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel="Transcript"
-                  onPress={() => setActiveTab('transcript')}
-                  android_ripple={{ color: tape.line }}
-                  style={[
-                    styles.segmentTab,
-                    currentTab === 'transcript' && {
-                      backgroundColor: tape.raised,
-                    },
-                  ]}
-                >
-                  <Text
-                    style={[
-                      styles.tabText,
-                      {
-                        color:
-                          currentTab === 'transcript'
-                            ? tape.ink
-                            : tape.inkMuted,
-                        fontFamily:
-                          currentTab === 'transcript'
-                            ? fontFamilies.semibold
-                            : fontFamilies.regular,
-                      },
-                    ]}
-                  >
-                    Transcript
-                  </Text>
-                </Pressable>
-              </View>
+              <SegmentTabs
+                primaryLabel={primaryTabLabel}
+                activeTab={currentTab}
+                onSelectTab={setActiveTab}
+              />
             ) : null}
 
             <View style={styles.tabContent}>
@@ -377,20 +329,7 @@ const styles = StyleSheet.create({
   scrollContent: {
     paddingBottom: 96,
   },
-  segmentedContainer: {
-    flexDirection: 'row',
-    borderRadius: radius.card,
-    borderWidth: 1,
-    overflow: 'hidden',
-    height: 48,
-  },
-  segmentTab: {
-    flex: 1,
-    minHeight: 48,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  tabText: { fontSize: typeScale.body },
+
   tabContent: { flex: 1 },
   centerContainer: {
     flex: 1,

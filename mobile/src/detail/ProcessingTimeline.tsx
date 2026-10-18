@@ -15,6 +15,7 @@ import type { Schemas } from '../api/client';
 import { errorMessage } from '../api/errorMessages';
 import { ApiError } from '../api/errors';
 import { fontFamilies } from '../theme/fonts';
+import { motion } from '../theme/motion';
 import type { TapeTheme } from '../theme/paperTheme';
 import { radius, spacing, typeScale } from '../theme/tokens';
 import { useRetryRecording } from './mutations';
@@ -37,8 +38,8 @@ function StepDot({ step }: { step: TimelineStepItem }) {
     scale.set(
       withRepeat(
         withSequence(
-          withTiming(1.3, { duration: 600 }),
-          withTiming(1, { duration: 600 }),
+          withTiming(1.3, { duration: motion.durations.slow }),
+          withTiming(1, { duration: motion.durations.slow }),
         ),
         -1,
         true,

@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { useTheme } from 'react-native-paper';
 
@@ -24,9 +24,14 @@ export function Scrubber({
 }: ScrubberProps) {
   const { tape } = useTheme<TapeTheme>();
   const [trackWidth, setTrackWidth] = useState<number>(0);
+  const trackWidthRef = useRef<number>(0);
+  const [dragPositionMs, setDragPositionMs] = useState<number | null>(null);
 
+  const currentPositionMs = dragPositionMs ?? positionMs;
   const progressRatio =
-    durationMs > 0 ? Math.min(1, Math.max(0, positionMs / durationMs)) : 0;
+    durationMs > 0
+      ? Math.min(1, Math.max(0, currentPositionMs / durationMs))
+      : 0;
 
   const sampledPeaks = useMemo(() => {
     if (!peaks || peaks.length === 0) return null;
@@ -47,12 +52,31 @@ export function Scrubber({
     return result;
   }, [peaks]);
 
-  const handleTouch = (locationX: number) => {
-    const width = trackWidth > 0 ? trackWidth : 100;
-    if (durationMs <= 0) return;
+  const calculateTargetMs = (locationX: number) => {
+    const width = trackWidthRef.current || trackWidth || 100;
+    if (durationMs <= 0) return 0;
     const ratio = Math.max(0, Math.min(1, locationX / width));
-    const targetMs = Math.round(ratio * durationMs);
+    return Math.round(ratio * durationMs);
+  };
+
+  const handleGrant = (locationX: number) => {
+    const targetMs = calculateTargetMs(locationX);
+    setDragPositionMs(targetMs);
+  };
+
+  const handleMove = (locationX: number) => {
+    const targetMs = calculateTargetMs(locationX);
+    setDragPositionMs(targetMs);
+  };
+
+  const handleRelease = (locationX: number) => {
+    const targetMs = calculateTargetMs(locationX);
+    setDragPositionMs(null);
     onSeek(targetMs);
+  };
+
+  const handleTerminate = () => {
+    setDragPositionMs(null);
   };
 
   return (
@@ -60,12 +84,28 @@ export function Scrubber({
       testID="player-scrubber"
       accessibilityRole="adjustable"
       accessibilityLabel="Audio scrubber"
-      accessibilityValue={{ min: 0, max: durationMs, now: positionMs }}
-      onLayout={(e) => setTrackWidth(e.nativeEvent.layout.width)}
+      accessibilityValue={{ min: 0, max: durationMs, now: currentPositionMs }}
+      accessibilityActions={[
+        { name: 'increment', label: 'Fast-forward 5 seconds' },
+        { name: 'decrement', label: 'Rewind 5 seconds' },
+      ]}
+      onAccessibilityAction={(event) => {
+        if (event.nativeEvent.actionName === 'increment') {
+          onSeek(Math.min(durationMs, positionMs + 5000));
+        } else if (event.nativeEvent.actionName === 'decrement') {
+          onSeek(Math.max(0, positionMs - 5000));
+        }
+      }}
+      onLayout={(e) => {
+        trackWidthRef.current = e.nativeEvent.layout.width;
+        setTrackWidth(e.nativeEvent.layout.width);
+      }}
       onStartShouldSetResponder={() => true}
       onMoveShouldSetResponder={() => true}
-      onResponderGrant={(e) => handleTouch(e.nativeEvent.locationX)}
-      onResponderMove={(e) => handleTouch(e.nativeEvent.locationX)}
+      onResponderGrant={(e) => handleGrant(e.nativeEvent.locationX)}
+      onResponderMove={(e) => handleMove(e.nativeEvent.locationX)}
+      onResponderRelease={(e) => handleRelease(e.nativeEvent.locationX)}
+      onResponderTerminate={handleTerminate}
       style={styles.container}
     >
       {sampledPeaks ? (

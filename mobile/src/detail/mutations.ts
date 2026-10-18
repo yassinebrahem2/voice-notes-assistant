@@ -140,12 +140,7 @@ export function useRenameSpeaker(
         const updatedSpeakers = (previous.speakers ?? []).map((spk) => {
           if (spk.id === speakerId) {
             const nextName = trimmed || null;
-            const fallbackLabel = spk.label
-              ? spk.label.startsWith('Speaker')
-                ? spk.label
-                : `Speaker ${spk.label}`
-              : spk.display_name;
-            const displayName = trimmed || fallbackLabel;
+            const displayName = trimmed || spk.display_name;
             return {
               ...spk,
               name: nextName,

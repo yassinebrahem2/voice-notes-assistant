@@ -150,6 +150,47 @@ describe('Recording mutations', () => {
       expect(onNotify).toHaveBeenCalledWith("Couldn't save");
       unsubscribe();
     });
+
+    test('clearing a speaker name keeps old display_name during optimistic update', async () => {
+      const { queryClient, Wrapper } = createWrapper();
+      const recordingWithNamedSpeaker: Schemas['RecordingDetailOut'] = {
+        ...baseRecording,
+        speakers: [
+          {
+            id: 'spk_1',
+            label: '1',
+            name: 'Alice',
+            display_name: 'Alice',
+          },
+        ],
+      };
+      queryClient.setQueryData(
+        ['recording', 'rec_1'],
+        recordingWithNamedSpeaker,
+      );
+      const observer = new QueryObserver(queryClient, {
+        queryKey: ['recording', 'rec_1'],
+      });
+      const unsubscribe = observer.subscribe(() => {});
+
+      mockApiFetch.mockImplementation(() => new Promise(() => {}));
+
+      const { result } = await renderHook(() => useRenameSpeaker('rec_1'), {
+        wrapper: Wrapper,
+      });
+
+      await act(async () => {
+        result.current.mutate({ speakerId: 'spk_1', name: '' });
+      });
+
+      const cached = queryClient.getQueryData<Schemas['RecordingDetailOut']>([
+        'recording',
+        'rec_1',
+      ]);
+      expect(cached?.speakers[0].name).toBeNull();
+      expect(cached?.speakers[0].display_name).toBe('Alice');
+      unsubscribe();
+    });
   });
 
   describe('useUpdateRecording', () => {

@@ -52,7 +52,7 @@ export function SpeakerRenameDialog({
     if (!speaker) return;
     const val = typeof overrideName === 'string' ? overrideName : name;
     const trimmed = val.trim();
-    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
     if (onSave) {
       onSave(speaker.id, trimmed);
     } else if (recordingId) {

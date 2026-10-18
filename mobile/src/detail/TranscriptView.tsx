@@ -6,7 +6,7 @@ import { useTheme } from 'react-native-paper';
 import { useReducedMotion } from 'react-native-reanimated';
 
 import type { Schemas } from '../api/client';
-import { formatDuration } from '../library/PendingRow';
+import { formatDuration } from '../format';
 import { fontFamilies } from '../theme/fonts';
 import type { TapeTheme } from '../theme/paperTheme';
 import { radius, spacing, typeScale } from '../theme/tokens';
@@ -21,7 +21,6 @@ export interface TranscriptViewProps {
   kind?: 'meeting' | 'note';
   recordingId?: string;
   onShowSnackbar?: (message: string) => void;
-  onRenameSpeaker?: (speaker: Schemas['SpeakerOut']) => void;
   onScrollBeginDrag?: () => void;
   isFollowing?: boolean;
   onFollow?: () => void;
@@ -35,7 +34,6 @@ export function TranscriptView({
   kind = 'meeting',
   recordingId,
   onShowSnackbar,
-  onRenameSpeaker,
   onScrollBeginDrag,
   isFollowing = true,
   onFollow,
@@ -92,7 +90,7 @@ export function TranscriptView({
           style={styles.speakerChipsScrollView}
         >
           {speakers.map((spk, idx) => {
-            const color = tape.speaker[idx % 6];
+            const color = tape.speaker[idx % tape.speaker.length];
             const name = spk.name?.trim() || spk.display_name.trim();
 
             return (
@@ -133,7 +131,9 @@ export function TranscriptView({
             ? speakers.findIndex((s) => s.id === turn.speakerId)
             : -1;
           const speakerColor =
-            speakerIdx >= 0 ? tape.speaker[speakerIdx % 6] : tape.inkMuted;
+            speakerIdx >= 0
+              ? tape.speaker[speakerIdx % tape.speaker.length]
+              : tape.inkMuted;
 
           return (
             <View
@@ -280,15 +280,6 @@ export function TranscriptView({
         recordingId={recordingId}
         onDismiss={() => setSelectedSpeaker(null)}
         onShowSnackbar={onShowSnackbar}
-        onSave={
-          onRenameSpeaker
-            ? (_id, name) => {
-                if (selectedSpeaker) {
-                  onRenameSpeaker({ ...selectedSpeaker, name });
-                }
-              }
-            : undefined
-        }
       />
     </View>
   );

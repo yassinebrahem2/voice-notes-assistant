@@ -2,7 +2,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useTheme } from 'react-native-paper';
 
 import type { Schemas } from '../api/client';
-import { formatDuration } from '../library/PendingRow';
+import { formatDuration } from '../format';
 import { fontFamilies } from '../theme/fonts';
 import type { TapeTheme } from '../theme/paperTheme';
 import { radius, spacing, typeScale } from '../theme/tokens';
