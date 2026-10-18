@@ -100,6 +100,7 @@ Versions checked 2026-10-16; majors are pinned.
 - [AGREED] Decision #46: a task that implements a stub route also updates the stub-route tests (explicit `STUBS` list in `backend/tests/api/test_routes_exist.py`).
 - [AGREED] Decision #48: Chat Retry recovers a lost run id from `GET /chats/{id}` (the run id is the stored user message id) and never sends a question twice; only a 4xx on the question's POST means it was not stored; a chat that is gone (404) is replaced by a new chat on Retry.
 - [AGREED] Decision #60: `/health` role readiness means "can process now"; fake speech reports `ready`, and the fake backend is reported only by `speech_backend`.
+- [USER] 2026-10-18: commits are authored and committed under the name and email of the person running the agent, never an AI identity (e.g. `Claude <noreply@anthropic.com>`); this counts as AI attribution. Earlier commits with that identity are not rewritten.
 - [USER] 2026-10-18: a model whose provider key is missing is skipped in its role's failover list (Chat and analysis alike); a role fails only when none of its models has a key. `/health` reports an LLM role `ready` when at least one of its models has a key; with none, the reason names every missing key.
 
 ## 3. Open

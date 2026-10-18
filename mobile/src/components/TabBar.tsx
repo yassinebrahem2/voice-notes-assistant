@@ -4,6 +4,7 @@ import { Pressable, StyleSheet, View } from 'react-native';
 import { Text, useTheme } from 'react-native-paper';
 
 import { RecordAction } from '../recording/RecordAction';
+import { useServerStatusValue, type ServerStatus } from '../server/statusStore';
 import { motion } from '../theme/motion';
 import type { TapeTheme } from '../theme/paperTheme';
 import { radius, spacing } from '../theme/tokens';
@@ -19,6 +20,24 @@ const tabs: Record<
   settings: { title: 'Settings', icon: 'cog-outline' },
 };
 
+// The dot on the Settings tab: none until the server has been tried. No address is as urgent as unreachable, since
+// the banner asks for one too. The hint carries the same state in words so it is not colour-only.
+function serverDot(
+  status: ServerStatus,
+  tape: TapeTheme['tape'],
+): { color: string; hint: string } | null {
+  switch (status) {
+    case 'ok':
+      return { color: tape.outline, hint: 'Server connected' };
+    case 'unreachable':
+      return { color: tape.signal, hint: 'Server unreachable' };
+    case 'no_server':
+      return { color: tape.signal, hint: 'No server address set' };
+    case 'unknown':
+      return null;
+  }
+}
+
 // How far the Record disc rises above the visible bar. The root is this much taller than the bar so that the disc stays
 // inside its parent: Android does not deliver touches to the part of a child drawn outside its parent's bounds.
 const discOverhang = spacing.sm;
@@ -30,16 +49,19 @@ export type TabBarProps = Pick<
 
 export function TabBar({ state, emitter, navigateToTab, insets }: TabBarProps) {
   const { tape } = useTheme<TapeTheme>();
+  const dot = serverDot(useServerStatusValue(), tape);
 
   function tab(name: TabName) {
     const route = state.routes.find((candidate) => candidate.name === name);
     if (!route) return null;
     const selected = state.routes[state.index]?.key === route.key;
     const color = selected ? tape.signal : tape.inkMuted;
+    const statusDot = name === 'settings' ? dot : null;
     return (
       <Pressable
         accessibilityRole="tab"
         accessibilityLabel={tabs[name].title}
+        accessibilityHint={statusDot?.hint}
         aria-selected={selected}
         onPress={() => {
           const event = emitter.emit({
@@ -61,12 +83,20 @@ export function TabBar({ state, emitter, navigateToTab, insets }: TabBarProps) {
           },
         ]}
       >
-        <MaterialCommunityIcons
-          name={tabs[name].icon}
-          size={24}
-          color={color}
-          accessible={false}
-        />
+        <View>
+          <MaterialCommunityIcons
+            name={tabs[name].icon}
+            size={24}
+            color={color}
+            accessible={false}
+          />
+          {statusDot && (
+            <View
+              testID="server-status-dot"
+              style={[styles.dot, { backgroundColor: statusDot.color }]}
+            />
+          )}
+        </View>
         <Text variant="labelMedium" style={{ color }}>
           {tabs[name].title}
         </Text>
@@ -129,6 +159,14 @@ const styles = StyleSheet.create({
     gap: spacing.xs,
     borderRadius: radius.card,
     overflow: 'hidden',
+  },
+  dot: {
+    position: 'absolute',
+    top: 0,
+    right: -spacing.xs,
+    width: spacing.sm,
+    height: spacing.sm,
+    borderRadius: radius.round,
   },
   record: {
     flex: 1,

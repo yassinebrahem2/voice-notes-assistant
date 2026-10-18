@@ -41,13 +41,23 @@ function isErrorCode(code: string): code is ErrorCode {
   return Object.prototype.hasOwnProperty.call(errorCodes, code);
 }
 
-export function parseApiError(status: number, body: unknown): ApiError {
-  if (
+export function isApiErrorEnvelope(
+  body: unknown,
+): body is { error: { code: string; message: string } } {
+  return (
     isRecord(body) &&
     isRecord(body.error) &&
     typeof body.error.code === 'string' &&
     typeof body.error.message === 'string'
-  ) {
+  );
+}
+
+export function isGatewayStatus(status: number): boolean {
+  return status === 502 || status === 503 || status === 504;
+}
+
+export function parseApiError(status: number, body: unknown): ApiError {
+  if (isApiErrorEnvelope(body)) {
     return new ApiError(
       status,
       isErrorCode(body.error.code) ? body.error.code : 'internal_error',

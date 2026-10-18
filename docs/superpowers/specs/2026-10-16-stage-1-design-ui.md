@@ -72,7 +72,7 @@ Tier 2 (polish; built after Tier 1 tasks and cut first if time runs short, state
 ## 6. App-side failure handling
 - Upload fails or is interrupted: the file and its kind stay on the phone; Retry on the recorder; afterwards a "Not uploaded" row (survives app restarts; pending files are listed from the document directory with a small index in AsyncStorage). `client_upload_id` makes retries idempotent.
 - Recorder error mid-recording: stop; if the file is playable, offer Save / Discard, else say it failed.
-- Server unreachable (network error or 10 s timeout): banner; a health check every 10 s while it shows; lists keep the last loaded data (in-memory TanStack Query cache). Queries retry twice with backoff; mutations do not retry.
+- Server unreachable (network error, 10 s timeout, or a 502/503/504 without the API's error body, which is the `tailscale serve` proxy answering for a stopped backend): banner; a health check every 10 s while it shows; lists keep the last loaded data (in-memory TanStack Query cache). Queries retry twice with backoff; mutations do not retry.
 - Optimistic edits roll back with "Couldn't save"; delete failure shows a snackbar and keeps the item.
 - Playback load failure: "Couldn't load audio" + Retry.
 - Processing failure: message per error code + Retry (`POST …/retry`).

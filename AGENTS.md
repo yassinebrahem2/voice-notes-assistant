@@ -111,6 +111,7 @@ Four types, each with its template and label. Blank issues are disabled.
 ## Git conventions
 - Conventional Commits: `feat(<module>): ...`, `fix(...)`, `test(...)`, `docs(...)`, `refactor(...)`, `chore(...)`. Scope = module or area (e.g. `backend`, `mobile`).
 - Never add AI attribution to commits or PRs: no `Co-Authored-By`, no "Generated with Claude Code" or similar, whatever your agent's defaults say.
+- Every commit's author and committer is the person running the agent, with their own name and email. Never an AI identity such as `Claude <noreply@anthropic.com>`, even when the container's git config sets one: check `git config user.name` and `user.email` before the first commit and set them to yours if they are not. Commits already pushed with an AI identity stay as they are; do not rewrite history to fix them.
 - PR description follows `.github/pull_request_template.md`: what changed, why, how it was tested, anything not done or done differently, `Closes #<issue>`.
 - `main` only changes through PRs merged by the lead (the lead may push spec and roadmap commits directly).
 
