@@ -6,7 +6,9 @@ processes and needs the speech extra and downloaded models (see
 [Real speech and models](#real-speech-and-models)); `SPEECH_BACKEND=fake` binds
 canned speech for development. Analysis always uses the real LLM summarizer, so a
 recording reaches `ready` only when `GROQ_API_KEY` or `GEMINI_API_KEY` is set in
-`backend/.env` (see [Backend dependencies and environment](#backend-dependencies-and-environment)).
+`backend/.env` (a recording in which no speech is found ends `ready` and Untitled
+without analysis; see
+[Backend dependencies and environment](#backend-dependencies-and-environment)).
 Mobile screens are placeholders and Record does nothing.
 Successful setup does not yet mean recording, transcription or chat works in the app.
 
@@ -190,14 +192,14 @@ uv run python -m app.cli seed-demo
 uv run python -m app.cli calibrate-retrieval --questions ../docs/calibration-questions.example.yaml
 ```
 
-Run `seed-demo` only against a data directory seeded with the real embedder.
+Run `calibrate-retrieval` only against demo data seeded with the real embedder.
 Earlier versions embedded the demo chunks with a fake embedder; those vectors have
 the same size as real ones, so nothing errors, but chat search silently finds none of
 the seeded recordings. `seed-demo` refuses a non-empty database and there is no
 re-index command, so replace such a data directory: point `DATA_DIR` at a fresh
-folder outside the repository, run `uv run --extra speech python -m app.cli setup`
-there (the model cache follows `DATA_DIR` unless `MODEL_CACHE_DIR` is set), then run
-`seed-demo` again before `calibrate-retrieval`.
+folder outside the repository, then run `seed-demo` again before
+`calibrate-retrieval`. The model cache follows `DATA_DIR` unless `MODEL_CACHE_DIR`
+is set, so the first `seed-demo` on a fresh folder downloads the embedder.
 
 The script reports the best cosine distance for expected and unrelated queries, detects any
 overlap between expected hits and unrelated hits, and suggests an optimal `retrieval_max_distance` threshold.
