@@ -16,7 +16,7 @@ from app.speech.fakes import FakeAsr, FakeDiarizer
 from app.speech.protocols import AsrSegment, DiarTurn
 
 
-def test_build_container_uses_fakes(tmp_path: Path) -> None:
+def test_build_container_binds_configured_components(tmp_path: Path) -> None:
     settings = Settings(data_dir=tmp_path / "data", model_cache_dir=tmp_path / "models", speech_backend="fake")
     container = build_container(settings)
     assert container.settings is settings

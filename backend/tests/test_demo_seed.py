@@ -18,7 +18,15 @@ from app.rag.vectors import unpack_embedding
 
 
 def build_with_fakes(settings: Settings) -> Container:
-    return dataclasses.replace(real_build_container(settings), embedder=FakeEmbedder(), analyzer=FakeAnalyzer())
+    result = dataclasses.replace(
+        real_build_container(settings), embedder=FakeEmbedder(), analyzer=FakeAnalyzer(), chat_runs=None
+    )
+    from app.agents.chat_graph import build_chat_graph
+    from app.chats.runs import ChatRuns
+
+    # Chat runs hold their container, so they are rebuilt on the one carrying the fakes.
+    result.chat_runs = ChatRuns(result, build_chat_graph)
+    return result
 
 
 @pytest.fixture
