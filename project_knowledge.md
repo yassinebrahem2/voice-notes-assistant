@@ -102,6 +102,8 @@ Versions checked 2026-10-16; majors are pinned.
 - [AGREED] Decision #60: `/health` role readiness means "can process now"; fake speech reports `ready`, and the fake backend is reported only by `speech_backend`.
 - [USER] 2026-10-18: commits are authored and committed under the name and email of the person running the agent, never an AI identity (e.g. `Claude <noreply@anthropic.com>`); this counts as AI attribution. Earlier commits with that identity are not rewritten.
 - [USER] 2026-10-18: a model whose provider key is missing is skipped in its role's failover list (Chat and analysis alike); a role fails only when none of its models has a key. `/health` reports an LLM role `ready` when at least one of its models has a key; with none, the reason names every missing key.
+- [USER] 2026-10-18: pyannote's telemetry is turned off (`PYANNOTE_METRICS_ENABLED=false` in the diarize child and in `setup`): nothing goes out to third parties during processing or the demo.
+- [USER] 2026-10-18: with the real speech backend bound, `/health` reports the speech roles not ready when the speech extra is not installed; otherwise speech readiness comes from the download record `setup` writes (a model fetched another way reads "Model not downloaded" until `setup` runs).
 
 ## 3. Open
 Each item is safe to decide later; the stage that decides it is named.
