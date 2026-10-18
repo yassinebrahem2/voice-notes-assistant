@@ -36,7 +36,7 @@
 
 **Files:**
 - Create: `backend/app/recordings/__init__.py`, `backend/app/recordings/read.py`
-- Modify: `backend/app/api/routes/recordings.py` (`list_recordings`, `get_recording`), `backend/app/api/routes/tags.py` (`list_tags`)
+- Modify: `backend/app/api/routes/recordings.py` (`list_recordings`, `get_recording`), `backend/app/api/routes/tags.py` (`list_tags`), `backend/tests/api/test_errors.py` (`test_stub_route_returns_contract_shape` registers its own route that calls `not_implemented()`, as the `/crash` test does, so the 501 contract check no longer depends on a real route staying a stub), `backend/tests/api/test_routes_exist.py` (`test_every_stub_returns_501` is parametrised over an explicit `STUBS` list, one route per line, instead of `ROUTES` minus `/health`; this task's three routes are left out of it; `ROUTES` and `test_routes_exist` stay as they are). Decision #46.
 - Test: `backend/tests/recordings/test_read.py`
 
 **Interfaces:**
@@ -62,7 +62,7 @@
 
 **Files:**
 - Create: `backend/app/recordings/edit.py`, `backend/app/audio/__init__.py`, `backend/app/audio/storage.py`
-- Modify: `backend/app/api/routes/recordings.py` (`update_recording`, `rename_speaker`, `delete_recording`, `retry_recording`)
+- Modify: `backend/app/api/routes/recordings.py` (`update_recording`, `rename_speaker`, `delete_recording`, `retry_recording`), `backend/tests/api/test_routes_exist.py` (remove this task's routes from `STUBS`; see Decision #46)
 - Test: `backend/tests/recordings/test_edit.py`
 
 **Interfaces:**
@@ -87,7 +87,7 @@
 
 **Files:**
 - Create: `backend/app/audio/upload.py`, `backend/app/audio/decode.py`, `backend/tests/fixtures/` (generated in tests, not committed binaries)
-- Modify: `backend/pyproject.toml` (add `av>=19,<20`), `backend/app/api/routes/recordings.py` (`upload_recording`, `get_recording_audio`)
+- Modify: `backend/pyproject.toml` (add `av>=19,<20`), `backend/app/api/routes/recordings.py` (`upload_recording`, `get_recording_audio`), `backend/tests/api/test_routes_exist.py` (remove this task's routes from `STUBS`; see Decision #46)
 - Test: `backend/tests/audio/test_upload.py`, `backend/tests/audio/test_decode.py`, `backend/tests/audio/test_serve.py`
 
 **Interfaces:**
@@ -163,7 +163,7 @@
 
 **Files:**
 - Create: `backend/app/rag/fastembed_embedder.py`
-- Modify: `backend/pyproject.toml` (base adds `fastembed>=0.9,<0.10`), `backend/uv.lock`, `backend/app/container.py` (embedder binding point), `backend/app/api/routes/health.py` (local readiness of the embedder), `backend/tests/conftest.py` (the `container` fixture keeps fakes)
+- Modify: `backend/pyproject.toml` (base adds `fastembed>=0.9,<0.10`), `backend/uv.lock`, `backend/app/container.py` (embedder binding point), `backend/app/api/routes/health.py` (local readiness of the embedder), `backend/tests/conftest.py` (the `container` fixture keeps fakes), `backend/tests/test_demo_seed.py` (`cli_container` also patches `app.cli.build_container` with a typed function that calls the real `build_container` and `dataclasses.replace`s `embedder=FakeEmbedder(), analyzer=FakeAnalyzer()`, so `seed-demo` tests never download a model; Decision #58)
 - Test: `backend/tests/rag/test_fastembed_embedder.py`, `backend/tests/test_container.py` (extend)
 
 **Interfaces:**
@@ -209,7 +209,7 @@
   - Pyright strict without the speech extra (CI installs only the base dependencies): no module-level import of `faster_whisper`, `pyannote.audio` or `torch` anywhere. Each child module imports them inside its `main()`, each import line carrying `# pyright: ignore[reportMissingImports]  -- optional speech extra not installed in CI` (a third-party boundary, rule named). Values from those libraries are unknown to pyright, so they cross into typed code in one place per child: a small loop that builds typed dataclasses (`ChildSegment(start_ms: int, end_ms: int, text: str)`, `ChildTurn(start_ms: int, end_ms: int, speaker: str)`) with explicit `int(...)`/`str(...)` conversions, under that same per-line rule where pyright reports `reportUnknownMemberType`/`reportUnknownVariableType`/`reportUnknownArgumentType` on a library value; nothing past that loop touches a library object. The parent (`real.py`) imports nothing heavy; it validates the child's JSON into `AsrSegment`/`DiarTurn`.
   - `RealAsr(models, settings)` / `RealDiarizer(models, settings)` implementing the protocols via `run_child` with `env = {**os.environ, "HF_HOME": str(model_cache_dir / "hf")}`: always the full parent environment (on Windows a child without `SYSTEMROOT` dies at startup; it also carries `PATH`, CUDA variables, `HF_TOKEN` and `HF_HUB_OFFLINE`), never a minimal mapping; `ChildFailed` → `StepError` in the pipeline. The pipeline calls them with no transaction open (Global Constraints).
   - `build_container`: `speech_backend == "real"` → `RealAsr`, `RealDiarizer`, `speech_backend_bound="real"`. The test fixture is unaffected: it sets `SPEECH_BACKEND=fake` (and Task 6's `replace` keeps the embedder and analyzer fake).
-  - `/health` local roles `asr`/`diarizer`: `"fake"` when fake is bound, else ready if model files are cached (and `HF_TOKEN` for the diarizer).
+  - `/health` local roles `asr`/`diarizer` (Decision #60): readiness means "can this role process a recording now". When fake speech is bound they stay `"ready"` (the fakes can process; `speech_backend: "fake"` is what tells the app it is fake, and Settings already shows "Speech: fake (dev)" from it). When `RealAsr`/`RealDiarizer` are bound (checked by bound class, as Task 6 does for the embedder): `"Model not downloaded"` unless the model files are in the cache dir; the diarizer also keeps the existing `Missing HF_TOKEN` check. `backend/tests/api/test_health.py` stays unedited and must keep passing; new readiness tests go in Task 7's own test file (real classes bound, empty temp cache → not downloaded; files placed → ready).
   - `python -m app.cli setup`: creates data and cache dirs, downloads the embedder, and when the speech extra is importable downloads the ASR and diarizer models; prints each role's readiness and missing env vars; never prints values.
   - `AGENTS.md` Backend commands: laptop install line `uv sync --extra speech`.
 
@@ -224,7 +224,7 @@
 - [ ] **Step 6: Commit** `feat(backend): run real speech in child processes and add the setup command`.
 
 ## Shared files with the agents plan
-Both this plan and the agents plan edit `backend/app/container.py` (binding points), `backend/tests/conftest.py` (the fixture's `dataclasses.replace` with fakes; the agents plan also sets `chat_runs` there), `backend/app/cli.py`, `docs/setup.md`, `backend/pyproject.toml` and `backend/uv.lock`, and may touch `backend/app/api/app.py`. Whichever merges second rebases and keeps both changes. A `uv.lock` conflict is resolved by taking either side and re-running `uv lock`, never by hand-merging the file.
+Both this plan and the agents plan edit `backend/app/container.py` (binding points), `backend/tests/conftest.py` (the fixture's `dataclasses.replace` with fakes; the agents plan also sets `chat_runs` there), `backend/app/cli.py`, `docs/setup.md`, `backend/pyproject.toml` and `backend/uv.lock`, and may touch `backend/app/api/app.py`. Both remove their implemented routes from `STUBS` in `backend/tests/api/test_routes_exist.py` (Decision #46); the task that removes the last entry deletes `STUBS` and `test_every_stub_returns_501`. Whichever merges second rebases and keeps both changes. A `uv.lock` conflict is resolved by taking either side and re-running `uv lock`, never by hand-merging the file.
 
 ## Self-review notes
 - Spec coverage: pipeline and claim/resume/retry (processing §1, §6) Tasks 2 and 4; speech execution (§2) Task 7; embedder (§5) Task 6; analysis storage (§4, server part) Task 5; chunking and indexing (§5) Task 5; upload limits and idempotency (data-API §4) Task 3; routes owned by this plan (overview) Tasks 1–3; installs and setup (platform §2) Tasks 6 and 7. The `Analyzer` (prompts, failover, map-reduce) is the agents plan.

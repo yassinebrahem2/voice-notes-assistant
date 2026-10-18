@@ -64,13 +64,30 @@ def chat_model(entry: LlmEntry, registry: ModelsRegistry) -> BaseChatModel:
     raise ConfigError(f"Unsupported client '{provider.client}' for provider '{entry.provider}'")
 
 
-def role_models(registry: ModelsRegistry, role: Literal["llm"]) -> list[BaseChatModel]:
-    """Build chat models for each configured entry in the given role, in order.
+def missing_key_envs(registry: ModelsRegistry, entries: Sequence[LlmEntry]) -> list[str]:
+    """Return the key env vars of the entries whose provider key is unset, in list order, without duplicates."""
+    missing: list[str] = []
+    for entry in entries:
+        key_env = registry.providers[entry.provider].key_env
+        if provider_key(registry, entry.provider) is None and key_env not in missing:
+            missing.append(key_env)
+    return missing
 
-    Tests monkeypatch this function to inject scripted or failing fake models.
+
+def role_models(registry: ModelsRegistry, role: Literal["llm"]) -> list[BaseChatModel]:
+    """Build chat models for the configured entries of the given role whose provider key is set, in order.
+
+    An entry without a key is skipped, so the failover list holds only models that can be called.
+
+    Raises:
+        ConfigError: If no entry of the role has its key set; names every missing key env var.
     """
     entries: list[LlmEntry] = getattr(registry.roles, role)
-    return [chat_model(entry, registry) for entry in entries]
+    keyed = [entry for entry in entries if provider_key(registry, entry.provider) is not None]
+    if not keyed:
+        names = ", ".join(missing_key_envs(registry, entries))
+        raise ConfigError(f"No model in role '{role}' has its API key set; missing {names}")
+    return [chat_model(entry, registry) for entry in keyed]
 
 
 def chat_middleware(
