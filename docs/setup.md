@@ -100,6 +100,7 @@ curl.exe http://127.0.0.1:8000/api/v1/health
 Expect HTTP 200 and JSON containing `app_name`, `version`, `speech_backend`
 (`"real"` by default, `"fake"` with `SPEECH_BACKEND=fake`) and `roles`; each role
 is `ready` or the reason it is not, such as `Model not downloaded`.
+`"Speech extra not installed"` means `uv sync --extra speech` is needed.
 
 Analysis tries the `llm_analysis` models in order (currently Gemini, then Groq;
 the order is set in `config/models.yaml`); a model whose key is missing is

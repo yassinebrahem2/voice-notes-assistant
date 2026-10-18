@@ -39,7 +39,7 @@ def run_child(module: str, args: list[str], *, timeout_s: float, env: Mapping[st
         out = Path(folder) / "result.json"
         command = [sys.executable, "-m", module, *args, "--out", str(out)]
         try:
-            completed = subprocess.run(  # noqa: S603  -- this interpreter running a speech module of ours, no shell
+            completed = subprocess.run(
                 command,
                 cwd=BACKEND_DIR,
                 env=dict(env),

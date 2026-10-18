@@ -1,5 +1,6 @@
 import dataclasses
 import json
+import os
 from pathlib import Path
 
 import pytest
@@ -11,6 +12,12 @@ from app.config.settings import Settings
 from app.container import Container
 from app.speech import asr_child, diarize_child
 from app.speech.real import RealAsr, RealDiarizer, record_download
+
+
+@pytest.fixture(autouse=True)
+def _mock_speech_extra(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("app.speech.real.speech_extra_installed", lambda: True)
+    monkeypatch.setattr("app.api.routes.health.speech_extra_installed", lambda: True)
 
 
 def _real_bound(container: Container, cache_dir: Path) -> Container:
@@ -126,6 +133,8 @@ def test_setup_without_speech_extra_downloads_the_embedder_and_prints_names_only
 
     download = EmbedderDownload()
     monkeypatch.setattr(cli, "TextEmbedding", download)
+    monkeypatch.setattr("app.speech.real.speech_extra_installed", lambda: False)
+    monkeypatch.setattr("app.api.routes.health.speech_extra_installed", lambda: False)
     monkeypatch.setattr(cli, "speech_extra_installed", lambda: False)
     first = setup_container.models.roles.llm[0]
     present_key = setup_container.models.providers[first.provider].key_env
@@ -139,8 +148,8 @@ def test_setup_without_speech_extra_downloads_the_embedder_and_prints_names_only
     ]
     out = capsys.readouterr().out
     assert "secret-value-123" not in out
-    assert "asr: Model not downloaded" in out
-    assert "diarizer: Missing HF_TOKEN" in out
+    assert "asr: Speech extra not installed" in out
+    assert "diarizer: Speech extra not installed" in out
     assert "llm: ready" in out
     missing = next(line for line in out.splitlines() if line.startswith("Missing environment variables:"))
     assert "HF_TOKEN" in missing
@@ -154,8 +163,11 @@ def test_setup_with_speech_extra_downloads_and_records_speech_models(
     from app import cli
 
     monkeypatch.setattr(cli, "TextEmbedding", EmbedderDownload())
+    monkeypatch.setattr("app.speech.real.speech_extra_installed", lambda: True)
+    monkeypatch.setattr("app.api.routes.health.speech_extra_installed", lambda: True)
     monkeypatch.setattr(cli, "speech_extra_installed", lambda: True)
     monkeypatch.setenv("HF_TOKEN", "hf-secret-value")
+    monkeypatch.setenv("PYANNOTE_METRICS_ENABLED", "true")
     hub_dirs: list[Path] = []
     tokens: list[str] = []
 
@@ -172,6 +184,7 @@ def test_setup_with_speech_extra_downloads_and_records_speech_models(
 
     def download_diarizer(model: str, hub_dir: Path, token: str) -> Path:
         assert model == setup_container.models.roles.diarizer.model
+        assert os.environ.get("PYANNOTE_METRICS_ENABLED") == "false"
         hub_dirs.append(hub_dir)
         tokens.append(token)
         return snapshot("diarizer")

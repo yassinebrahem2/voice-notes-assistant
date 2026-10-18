@@ -183,6 +183,12 @@ def test_real_diarizer_runs_its_child_with_the_role_and_full_environment(
     assert call.env["HF_TOKEN"] == os.environ["HF_TOKEN"]
 
 
+def test_child_env_disables_pyannote_telemetry(container: Container, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("PYANNOTE_METRICS_ENABLED", "true")
+    env = real._child_env(container.settings)  # pyright: ignore[reportPrivateUsage]
+    assert env["PYANNOTE_METRICS_ENABLED"] == "false"
+
+
 @pytest.mark.parametrize(
     "output",
     [

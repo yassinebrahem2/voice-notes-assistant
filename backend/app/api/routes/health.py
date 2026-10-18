@@ -9,7 +9,7 @@ from app.config.settings import hf_token, provider_key
 from app.container import Container
 from app.llm.factory import missing_key_envs
 from app.rag.fastembed_embedder import FastEmbedEmbedder
-from app.speech.real import RealAsr, RealDiarizer
+from app.speech.real import RealAsr, RealDiarizer, speech_extra_installed
 
 router = APIRouter(tags=["health"])
 
@@ -30,12 +30,16 @@ def get_health(container: Annotated[Container, Depends(get_container)]) -> Healt
         if all(provider_key(container.models, entry.provider) is None for entry in entries):
             roles[role] = f"Missing {join_key_names(missing_key_envs(container.models, entries))}"
     # Bound fakes can always process, so only real speech has model files to check (Decision #60).
-    if isinstance(container.asr, RealAsr) and not container.asr.is_cached():
-        roles["asr"] = "Model not downloaded"
-    if container.speech_backend_bound == "real" and hf_token() is None:
-        roles["diarizer"] = "Missing HF_TOKEN"
-    elif isinstance(container.diarizer, RealDiarizer) and not container.diarizer.is_cached():
-        roles["diarizer"] = "Model not downloaded"
+    if container.speech_backend_bound == "real" and not speech_extra_installed():
+        roles["asr"] = "Speech extra not installed"
+        roles["diarizer"] = "Speech extra not installed"
+    else:
+        if isinstance(container.asr, RealAsr) and not container.asr.is_cached():
+            roles["asr"] = "Model not downloaded"
+        if container.speech_backend_bound == "real" and hf_token() is None:
+            roles["diarizer"] = "Missing HF_TOKEN"
+        elif isinstance(container.diarizer, RealDiarizer) and not container.diarizer.is_cached():
+            roles["diarizer"] = "Model not downloaded"
     if isinstance(container.embedder, FastEmbedEmbedder) and not container.embedder.is_cached():
         roles["embedder"] = "Model not downloaded"
     return HealthOut(

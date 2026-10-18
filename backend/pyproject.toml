@@ -24,6 +24,7 @@ dependencies = [
     "langchain-google-genai~=4.4",
     "google-genai>=2.20,<3",
     "httpx~=0.28.1",
+    "huggingface-hub>=1.33,<2",
 ]
 
 [project.optional-dependencies]
@@ -58,6 +59,8 @@ select = ["E", "F", "I", "B", "UP", "S", "SIM", "RUF"]
 
 [tool.ruff.lint.per-file-ignores]
 "tests/**/*.py" = ["S101", "S603"]
+# this interpreter running one of our own speech modules, no shell
+"app/speech/child.py" = ["S603"]
 
 [tool.pyright]
 include = ["app", "tests"]

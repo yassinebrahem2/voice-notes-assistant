@@ -1,5 +1,4 @@
 import argparse
-import importlib.util
 import json
 import os
 import sys
@@ -16,17 +15,9 @@ from app.container import Container, build_container
 from app.db.connection import connect
 from app.db.migrate import apply_migrations
 from app.speech import asr_child, diarize_child
-from app.speech.real import hf_home, record_download
+from app.speech.real import hf_home, record_download, speech_extra_installed
 
 OPENAPI_PATH = Path(__file__).resolve().parents[1] / "openapi.json"
-
-
-def speech_extra_installed() -> bool:
-    """Whether the speech packages are importable, checked without importing them (and so without torch)."""
-    names = ("faster_whisper", "pyannote", "torch")
-    return all(importlib.util.find_spec(name) is not None for name in names) and (
-        importlib.util.find_spec("pyannote.audio") is not None
-    )
 
 
 def _missing_env_names(container: Container) -> list[str]:
@@ -56,6 +47,7 @@ def run_setup(container: Container) -> None:
             print("HF_TOKEN is not set: skipping the diarizer model.")
         else:
             print("Downloading the diarizer model")
+            os.environ["PYANNOTE_METRICS_ENABLED"] = "false"
             snapshot = diarize_child.download(roles.diarizer.model, hub_dir, token.get_secret_value())
             record_download(settings.model_cache_dir, "diarizer", roles.diarizer.model, snapshot)
     health = get_health(container)

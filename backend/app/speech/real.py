@@ -5,6 +5,7 @@ Which files a model needs is known only to its library, so `setup` downloads thr
 files it got (`record_download`); readiness then checks that those files are still in the cache.
 """
 
+import importlib.util
 import json
 import os
 from pathlib import Path
@@ -20,6 +21,14 @@ from app.speech.protocols import AsrSegment, DiarTurn
 SpeechRole = Literal["asr", "diarizer"]
 
 DOWNLOADS_FILE = "speech-downloads.json"
+
+
+def speech_extra_installed() -> bool:
+    """Whether the speech packages are importable, checked without importing them (and so without torch)."""
+    names = ("faster_whisper", "pyannote", "torch")
+    return all(importlib.util.find_spec(name) is not None for name in names) and (
+        importlib.util.find_spec("pyannote.audio") is not None
+    )
 
 
 def hf_home(model_cache_dir: Path) -> Path:
@@ -87,7 +96,7 @@ def model_downloaded(model_cache_dir: Path, role: SpeechRole, model: str) -> boo
 def _child_env(settings: Settings) -> dict[str, str]:
     # The full environment, read at each call: Windows children need SYSTEMROOT, and serve sets HF_HUB_OFFLINE
     # after the container is built; PATH, CUDA variables and HF_TOKEN come through the same way.
-    return {**os.environ, "HF_HOME": str(hf_home(settings.model_cache_dir))}
+    return {**os.environ, "HF_HOME": str(hf_home(settings.model_cache_dir)), "PYANNOTE_METRICS_ENABLED": "false"}
 
 
 class RealAsr:

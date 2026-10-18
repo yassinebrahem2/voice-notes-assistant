@@ -43,6 +43,7 @@ def test_keys_from_env_file_reach_health(container: Container, tmp_path: Path) -
 
 def test_real_bound_diarizer_checks_hf_token(container: Container, monkeypatch: pytest.MonkeyPatch) -> None:
     container.speech_backend_bound = "real"
+    monkeypatch.setattr("app.api.routes.health.speech_extra_installed", lambda: True)
     with TestClient(create_app(container)) as client:
         response = client.get("/api/v1/health")
         assert response.json()["speech_backend"] == "real"
@@ -75,3 +76,32 @@ def test_join_key_names() -> None:
     assert join_key_names(["A"]) == "A"
     assert join_key_names(["A", "B"]) == "A and B"
     assert join_key_names(["A", "B", "C"]) == "A, B and C"
+
+
+def test_real_bound_reports_speech_extra_not_installed_when_extra_missing(
+    container: Container, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    container.speech_backend_bound = "real"
+    monkeypatch.setattr("app.api.routes.health.speech_extra_installed", lambda: False, raising=False)
+    monkeypatch.setattr("app.speech.real.speech_extra_installed", lambda: False, raising=False)
+    with TestClient(create_app(container)) as client:
+        response = client.get("/api/v1/health")
+        assert response.status_code == 200
+        roles = response.json()["roles"]
+        assert roles["asr"] == "Speech extra not installed"
+        assert roles["diarizer"] == "Speech extra not installed"
+
+
+def test_fake_bound_reports_ready_even_when_speech_extra_missing(
+    container: Container, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr("app.api.routes.health.speech_extra_installed", lambda: False, raising=False)
+    monkeypatch.setattr("app.speech.real.speech_extra_installed", lambda: False, raising=False)
+    for provider in container.models.providers.values():
+        monkeypatch.setenv(provider.key_env, "present")
+    with TestClient(create_app(container)) as client:
+        response = client.get("/api/v1/health")
+        assert response.status_code == 200
+        roles = response.json()["roles"]
+        assert roles["asr"] == "ready"
+        assert roles["diarizer"] == "ready"
