@@ -1,9 +1,9 @@
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
-import * as Haptics from 'expo-haptics';
+import { File } from 'expo-file-system';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { BackHandler, Pressable, StyleSheet, View } from 'react-native';
-import { Button, Dialog, Portal, Text, useTheme } from 'react-native-paper';
+import { Text, useTheme } from 'react-native-paper';
 import Animated, {
   ReduceMotion,
   useAnimatedStyle,
@@ -12,54 +12,52 @@ import Animated, {
 } from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { isExpoGo } from '../src/recording/environment';
 import { closeFanOut } from '../src/recording/fanOutStore';
+import { isExpoGo } from '../src/recording/environment';
 import { LevelRing } from '../src/recording/LevelRing';
-import {
-  enqueue,
-  removePending,
-  type PendingUpload,
-} from '../src/recording/pending';
-import { uploadPending } from '../src/recording/upload';
-import {
-  UploadProgressRing,
-  type UploadStatus,
-} from '../src/recording/UploadProgressRing';
+import { checkAudioPlayable } from '../src/recording/playability';
+import { UploadProgressRing } from '../src/recording/UploadProgressRing';
 import { useRecorder } from '../src/recording/useRecorder';
+import { useRecordFlow } from '../src/recording/useRecordFlow';
 import { Waveform } from '../src/recording/Waveform';
+import { DiscardDialog } from '../src/recording/DiscardDialog';
+import { RecorderBanner } from '../src/recording/RecorderBanner';
+import { RecorderErrorView } from '../src/recording/RecorderErrorView';
 import { fontFamilies } from '../src/theme/fonts';
 import { motion } from '../src/theme/motion';
 import type { TapeTheme } from '../src/theme/paperTheme';
 import { radius, spacing } from '../src/theme/tokens';
 
 function formatDuration(ms: number): string {
-  const totalSeconds = Math.floor(ms / 1000);
+  const totalSeconds = Math.max(0, Math.floor(ms / 1000));
+  const minutes = Math.floor(totalSeconds / 60);
   const seconds = totalSeconds % 60;
-  const minutes = Math.floor(totalSeconds / 60) % 60;
-  const hours = Math.floor(totalSeconds / 3600);
-  const pad = (n: number) => n.toString().padStart(2, '0');
-  if (hours > 0) {
-    return `${pad(hours)}:${pad(minutes)}:${pad(seconds)}`;
-  }
-  return `${pad(minutes)}:${pad(seconds)}`;
+  return `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
 }
-
-type ScreenState = 'recording' | UploadStatus;
 
 export default function RecordScreen() {
   const { kind } = useLocalSearchParams<{ kind?: string }>();
   const recordingKind = kind === 'note' ? 'note' : 'meeting';
   const recorder = useRecorder(recordingKind);
-  const { tape } = useTheme<TapeTheme>();
+  const theme = useTheme<TapeTheme>();
+  const { tape } = theme;
+
   const [showDiscardDialog, setShowDiscardDialog] = useState(false);
-  const [expoGoClient, setExpoGoClient] = useState(isExpoGo);
-  const [screenState, setScreenState] = useState<ScreenState>('recording');
-  const [uploadProgress, setUploadProgress] = useState(0);
-  const pendingItemRef = useRef<PendingUpload | null>(null);
   const isMountedRef = useRef(true);
   const mounted = useRef(false);
   const opacity = useSharedValue(1);
   const veil = useAnimatedStyle(() => ({ opacity: opacity.get() }));
+
+  const {
+    screenState,
+    setScreenState,
+    uploadProgress,
+    stopping,
+    handleStop,
+    handleRetry,
+    handleSaveRecovered,
+    handleDiscardRecovered,
+  } = useRecordFlow(recordingKind, recorder, () => isMountedRef.current);
 
   useEffect(() => {
     isMountedRef.current = true;
@@ -67,51 +65,6 @@ export default function RecordScreen() {
       isMountedRef.current = false;
     };
   }, []);
-
-  const startUpload = useCallback(async (item: PendingUpload) => {
-    setScreenState('uploading');
-    setUploadProgress(0);
-    try {
-      const recording = await uploadPending(item, (fraction) => {
-        if (isMountedRef.current) {
-          setUploadProgress(fraction);
-        }
-      });
-      if (!isMountedRef.current) return;
-      setScreenState('success');
-      setTimeout(() => {
-        if (isMountedRef.current) {
-          router.replace(`/recording/${recording.id}` as never);
-        }
-      }, 500);
-    } catch (error) {
-      console.warn('Upload failed', error);
-      if (isMountedRef.current) {
-        setScreenState('error');
-      }
-    }
-  }, []);
-
-  const handleStop = useCallback(async () => {
-    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() =>
-      console.warn('Haptic feedback is unavailable.'),
-    );
-    try {
-      const { uri, durationMs } = await recorder.stop();
-      const item = await enqueue(uri, recordingKind, durationMs);
-      pendingItemRef.current = item;
-      await startUpload(item);
-    } catch (error) {
-      console.warn('Failed to stop or enqueue recording', error);
-      setScreenState('error');
-    }
-  }, [recorder, recordingKind, startUpload]);
-
-  const handleRetry = useCallback(() => {
-    if (pendingItemRef.current) {
-      void startUpload(pendingItemRef.current);
-    }
-  }, [startUpload]);
 
   const handleClose = useCallback(() => {
     if (
@@ -126,12 +79,29 @@ export default function RecordScreen() {
 
   const handleDiscard = useCallback(async () => {
     setShowDiscardDialog(false);
-    if (pendingItemRef.current) {
-      await removePending(pendingItemRef.current.clientUploadId);
-    }
     await recorder.discard();
     router.back();
   }, [recorder]);
+
+  useEffect(() => {
+    if (recorder.error && screenState === 'recording') {
+      void (async () => {
+        const playable = await checkAudioPlayable(recorder.uri);
+        if (!isMountedRef.current) return;
+        if (playable) {
+          setScreenState('offer_save');
+        } else {
+          try {
+            if (recorder.uri) {
+              const file = new File(recorder.uri);
+              if (file.exists) file.delete();
+            }
+          } catch {}
+          setScreenState('recording_failed');
+        }
+      })();
+    }
+  }, [recorder.error, recorder.uri, screenState, setScreenState]);
 
   useEffect(() => {
     const onBackPress = () => {
@@ -148,30 +118,38 @@ export default function RecordScreen() {
     return () => sub.remove();
   }, [screenState, recorder.isRecording, recorder.elapsedMs]);
 
+  const isErrorState =
+    screenState === 'start_failed' ||
+    screenState === 'recording_failed' ||
+    screenState === 'enqueue_failed' ||
+    screenState === 'offer_save';
+
+  const onLayout = useCallback(() => {
+    if (mounted.current) return;
+    mounted.current = true;
+    void (async () => {
+      try {
+        await recorder.prepare();
+        await recorder.start();
+      } catch (error) {
+        console.warn('Failed to start recording', error);
+        setScreenState('start_failed');
+      }
+      closeFanOut();
+      opacity.set(
+        withTiming(0, {
+          duration: motion.durations.base,
+          reduceMotion: ReduceMotion.Never,
+        }),
+      );
+    })();
+  }, [recorder, opacity, setScreenState]);
+
   return (
     <View
       testID="record-screen"
       style={[styles.root, { backgroundColor: tape.bg }]}
-      onLayout={() => {
-        if (mounted.current) return;
-        mounted.current = true;
-        void (async () => {
-          try {
-            await recorder.prepare();
-            setExpoGoClient(isExpoGo());
-            await recorder.start();
-          } catch (error) {
-            console.warn('Failed to start recording', error);
-          }
-          closeFanOut();
-          opacity.set(
-            withTiming(0, {
-              duration: motion.durations.base,
-              reduceMotion: ReduceMotion.Never,
-            }),
-          );
-        })();
-      }}
+      onLayout={onLayout}
     >
       <SafeAreaView style={styles.content}>
         <View style={styles.header}>
@@ -194,79 +172,52 @@ export default function RecordScreen() {
           </Pressable>
         </View>
 
-        <View style={styles.body}>
-          <Text
-            variant="displayLarge"
-            testID="record-timer"
-            style={[
-              styles.timer,
-              {
-                color: tape.ink,
-                fontFamily: fontFamilies.mono,
-                fontVariant: ['tabular-nums'],
-              },
-            ]}
-          >
-            {formatDuration(recorder.elapsedMs)}
-          </Text>
-
-          {expoGoClient || isExpoGo() ? (
+        {isErrorState ? (
+          <RecorderErrorView
+            state={screenState}
+            theme={theme}
+            onClose={() => router.back()}
+            onRetry={handleRetry}
+            onSave={handleSaveRecovered}
+            onDiscard={handleDiscardRecovered}
+          />
+        ) : (
+          <View style={styles.body}>
             <Text
-              variant="bodySmall"
-              style={[styles.expoGoNote, { color: tape.inkMuted }]}
+              variant="displayLarge"
+              testID="record-timer"
+              style={[
+                styles.timer,
+                {
+                  color: tape.ink,
+                  fontFamily: fontFamilies.mono,
+                  fontVariant: ['tabular-nums'],
+                },
+              ]}
             >
-              Keep the app open while recording
+              {formatDuration(recorder.elapsedMs)}
             </Text>
-          ) : null}
 
-          <Waveform level={recorder.level} />
-        </View>
+            {isExpoGo() ? (
+              <Text
+                variant="bodySmall"
+                style={[styles.expoGoNote, { color: tape.inkMuted }]}
+              >
+                Keep the app open while recording
+              </Text>
+            ) : null}
+
+            <Waveform level={recorder.level} />
+          </View>
+        )}
 
         {screenState === 'recording' && recorder.paused ? (
-          <View
-            testID="paused-banner"
-            style={[
-              styles.pausedBanner,
-              {
-                backgroundColor: tape.surface,
-                borderColor: tape.line,
-              },
-            ]}
-          >
-            <Text
-              variant="bodyMedium"
-              style={[styles.pausedText, { color: tape.ink }]}
-            >
-              Paused while the app was in the background
-            </Text>
-            <View style={styles.pausedActions}>
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel="Resume recording"
-                onPress={() => recorder.resume()}
-                android_ripple={{ color: tape.line }}
-                style={[
-                  styles.bannerButton,
-                  { borderColor: tape.outline, borderWidth: 1 },
-                ]}
-              >
-                <Text variant="labelLarge" style={{ color: tape.ink }}>
-                  Resume
-                </Text>
-              </Pressable>
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel="Stop recording"
-                onPress={handleStop}
-                android_ripple={{ color: tape.line }}
-                style={[styles.bannerButton, { backgroundColor: tape.signal }]}
-              >
-                <Text variant="labelLarge" style={{ color: tape.onSignal }}>
-                  Stop
-                </Text>
-              </Pressable>
-            </View>
-          </View>
+          <RecorderBanner
+            theme={theme}
+            disabled={stopping}
+            onResume={() => recorder.resume()}
+            onStop={handleStop}
+          />
         ) : null}
 
         <View style={styles.footer}>
@@ -277,6 +228,7 @@ export default function RecordScreen() {
                 testID="stop-button"
                 accessibilityRole="button"
                 accessibilityLabel="Stop recording"
+                disabled={stopping}
                 onPress={handleStop}
                 android_ripple={{ color: tape.onSignal }}
                 style={({ pressed }) => [
@@ -295,13 +247,15 @@ export default function RecordScreen() {
                 />
               </Pressable>
             </>
-          ) : (
+          ) : screenState === 'uploading' ||
+            screenState === 'error' ||
+            screenState === 'success' ? (
             <UploadProgressRing
               progress={uploadProgress}
               status={screenState}
               onRetry={handleRetry}
             />
-          )}
+          ) : null}
         </View>
       </SafeAreaView>
 
@@ -314,40 +268,12 @@ export default function RecordScreen() {
         ]}
       />
 
-      <Portal>
-        <Dialog
-          visible={showDiscardDialog}
-          onDismiss={() => setShowDiscardDialog(false)}
-          style={{ backgroundColor: tape.surface }}
-        >
-          <Dialog.Title style={{ color: tape.ink }}>
-            Discard recording?
-          </Dialog.Title>
-          <Dialog.Content>
-            <Text variant="bodyMedium" style={{ color: tape.inkMuted }}>
-              This recording will not be saved.
-            </Text>
-          </Dialog.Content>
-          <Dialog.Actions>
-            <Button
-              textColor={tape.inkMuted}
-              onPress={() => setShowDiscardDialog(false)}
-              accessibilityLabel="Keep recording"
-              style={styles.dialogButton}
-            >
-              Keep recording
-            </Button>
-            <Button
-              textColor={tape.signal}
-              onPress={handleDiscard}
-              accessibilityLabel="Discard"
-              style={styles.dialogButton}
-            >
-              Discard
-            </Button>
-          </Dialog.Actions>
-        </Dialog>
-      </Portal>
+      <DiscardDialog
+        visible={showDiscardDialog}
+        theme={theme}
+        onDismiss={() => setShowDiscardDialog(false)}
+        onDiscard={handleDiscard}
+      />
     </View>
   );
 }
@@ -361,73 +287,34 @@ const styles = StyleSheet.create({
   },
   header: {
     flexDirection: 'row',
-    alignItems: 'center',
     justifyContent: 'space-between',
+    alignItems: 'center',
   },
   close: {
-    width: spacing.xxl,
-    height: spacing.xxl,
-    borderRadius: radius.round,
+    minWidth: 48,
+    minHeight: 48,
     alignItems: 'center',
     justifyContent: 'center',
-    overflow: 'hidden',
   },
-  body: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: spacing.lg,
-  },
-  timer: {
-    marginBottom: spacing.xs,
-  },
-  expoGoNote: {
-    marginBottom: spacing.md,
-  },
-  pausedBanner: {
-    borderRadius: radius.card,
-    borderWidth: 1,
-    padding: spacing.md,
-    marginBottom: spacing.md,
-  },
-  pausedText: {
-    marginBottom: spacing.sm,
-    textAlign: 'center',
-  },
-  pausedActions: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    gap: spacing.md,
-  },
-  bannerButton: {
-    minHeight: spacing.xxl,
-    minWidth: 96,
-    paddingHorizontal: spacing.md,
-    borderRadius: radius.round,
-    alignItems: 'center',
-    justifyContent: 'center',
-    overflow: 'hidden',
-  },
+  body: { alignItems: 'center', gap: spacing.lg },
+  timer: { textAlign: 'center' },
+  expoGoNote: { textAlign: 'center' },
   footer: {
+    minHeight: 140,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: spacing.lg,
   },
   stopButton: {
+    position: 'absolute',
     width: 72,
     height: 72,
-    borderRadius: radius.round,
+    borderRadius: 36,
     alignItems: 'center',
     justifyContent: 'center',
-    overflow: 'hidden',
   },
   stopSquare: {
     width: 24,
     height: 24,
-    borderRadius: 4,
-  },
-  dialogButton: {
-    minHeight: spacing.xxl,
-    justifyContent: 'center',
+    borderRadius: radius.card,
   },
 });

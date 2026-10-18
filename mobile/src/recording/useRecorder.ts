@@ -1,19 +1,16 @@
 import { activateKeepAwakeAsync, deactivateKeepAwake } from 'expo-keep-awake';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { AppState } from 'react-native';
+import { File } from 'expo-file-system';
 import { useSharedValue, type SharedValue } from 'react-native-reanimated';
 
-import {
-  audioModeFor,
-  isExpoGo,
-  markAsExpoGo,
-  shouldPauseOnReturn,
-} from './environment';
+import { audioModeFor, isExpoGo, shouldPauseOnReturn } from './environment';
 import type { RecordingKind } from './fanOut';
 import { dbfsToLevel } from './levels';
 
 import {
   RecordingPresets,
+  type RecordingStatus,
   setAudioModeAsync,
   useAudioRecorder,
 } from 'expo-audio';
@@ -23,6 +20,8 @@ export interface UseRecorderResult {
   elapsedMs: number;
   paused: boolean;
   isRecording: boolean;
+  error: string | null;
+  uri: string | null;
   prepare: () => Promise<void>;
   start: () => Promise<void>;
   stop: () => Promise<{ uri: string; durationMs: number }>;
@@ -32,10 +31,8 @@ export interface UseRecorderResult {
 }
 
 export function useRecorder(_kind: RecordingKind): UseRecorderResult {
-  const recorder = useAudioRecorder({
-    ...RecordingPresets.HIGH_QUALITY,
-    isMeteringEnabled: true,
-  });
+  const [error, setError] = useState<string | null>(null);
+  const recorderRef = useRef<ReturnType<typeof useAudioRecorder> | null>(null);
 
   const level = useSharedValue(0);
   const [elapsedMs, setElapsedMs] = useState(0);
@@ -52,6 +49,35 @@ export function useRecorder(_kind: RecordingKind): UseRecorderResult {
       intervalRef.current = null;
     }
   }, []);
+
+  const statusListener = useCallback(
+    (status: RecordingStatus) => {
+      if (status.hasError) {
+        clearIntervalTimer();
+        try {
+          if (recorderRef.current) {
+            void recorderRef.current.stop();
+          }
+        } catch (err) {
+          console.warn('Failed to stop recorder after status error', err);
+        }
+        setIsRecording(false);
+        setError(status.error ?? 'Recording error');
+      }
+    },
+    [clearIntervalTimer],
+  );
+
+  const recorder = useAudioRecorder(
+    {
+      ...RecordingPresets.HIGH_QUALITY,
+      isMeteringEnabled: true,
+    },
+    statusListener,
+  );
+  useEffect(() => {
+    recorderRef.current = recorder;
+  }, [recorder]);
 
   const startInterval = useCallback(() => {
     clearIntervalTimer();
@@ -70,21 +96,13 @@ export function useRecorder(_kind: RecordingKind): UseRecorderResult {
   }, [recorder, clearIntervalTimer, level]);
 
   const prepare = useCallback(async () => {
-    try {
-      await setAudioModeAsync(audioModeFor(isExpoGo()));
-      await recorder.prepareToRecordAsync();
-    } catch (err) {
-      if (err instanceof Error && err.message.includes('recording service')) {
-        markAsExpoGo();
-        await setAudioModeAsync(audioModeFor(true));
-        await recorder.prepareToRecordAsync();
-      } else {
-        throw err;
-      }
-    }
+    setError(null);
+    await setAudioModeAsync(audioModeFor(isExpoGo()));
+    await recorder.prepareToRecordAsync();
   }, [recorder]);
 
   const start = useCallback(async () => {
+    setError(null);
     await activateKeepAwakeAsync();
     recorder.record();
     setIsRecording(true);
@@ -123,13 +141,32 @@ export function useRecorder(_kind: RecordingKind): UseRecorderResult {
     deactivateKeepAwake();
     try {
       await recorder.stop();
-    } catch {
-      // Ignore if recorder is already stopped
+    } catch (err) {
+      try {
+        const status = recorder.getStatus();
+        if (status.isRecording) {
+          console.warn('Failed to stop recorder on discard', err);
+        }
+      } catch {
+        console.warn('Failed to stop recorder on discard', err);
+      }
+    }
+    try {
+      const uri = recorder.uri;
+      if (uri) {
+        const file = new File(uri);
+        if (file.exists) {
+          file.delete();
+        }
+      }
+    } catch (err) {
+      console.warn('Failed to delete cache file on discard', err);
     }
     level.set(0);
     setElapsedMs(0);
     setPaused(false);
     setIsRecording(false);
+    setError(null);
     lastElapsedDurationRef.current = 0;
   }, [recorder, clearIntervalTimer, level]);
 
@@ -140,12 +177,14 @@ export function useRecorder(_kind: RecordingKind): UseRecorderResult {
       } else if (nextState === 'active') {
         if (shouldPauseOnReturn(isExpoGo(), wasBackgroundedRef.current)) {
           wasBackgroundedRef.current = false;
-          const status = recorder.getStatus();
-          if (status.isRecording) {
+          try {
             recorder.pause();
-            clearIntervalTimer();
-            setPaused(true);
+          } catch (err) {
+            console.warn('Failed to pause recorder on foreground return', err);
           }
+          clearIntervalTimer();
+          level.set(0);
+          setPaused(true);
         } else {
           wasBackgroundedRef.current = false;
         }
@@ -155,7 +194,7 @@ export function useRecorder(_kind: RecordingKind): UseRecorderResult {
     return () => {
       subscription.remove();
     };
-  }, [recorder, clearIntervalTimer]);
+  }, [recorder, clearIntervalTimer, level]);
 
   useEffect(() => {
     return () => {
@@ -169,6 +208,8 @@ export function useRecorder(_kind: RecordingKind): UseRecorderResult {
     elapsedMs,
     paused,
     isRecording,
+    error,
+    uri: recorder.uri ?? null,
     prepare,
     start,
     stop,

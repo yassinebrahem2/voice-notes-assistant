@@ -1,12 +1,6 @@
 import Constants, { ExecutionEnvironment } from 'expo-constants';
 
-import {
-  audioModeFor,
-  isExpoGo,
-  markAsExpoGo,
-  resetExpoGoDetection,
-  shouldPauseOnReturn,
-} from './environment';
+import { audioModeFor, isExpoGo, shouldPauseOnReturn } from './environment';
 
 describe('environment', () => {
   describe('isExpoGo', () => {
@@ -14,7 +8,6 @@ describe('environment', () => {
 
     afterEach(() => {
       Constants.executionEnvironment = originalEnv;
-      resetExpoGoDetection();
     });
 
     test('returns true when executionEnvironment is storeClient', () => {
@@ -30,13 +23,6 @@ describe('environment', () => {
     test('returns false when executionEnvironment is standalone', () => {
       Constants.executionEnvironment = ExecutionEnvironment.Standalone;
       expect(isExpoGo()).toBe(false);
-    });
-
-    test('returns true when markAsExpoGo is called', () => {
-      Constants.executionEnvironment = ExecutionEnvironment.Bare;
-      expect(isExpoGo()).toBe(false);
-      markAsExpoGo();
-      expect(isExpoGo()).toBe(true);
     });
   });
 
