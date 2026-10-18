@@ -2,7 +2,7 @@ import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { useTheme } from 'react-native-paper';
+import { Snackbar, useTheme } from 'react-native-paper';
 import Animated, {
   FadeIn,
   FadeInDown,
@@ -53,6 +53,7 @@ export function RecordingScreen(props: RecordingScreenProps = {}) {
   const { tape } = useTheme<TapeTheme>();
   const reducedMotion = useReducedMotion();
   const { data: recording, isLoading, deleted } = useRecording(id);
+  const [snackbarMessage, setSnackbarMessage] = useState<string | null>(null);
 
   const [activeTab, setActiveTab] = useState<'primary' | 'transcript'>(() =>
     initialSegment ? 'transcript' : 'primary',
@@ -110,8 +111,20 @@ export function RecordingScreen(props: RecordingScreenProps = {}) {
   if (recording.status !== 'ready') {
     return (
       <SafeAreaView style={[styles.screen, { backgroundColor: tape.bg }]}>
-        <RecordingHeader title={title} onBack={() => router.back()} />
+        <RecordingHeader
+          title={title}
+          recording={recording}
+          onBack={() => router.back()}
+          onShowSnackbar={setSnackbarMessage}
+        />
         <ProcessingTimeline recording={recording} />
+        <Snackbar
+          visible={Boolean(snackbarMessage)}
+          onDismiss={() => setSnackbarMessage(null)}
+          duration={3000}
+        >
+          {snackbarMessage}
+        </Snackbar>
       </SafeAreaView>
     );
   }
@@ -130,7 +143,9 @@ export function RecordingScreen(props: RecordingScreenProps = {}) {
         <RecordingHeader
           title={title}
           tags={recording.tags}
+          recording={recording}
           onBack={() => router.back()}
+          onShowSnackbar={setSnackbarMessage}
         />
 
         {empty ? (
@@ -238,12 +253,21 @@ export function RecordingScreen(props: RecordingScreenProps = {}) {
                   onSelectSegment={setActiveSegmentId}
                   speakers={recording.speakers ?? []}
                   kind={recording.kind}
+                  recordingId={recording.id}
+                  onShowSnackbar={setSnackbarMessage}
                 />
               )}
             </View>
           </View>
         )}
       </Animated.View>
+      <Snackbar
+        visible={Boolean(snackbarMessage)}
+        onDismiss={() => setSnackbarMessage(null)}
+        duration={3000}
+      >
+        {snackbarMessage}
+      </Snackbar>
     </SafeAreaView>
   );
 }

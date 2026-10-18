@@ -1,5 +1,5 @@
 import type React from 'react';
-import { useCallback, useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useTheme } from 'react-native-paper';
 import { useReducedMotion } from 'react-native-reanimated';
@@ -9,6 +9,7 @@ import { formatDuration } from '../library/PendingRow';
 import { fontFamilies } from '../theme/fonts';
 import type { TapeTheme } from '../theme/paperTheme';
 import { radius, spacing, typeScale } from '../theme/tokens';
+import { SpeakerRenameDialog } from './SpeakerRenameDialog';
 import type { Turn } from './turns';
 
 export interface TranscriptViewProps {
@@ -17,6 +18,9 @@ export interface TranscriptViewProps {
   onSelectSegment?: (segmentId: string) => void;
   speakers?: Schemas['SpeakerOut'][];
   kind?: 'meeting' | 'note';
+  recordingId?: string;
+  onShowSnackbar?: (message: string) => void;
+  onRenameSpeaker?: (speaker: Schemas['SpeakerOut']) => void;
 }
 
 export function TranscriptView({
@@ -25,9 +29,15 @@ export function TranscriptView({
   onSelectSegment,
   speakers = [],
   kind = 'meeting',
+  recordingId,
+  onShowSnackbar,
+  onRenameSpeaker,
 }: TranscriptViewProps) {
   const { tape } = useTheme<TapeTheme>();
   const reducedMotion = useReducedMotion();
+  const [selectedSpeaker, setSelectedSpeaker] = useState<
+    Schemas['SpeakerOut'] | null
+  >(null);
   const scrollViewRef = useRef<React.ElementRef<typeof ScrollView>>(null);
   const turnPositions = useRef<number[]>([]);
   const segmentOffsets = useRef<Record<string, number>>({});
@@ -77,8 +87,12 @@ export function TranscriptView({
             const name = spk.name?.trim() || spk.display_name.trim();
 
             return (
-              <View
+              <Pressable
                 key={spk.id}
+                accessibilityRole="button"
+                accessibilityLabel={`Rename speaker ${name}`}
+                onPress={() => setSelectedSpeaker(spk)}
+                android_ripple={{ color: tape.line }}
                 style={[
                   styles.speakerChip,
                   { backgroundColor: tape.surface, borderColor: tape.line },
@@ -93,7 +107,7 @@ export function TranscriptView({
                 >
                   {name}
                 </Text>
-              </View>
+              </Pressable>
             );
           })}
         </ScrollView>
@@ -129,17 +143,28 @@ export function TranscriptView({
             >
               <View style={styles.turnHeader}>
                 {kind === 'meeting' ? (
-                  <Text
-                    style={[
-                      styles.speakerName,
-                      {
-                        color: speakerColor,
-                        fontFamily: fontFamilies.semibold,
-                      },
-                    ]}
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel={`Rename speaker ${turn.speakerName}`}
+                    onPress={() => {
+                      const spk = speakers.find((s) => s.id === turn.speakerId);
+                      if (spk) setSelectedSpeaker(spk);
+                    }}
+                    android_ripple={{ color: tape.line }}
+                    style={styles.speakerNamePressable}
                   >
-                    {turn.speakerName}
-                  </Text>
+                    <Text
+                      style={[
+                        styles.speakerName,
+                        {
+                          color: speakerColor,
+                          fontFamily: fontFamilies.semibold,
+                        },
+                      ]}
+                    >
+                      {turn.speakerName}
+                    </Text>
+                  </Pressable>
                 ) : null}
                 <Text
                   style={[
@@ -205,6 +230,23 @@ export function TranscriptView({
           );
         })}
       </ScrollView>
+
+      <SpeakerRenameDialog
+        visible={selectedSpeaker !== null}
+        speaker={selectedSpeaker}
+        recordingId={recordingId}
+        onDismiss={() => setSelectedSpeaker(null)}
+        onShowSnackbar={onShowSnackbar}
+        onSave={
+          onRenameSpeaker
+            ? (_id, name) => {
+                if (selectedSpeaker) {
+                  onRenameSpeaker({ ...selectedSpeaker, name });
+                }
+              }
+            : undefined
+        }
+      />
     </View>
   );
 }
@@ -252,6 +294,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: spacing.md,
     marginBottom: spacing.xs,
+  },
+  speakerNamePressable: {
+    minHeight: 48,
+    justifyContent: 'center',
+    paddingVertical: spacing.xs,
   },
   speakerName: {
     fontSize: typeScale.body,
