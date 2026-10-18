@@ -2,7 +2,7 @@ import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { Snackbar, useTheme } from 'react-native-paper';
+import { Button, Snackbar, useTheme } from 'react-native-paper';
 import Animated, {
   FadeIn,
   FadeInDown,
@@ -11,6 +11,7 @@ import Animated, {
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import type { Schemas } from '../../src/api/client';
+import { errorMessage } from '../../src/api/errorMessages';
 import { NoteView } from '../../src/detail/NoteView';
 import { ProcessingTimeline } from '../../src/detail/ProcessingTimeline';
 import { RecordingHeader } from '../../src/detail/RecordingHeader';
@@ -32,8 +33,7 @@ export interface RecordingScreenProps {
   segment?: string;
 }
 
-function isAnalysisEmpty(r: Schemas['RecordingDetailOut']): boolean {
-  if (!r.segments || r.segments.length === 0) return true;
+function isPrimaryEmpty(r: Schemas['RecordingDetailOut']): boolean {
   if (r.kind === 'meeting') {
     const s = r.summary;
     return (
@@ -55,10 +55,16 @@ export function RecordingScreen(props: RecordingScreenProps = {}) {
 
   const { tape } = useTheme<TapeTheme>();
   const reducedMotion = useReducedMotion();
-  const { data: recording, isLoading, deleted } = useRecording(id);
+  const {
+    data: recording,
+    isLoading,
+    error,
+    deleted,
+    refetch,
+  } = useRecording(id);
   const [snackbarMessage, setSnackbarMessage] = useState<string | null>(null);
 
-  const player = usePlayer(id);
+  const player = usePlayer(id, recording?.status === 'ready' && !deleted);
   const initialPlayed = useRef(false);
   const [isFollowing, setIsFollowing] = useState(true);
 
@@ -133,6 +139,38 @@ export function RecordingScreen(props: RecordingScreenProps = {}) {
     );
   }
 
+  if (error) {
+    return (
+      <SafeAreaView style={[styles.screen, { backgroundColor: tape.bg }]}>
+        <RecordingHeader title="" onBack={() => router.back()} />
+        <View style={styles.centerContainer}>
+          <Text
+            style={[
+              styles.centerText,
+              {
+                color: tape.ink,
+                fontFamily: fontFamilies.regular,
+                marginBottom: spacing.md,
+              },
+            ]}
+          >
+            {errorMessage(error)}
+          </Text>
+          <Button
+            mode="contained"
+            onPress={() => refetch()}
+            accessibilityLabel="Retry"
+            buttonColor={tape.signal}
+            textColor={tape.onSignal}
+            style={{ borderRadius: radius.card, minHeight: 48 }}
+          >
+            Retry
+          </Button>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
   if (isLoading || !recording) {
     return (
       <SafeAreaView style={[styles.screen, { backgroundColor: tape.bg }]}>
@@ -164,7 +202,10 @@ export function RecordingScreen(props: RecordingScreenProps = {}) {
     );
   }
 
-  const empty = isAnalysisEmpty(recording);
+  const hasNoSegments = !recording.segments || recording.segments.length === 0;
+  const primaryEmpty = isPrimaryEmpty(recording);
+  const currentTab =
+    activeTab === 'primary' && primaryEmpty ? 'transcript' : activeTab;
   const primaryTabLabel = recording.kind === 'meeting' ? 'Summary' : 'Note';
 
   return (
@@ -183,7 +224,7 @@ export function RecordingScreen(props: RecordingScreenProps = {}) {
           onShowSnackbar={setSnackbarMessage}
         />
 
-        {empty ? (
+        {hasNoSegments ? (
           <View style={styles.centerContainer}>
             <MaterialCommunityIcons
               name="microphone-off"
@@ -202,70 +243,77 @@ export function RecordingScreen(props: RecordingScreenProps = {}) {
           </View>
         ) : (
           <View style={styles.body}>
-            <View
-              style={[
-                styles.segmentedContainer,
-                { backgroundColor: tape.surface, borderColor: tape.line },
-              ]}
-            >
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel={primaryTabLabel}
-                onPress={() => setActiveTab('primary')}
-                android_ripple={{ color: tape.line }}
+            {!primaryEmpty ? (
+              <View
                 style={[
-                  styles.segmentTab,
-                  activeTab === 'primary' && { backgroundColor: tape.raised },
+                  styles.segmentedContainer,
+                  { backgroundColor: tape.surface, borderColor: tape.line },
                 ]}
               >
-                <Text
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={primaryTabLabel}
+                  onPress={() => setActiveTab('primary')}
+                  android_ripple={{ color: tape.line }}
                   style={[
-                    styles.tabText,
-                    {
-                      color: activeTab === 'primary' ? tape.ink : tape.inkMuted,
-                      fontFamily:
-                        activeTab === 'primary'
-                          ? fontFamilies.semibold
-                          : fontFamilies.regular,
+                    styles.segmentTab,
+                    currentTab === 'primary' && {
+                      backgroundColor: tape.raised,
                     },
                   ]}
                 >
-                  {primaryTabLabel}
-                </Text>
-              </Pressable>
+                  <Text
+                    style={[
+                      styles.tabText,
+                      {
+                        color:
+                          currentTab === 'primary' ? tape.ink : tape.inkMuted,
+                        fontFamily:
+                          currentTab === 'primary'
+                            ? fontFamilies.semibold
+                            : fontFamilies.regular,
+                      },
+                    ]}
+                  >
+                    {primaryTabLabel}
+                  </Text>
+                </Pressable>
 
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel="Transcript"
-                onPress={() => setActiveTab('transcript')}
-                android_ripple={{ color: tape.line }}
-                style={[
-                  styles.segmentTab,
-                  activeTab === 'transcript' && {
-                    backgroundColor: tape.raised,
-                  },
-                ]}
-              >
-                <Text
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="Transcript"
+                  onPress={() => setActiveTab('transcript')}
+                  android_ripple={{ color: tape.line }}
                   style={[
-                    styles.tabText,
-                    {
-                      color:
-                        activeTab === 'transcript' ? tape.ink : tape.inkMuted,
-                      fontFamily:
-                        activeTab === 'transcript'
-                          ? fontFamilies.semibold
-                          : fontFamilies.regular,
+                    styles.segmentTab,
+                    currentTab === 'transcript' && {
+                      backgroundColor: tape.raised,
                     },
                   ]}
                 >
-                  Transcript
-                </Text>
-              </Pressable>
-            </View>
+                  <Text
+                    style={[
+                      styles.tabText,
+                      {
+                        color:
+                          currentTab === 'transcript'
+                            ? tape.ink
+                            : tape.inkMuted,
+                        fontFamily:
+                          currentTab === 'transcript'
+                            ? fontFamilies.semibold
+                            : fontFamilies.regular,
+                      },
+                    ]}
+                  >
+                    Transcript
+                  </Text>
+                </Pressable>
+              </View>
+            ) : null}
 
             <View style={styles.tabContent}>
-              {activeTab === 'primary' ? (
+              {currentTab === 'primary' ? (
                 <ScrollView
                   showsVerticalScrollIndicator={false}
                   contentContainerStyle={styles.scrollContent}
@@ -306,7 +354,7 @@ export function RecordingScreen(props: RecordingScreenProps = {}) {
           </View>
         )}
       </Animated.View>
-      {recording.status === 'ready' && !empty ? (
+      {recording.status === 'ready' && !hasNoSegments ? (
         <PlayerBar player={player} peaks={recording.waveform_peaks} />
       ) : null}
       <Snackbar

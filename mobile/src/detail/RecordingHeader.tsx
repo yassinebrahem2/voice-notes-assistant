@@ -8,7 +8,7 @@ import { fontFamilies } from '../theme/fonts';
 import type { TapeTheme } from '../theme/paperTheme';
 import { radius, spacing, typeScale } from '../theme/tokens';
 import { HeaderMenu } from './HeaderMenu';
-import { useUpdateRecording } from './mutations';
+import { normalizeTag, useUpdateRecording } from './mutations';
 
 export interface RecordingHeaderProps {
   title: string;
@@ -30,15 +30,16 @@ export function RecordingHeader({
   onUpdateTags,
 }: RecordingHeaderProps) {
   const { tape } = useTheme<TapeTheme>();
+  const isUntitled = !recording?.title?.trim();
   const [isEditingTitle, setIsEditingTitle] = useState(false);
-  const [editedTitle, setEditedTitle] = useState(title);
+  const [editedTitle, setEditedTitle] = useState(isUntitled ? '' : title);
   const [prevTitle, setPrevTitle] = useState(title);
   const [isAddingTag, setIsAddingTag] = useState(false);
   const [newTagName, setNewTagName] = useState('');
 
   if (title !== prevTitle) {
     setPrevTitle(title);
-    setEditedTitle(title);
+    setEditedTitle(isUntitled ? '' : title);
   }
 
   const updateMutation = useUpdateRecording(recording?.id ?? '', {
@@ -46,6 +47,11 @@ export function RecordingHeader({
   });
 
   const isReady = recording?.status === 'ready';
+
+  const handleStartEditTitle = () => {
+    setEditedTitle(isUntitled ? '' : (recording?.title ?? title));
+    setIsEditingTitle(true);
+  };
 
   const handleSaveTitle = (overrideTitle?: unknown) => {
     const val = typeof overrideTitle === 'string' ? overrideTitle : editedTitle;
@@ -73,8 +79,10 @@ export function RecordingHeader({
   const handleAddTag = () => {
     const trimmed = newTagName.trim();
     if (trimmed) {
+      const norm = normalizeTag(trimmed);
       const currentTags = (tags ?? []).map((t) => t.name);
-      if (!currentTags.includes(trimmed)) {
+      const isDuplicate = currentTags.some((t) => normalizeTag(t) === norm);
+      if (!isDuplicate) {
         const updated = [...currentTags, trimmed];
         if (onUpdateTags) {
           onUpdateTags(updated);
@@ -111,6 +119,8 @@ export function RecordingHeader({
               value={editedTitle}
               onChangeText={setEditedTitle}
               onSubmitEditing={(e) => handleSaveTitle(e.nativeEvent.text)}
+              placeholder={isUntitled ? 'Untitled recording' : undefined}
+              placeholderTextColor={tape.inkMuted}
               accessibilityLabel="Recording title input"
               style={[
                 styles.titleInput,
@@ -141,7 +151,7 @@ export function RecordingHeader({
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="Edit title"
-            onPress={() => setIsEditingTitle(true)}
+            onPress={handleStartEditTitle}
             android_ripple={{ color: tape.line }}
             style={styles.titlePressable}
           >

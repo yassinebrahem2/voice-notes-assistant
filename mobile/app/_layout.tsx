@@ -9,6 +9,7 @@ import { PaperProvider } from 'react-native-paper';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { queryClient } from '../src/api/queryClient';
+import { AppSnackbar } from '../src/components/AppSnackbar';
 import { FanOutOverlay } from '../src/recording/FanOutOverlay';
 import { ServerBanner } from '../src/server/ServerBanner';
 import { useThemePreference } from '../src/settings/themePreference';
@@ -55,6 +56,7 @@ export default function RootLayout() {
             />
           </Stack>
           <FanOutOverlay />
+          <AppSnackbar />
         </PaperProvider>
       </SafeAreaProvider>
     </QueryClientProvider>

@@ -10,11 +10,16 @@ import React from 'react';
 
 import { apiFetch, type Schemas } from '../api/client';
 import { ApiError } from '../api/errors';
+import { showSnackbar } from '../components/snackbarStore';
 import {
   useDeleteRecording,
   useRenameSpeaker,
   useUpdateRecording,
 } from './mutations';
+
+jest.mock('../components/snackbarStore', () => ({
+  showSnackbar: jest.fn(),
+}));
 
 jest.mock('expo-router', () => ({
   router: { back: jest.fn() },
@@ -202,6 +207,34 @@ describe('Recording mutations', () => {
       expect(onNotify).toHaveBeenCalledWith("Couldn't save");
       unsubscribe();
     });
+
+    test('adding a tag invalidates tags, recordings, and recording queries on settlement', async () => {
+      const { queryClient, Wrapper } = createWrapper();
+      const invalidateSpy = jest.spyOn(queryClient, 'invalidateQueries');
+      mockApiFetch.mockResolvedValue({
+        id: 'rec_1',
+        title: 'Old Title',
+        tags: [{ id: 'tag_2', name: 'Ideas', count: 1 }],
+      } as Schemas['RecordingOut']);
+
+      const { result } = await renderHook(() => useUpdateRecording('rec_1'), {
+        wrapper: Wrapper,
+      });
+
+      await act(async () => {
+        result.current.mutate({ tags: ['Ideas'] });
+      });
+
+      await waitFor(() => {
+        expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['tags'] });
+        expect(invalidateSpy).toHaveBeenCalledWith({
+          queryKey: ['recordings'],
+        });
+        expect(invalidateSpy).toHaveBeenCalledWith({
+          queryKey: ['recording', 'rec_1'],
+        });
+      });
+    });
   });
 
   describe('useDeleteRecording', () => {
@@ -229,27 +262,34 @@ describe('Recording mutations', () => {
       expect(router.back).not.toHaveBeenCalled();
     });
 
-    test('invalidates recordings, notifies "Deleted", and navigates back on success', async () => {
+    test('invalidates recordings and tags, removes recording from cache, shows "Deleted" on app snackbar, and navigates back on success', async () => {
       const { queryClient, Wrapper } = createWrapper();
+      queryClient.setQueryData(['recording', 'rec_1'], baseRecording);
       const invalidateSpy = jest.spyOn(queryClient, 'invalidateQueries');
+      const removeSpy = jest.spyOn(queryClient, 'removeQueries');
       mockApiFetch.mockResolvedValue(undefined);
 
-      const onNotify = jest.fn();
-      const { result } = await renderHook(
-        () => useDeleteRecording({ onNotify }),
-        { wrapper: Wrapper },
-      );
+      const { result } = await renderHook(() => useDeleteRecording(), {
+        wrapper: Wrapper,
+      });
 
       await act(async () => {
         result.current.mutate('rec_1');
       });
 
       await waitFor(() => {
-        expect(onNotify).toHaveBeenCalledWith('Deleted');
+        expect(removeSpy).toHaveBeenCalledWith({
+          queryKey: ['recording', 'rec_1'],
+        });
       });
+      expect(queryClient.getQueryData(['recording', 'rec_1'])).toBeUndefined();
+      expect(showSnackbar).toHaveBeenCalledWith('Deleted');
       expect(router.back).toHaveBeenCalled();
       expect(invalidateSpy).toHaveBeenCalledWith({
         queryKey: ['recordings'],
+      });
+      expect(invalidateSpy).toHaveBeenCalledWith({
+        queryKey: ['tags'],
       });
     });
   });

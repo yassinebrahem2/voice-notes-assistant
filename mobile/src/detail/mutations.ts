@@ -4,6 +4,11 @@ import { router } from 'expo-router';
 import { apiFetch, type Schemas } from '../api/client';
 import { ApiError } from '../api/errors';
 import { errorMessage } from '../api/errorMessages';
+import { showSnackbar } from '../components/snackbarStore';
+
+export function normalizeTag(name: string): string {
+  return name.trim().toLowerCase().replace(/\s+/g, '-').slice(0, 24);
+}
 
 export interface MutationOptions<TData = unknown> {
   onNotify?: (message: string) => void;
@@ -102,6 +107,7 @@ export function useUpdateRecording(
         queryKey: ['recording', recordingId],
       });
       void queryClient.invalidateQueries({ queryKey: ['recordings'] });
+      void queryClient.invalidateQueries({ queryKey: ['tags'] });
     },
   });
 }
@@ -199,8 +205,9 @@ export function useDeleteRecording(options?: MutationOptions<void>) {
     },
     onSuccess: (_data, id) => {
       void queryClient.invalidateQueries({ queryKey: ['recordings'] });
-      void queryClient.invalidateQueries({ queryKey: ['recording', id] });
-      options?.onNotify?.('Deleted');
+      void queryClient.invalidateQueries({ queryKey: ['tags'] });
+      queryClient.removeQueries({ queryKey: ['recording', id] });
+      showSnackbar('Deleted');
       options?.onSuccess?.();
       router.back();
     },

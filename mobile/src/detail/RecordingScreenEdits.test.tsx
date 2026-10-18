@@ -11,6 +11,7 @@ import { PaperProvider } from 'react-native-paper';
 import { useReducedMotion } from 'react-native-reanimated';
 
 import { RecordingScreen } from '../../app/recording/[id]';
+import type { Schemas } from '../api/client';
 import { paperTheme } from '../theme/paperTheme';
 import {
   useDeleteRecording,
@@ -54,6 +55,7 @@ jest.mock('./mutations', () => ({
   useUpdateRecording: jest.fn(),
   useRenameSpeaker: jest.fn(),
   useDeleteRecording: jest.fn(),
+  normalizeTag: jest.requireActual('./mutations').normalizeTag,
 }));
 
 const mockUseRecording = jest.mocked(useRecording);
@@ -63,6 +65,30 @@ const mockUseRenameSpeaker = jest.mocked(useRenameSpeaker);
 const mockUseDeleteRecording = jest.mocked(useDeleteRecording);
 const mockUseLocalSearchParams = jest.mocked(useLocalSearchParams);
 const mockUseReducedMotion = jest.mocked(useReducedMotion);
+
+function makeRecording(
+  overrides: Partial<Schemas['RecordingDetailOut']> = {},
+): Schemas['RecordingDetailOut'] {
+  return {
+    id: 'rec_1',
+    kind: 'note',
+    status: 'ready',
+    title: 'Note Title',
+    processing: false,
+    segments: [],
+    speakers: [],
+    tags: [],
+    created_at: '2026-10-17T12:00:00Z',
+    duration_ms: 1000,
+    error_code: null,
+    error_message: null,
+    failed_step: null,
+    summary: null,
+    note: { key_points: [], clean_text: 'Text' },
+    waveform_peaks: null,
+    ...overrides,
+  };
+}
 
 async function renderScreen(id = 'rec_1', segment?: string) {
   mockUseLocalSearchParams.mockReturnValue({ id, segment });
@@ -102,24 +128,14 @@ describe('RecordingScreen edits', () => {
 
   test('Delete is disabled while recording is processing', async () => {
     mockUseRecording.mockReturnValue({
-      data: {
+      data: makeRecording({
         id: 'rec_proc',
         kind: 'meeting',
         status: 'transcribing',
         title: 'Processing Meeting',
         processing: true,
-        segments: [],
-        speakers: [],
-        tags: [],
-        created_at: '2026-10-17T12:00:00Z',
-        duration_ms: 10000,
-        error_code: null,
-        error_message: null,
-        failed_step: null,
-        summary: null,
         note: null,
-        waveform_peaks: null,
-      },
+      }),
       isLoading: false,
       isError: false,
       error: null,
@@ -143,12 +159,9 @@ describe('RecordingScreen edits', () => {
 
   test('confirm delete triggers deletion with medium haptic', async () => {
     mockUseRecording.mockReturnValue({
-      data: {
+      data: makeRecording({
         id: 'rec_to_delete',
-        kind: 'note',
-        status: 'ready',
         title: 'Note to Delete',
-        processing: false,
         segments: [
           {
             id: 'seg_1',
@@ -159,17 +172,7 @@ describe('RecordingScreen edits', () => {
             text: 'Test',
           },
         ],
-        speakers: [],
-        tags: [],
-        created_at: '2026-10-17T12:00:00Z',
-        duration_ms: 1000,
-        error_code: null,
-        error_message: null,
-        failed_step: null,
-        summary: null,
-        note: { key_points: [], clean_text: 'Test' },
-        waveform_peaks: null,
-      },
+      }),
       isLoading: false,
       isError: false,
       error: null,
@@ -203,22 +206,9 @@ describe('RecordingScreen edits', () => {
 
   test('title edit triggers update mutation', async () => {
     mockUseRecording.mockReturnValue({
-      data: {
+      data: makeRecording({
         id: 'rec_title_edit',
-        kind: 'note',
-        status: 'ready',
         title: 'Old Title',
-        processing: false,
-        tags: [],
-        created_at: '2026-10-17T12:00:00Z',
-        duration_ms: 1000,
-        error_code: null,
-        error_message: null,
-        failed_step: null,
-        summary: null,
-        note: { key_points: [], clean_text: 'Note' },
-        waveform_peaks: null,
-        speakers: [],
         segments: [
           {
             id: 'seg_1',
@@ -229,7 +219,7 @@ describe('RecordingScreen edits', () => {
             text: 'Note',
           },
         ],
-      },
+      }),
       isLoading: false,
       isError: false,
       error: null,
@@ -256,18 +246,11 @@ describe('RecordingScreen edits', () => {
 
   test('speaker rename dialog opens on tap and triggers rename with light haptic', async () => {
     mockUseRecording.mockReturnValue({
-      data: {
+      data: makeRecording({
         id: 'rec_spk',
         kind: 'meeting',
-        status: 'ready',
         title: 'Meeting with Speakers',
-        processing: false,
-        tags: [],
-        created_at: '2026-10-17T12:00:00Z',
         duration_ms: 5000,
-        error_code: null,
-        error_message: null,
-        failed_step: null,
         summary: {
           overview: 'Team discussion.',
           decisions: [],
@@ -275,7 +258,6 @@ describe('RecordingScreen edits', () => {
           open_questions: [],
         },
         note: null,
-        waveform_peaks: null,
         speakers: [
           {
             id: 'spk_1',
@@ -294,7 +276,7 @@ describe('RecordingScreen edits', () => {
             text: 'Hello team.',
           },
         ],
-      },
+      }),
       isLoading: false,
       isError: false,
       error: null,
@@ -331,27 +313,14 @@ describe('RecordingScreen edits', () => {
 
   test('tag removal triggers update mutation', async () => {
     mockUseRecording.mockReturnValue({
-      data: {
+      data: makeRecording({
         id: 'rec_tag_rm',
-        kind: 'note',
-        status: 'ready',
         title: 'Tagged Note',
-        processing: false,
         tags: [
           { id: 'tag_1', name: 'Work', count: 1 },
           { id: 'tag_2', name: 'Personal', count: 1 },
         ],
-        created_at: '2026-10-17T12:00:00Z',
-        duration_ms: 1000,
-        error_code: null,
-        error_message: null,
-        failed_step: null,
-        summary: null,
-        note: { key_points: [], clean_text: 'Tagged' },
-        waveform_peaks: null,
-        speakers: [],
-        segments: [],
-      },
+      }),
       isLoading: false,
       isError: false,
       error: null,
@@ -368,24 +337,11 @@ describe('RecordingScreen edits', () => {
 
   test('tag addition triggers update mutation', async () => {
     mockUseRecording.mockReturnValue({
-      data: {
+      data: makeRecording({
         id: 'rec_tag_add',
-        kind: 'note',
-        status: 'ready',
         title: 'Tagged Note',
-        processing: false,
         tags: [{ id: 'tag_1', name: 'Work', count: 1 }],
-        created_at: '2026-10-17T12:00:00Z',
-        duration_ms: 1000,
-        error_code: null,
-        error_message: null,
-        failed_step: null,
-        summary: null,
-        note: { key_points: [], clean_text: 'Tagged' },
-        waveform_peaks: null,
-        speakers: [],
-        segments: [],
-      },
+      }),
       isLoading: false,
       isError: false,
       error: null,
@@ -404,5 +360,32 @@ describe('RecordingScreen edits', () => {
     await fireEvent.press(saveTagBtn);
 
     expect(mockUpdate).toHaveBeenCalledWith({ tags: ['Work', 'Project'] });
+  });
+
+  test('adding duplicate normalized tag "Work Notes" to recording tagged "work-notes" sends no request', async () => {
+    mockUseRecording.mockReturnValue({
+      data: makeRecording({
+        id: 'rec_tag_dup',
+        title: 'Tagged Note',
+        tags: [{ id: 'tag_1', name: 'work-notes', count: 1 }],
+      }),
+      isLoading: false,
+      isError: false,
+      error: null,
+      deleted: false,
+      refetch: jest.fn(),
+    });
+
+    await renderScreen('rec_tag_dup');
+    const addTagBtn = screen.getByLabelText('Add tag');
+    await fireEvent.press(addTagBtn);
+
+    const tagInput = await screen.findByLabelText('New tag input');
+    await fireEvent.changeText(tagInput, 'Work Notes');
+
+    const saveTagBtn = screen.getByLabelText('Save tag');
+    await fireEvent.press(saveTagBtn);
+
+    expect(mockUpdate).not.toHaveBeenCalled();
   });
 });

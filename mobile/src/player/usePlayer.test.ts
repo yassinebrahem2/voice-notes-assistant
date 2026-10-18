@@ -129,7 +129,8 @@ describe('usePlayer', () => {
     expect(mockPlayer.play).not.toHaveBeenCalled();
   });
 
-  test('handles seek errors and allows retry', async () => {
+  test('failed seek logs console.warn and does not set error', async () => {
+    const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
     mockPlayer.seekTo.mockRejectedValueOnce(new Error('Audio seek failure'));
 
     const { result } = await renderHook(() => usePlayer('rec_123'));
@@ -138,9 +139,22 @@ describe('usePlayer', () => {
       await result.current.playFrom(1000);
     });
 
+    expect(warnSpy).toHaveBeenCalled();
+    expect(result.current.error).toBeNull();
+    warnSpy.mockRestore();
+  });
+
+  test('playbackStatusUpdate with error shows "Couldn\'t load audio" and retry replaces source', async () => {
+    const { result } = await renderHook(() => usePlayer('rec_123'));
+
+    expect(result.current.error).toBeNull();
+
+    await act(async () => {
+      statusListener?.({ error: 'Player decode error' });
+    });
+
     expect(result.current.error).toBe("Couldn't load audio");
 
-    // Retry should clear error and replace source
     await act(async () => {
       result.current.retry();
     });
@@ -151,15 +165,8 @@ describe('usePlayer', () => {
     );
   });
 
-  test('handles playback error from status listener', async () => {
-    const { result } = await renderHook(() => usePlayer('rec_123'));
-
-    expect(result.current.error).toBeNull();
-
-    await act(async () => {
-      statusListener?.({ playbackState: 'error' });
-    });
-
-    expect(result.current.error).toBe("Couldn't load audio");
+  test('when enabled is false, does not create audio source', async () => {
+    await renderHook(() => usePlayer('rec_123', false));
+    expect(mockUseAudioPlayer).toHaveBeenCalledWith(null, expect.anything());
   });
 });

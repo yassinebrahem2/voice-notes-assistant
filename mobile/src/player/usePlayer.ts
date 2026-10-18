@@ -14,25 +14,28 @@ export interface UsePlayerResult {
   retry: () => void;
 }
 
-export function usePlayer(recordingId: string): UsePlayerResult {
+export function usePlayer(
+  recordingId: string,
+  enabled = true,
+): UsePlayerResult {
   const { url: serverUrl } = useServerUrl();
   const [error, setError] = useState<string | null>(null);
 
   const audioUrl = useMemo(() => {
-    if (!serverUrl || !recordingId) return null;
+    if (!enabled || !serverUrl || !recordingId) return null;
     return `${serverUrl}/api/v1/recordings/${recordingId}/audio`;
-  }, [serverUrl, recordingId]);
+  }, [enabled, serverUrl, recordingId]);
 
   const player = useAudioPlayer(audioUrl, { updateInterval: 250 });
   const status = useAudioPlayerStatus(player);
 
   useEffect(() => {
-    if (!player || typeof player.addListener !== 'function') return;
+    if (!player) return;
 
     const sub = player.addListener(
       'playbackStatusUpdate',
-      (s: { playbackState?: string }) => {
-        if (s?.playbackState === 'error') {
+      (s: { playbackState?: string; error?: string | null }) => {
+        if (s?.playbackState === 'error' || Boolean(s?.error)) {
           setError("Couldn't load audio");
         }
       },
@@ -56,13 +59,12 @@ export function usePlayer(recordingId: string): UsePlayerResult {
   const seekTo = useCallback(
     async (posMs: number) => {
       try {
-        setError(null);
         const seconds = Math.max(0, posMs / 1000);
-        if (player && typeof player.seekTo === 'function') {
+        if (player) {
           await player.seekTo(seconds);
         }
-      } catch {
-        setError("Couldn't load audio");
+      } catch (err) {
+        console.warn('Failed to seek player', err);
       }
     },
     [player],
@@ -71,16 +73,13 @@ export function usePlayer(recordingId: string): UsePlayerResult {
   const playFrom = useCallback(
     async (posMs: number) => {
       try {
-        setError(null);
         const seconds = Math.max(0, posMs / 1000);
-        if (player && typeof player.seekTo === 'function') {
+        if (player) {
           await player.seekTo(seconds);
-        }
-        if (player && typeof player.play === 'function') {
           player.play();
         }
-      } catch {
-        setError("Couldn't load audio");
+      } catch (err) {
+        console.warn('Failed to play from position', err);
       }
     },
     [player],
@@ -88,27 +87,24 @@ export function usePlayer(recordingId: string): UsePlayerResult {
 
   const toggle = useCallback(() => {
     try {
-      setError(null);
+      if (!player) return;
       if (isPlaying) {
-        if (player && typeof player.pause === 'function') {
-          player.pause();
-        }
+        player.pause();
       } else {
-        if (player && typeof player.play === 'function') {
-          player.play();
-        }
+        player.play();
       }
-    } catch {
-      setError("Couldn't load audio");
+    } catch (err) {
+      console.warn('Failed to toggle playback', err);
     }
   }, [isPlaying, player]);
 
   const retry = useCallback(() => {
     setError(null);
-    if (audioUrl && player && typeof player.replace === 'function') {
+    if (audioUrl && player) {
       try {
         player.replace(audioUrl);
-      } catch {
+      } catch (err) {
+        console.warn('Failed to replace audio source', err);
         setError("Couldn't load audio");
       }
     }
