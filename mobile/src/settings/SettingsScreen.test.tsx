@@ -1,6 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import {
+  act,
   fireEvent,
   render,
   screen,
@@ -10,6 +11,7 @@ import { PaperProvider } from 'react-native-paper';
 
 import { apiFetch } from '../api/client';
 import { ApiError } from '../api/errors';
+import { reportNetworkError, reportOk } from '../server/statusStore';
 import { paperTheme } from '../theme/paperTheme';
 import { readinessRows, SettingsScreen } from './SettingsScreen';
 import { testConnection } from './testConnection';
@@ -76,6 +78,24 @@ test('an unreachable stored server shows the readiness message', async () => {
     Promise.reject(new ApiError(0, 'network_error', 'x')),
   );
   expect(await screen.findByText("Can't reach the server.")).toBeOnTheScreen();
+});
+
+test('readiness recovers once the server is reachable again', async () => {
+  reportNetworkError();
+  await setup('https://s.example', () =>
+    Promise.reject(new ApiError(0, 'network_error', 'x')),
+  );
+  expect(await screen.findByText("Can't reach the server.")).toBeOnTheScreen();
+  jest.mocked(apiFetch).mockResolvedValue({
+    app_name: 'Test App',
+    version: '0.1.0',
+    speech_backend: 'real',
+    roles: { llm: 'ready' },
+  });
+  await act(async () => {
+    reportOk();
+  });
+  expect(await screen.findByLabelText('Chat AI: ready')).toBeOnTheScreen();
 });
 
 test('a connection result for an edited URL is ignored', async () => {

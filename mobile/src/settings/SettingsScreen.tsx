@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   KeyboardAvoidingView,
   Platform,
@@ -15,6 +15,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { apiFetch } from '../api/client';
 import { errorMessage } from '../api/errorMessages';
 import { appInfo } from '../config/appInfo';
+import { useServerStatusValue } from '../server/statusStore';
 import { fontFamilies } from '../theme/fonts';
 import type { TapeTheme } from '../theme/paperTheme';
 import { radius, spacing, typeScale } from '../theme/tokens';
@@ -158,6 +159,16 @@ function Readiness({ url }: { url: string | null }) {
     enabled: url !== null,
     retry: false,
   });
+  // The tab stays mounted, so an error from an outage would outlive it. Only the move to ok counts: apiFetch also
+  // reports ok just before throwing an HTTP error, and refetching then would only repeat that error.
+  const serverStatus = useServerStatusValue();
+  const previousStatus = useRef(serverStatus);
+  const { isError, refetch } = health;
+  useEffect(() => {
+    const recovered = serverStatus === 'ok' && previousStatus.current !== 'ok';
+    previousStatus.current = serverStatus;
+    if (recovered && isError) void refetch();
+  }, [serverStatus, isError, refetch]);
   if (url === null)
     return (
       <Text style={{ color: tape.inkMuted }}>Set a server URL first.</Text>
