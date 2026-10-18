@@ -4,7 +4,6 @@ import {
   type NativeScrollEvent,
   type NativeSyntheticEvent,
   StyleSheet,
-  View,
 } from 'react-native';
 import { useTheme } from 'react-native-paper';
 import Animated, {
@@ -12,6 +11,7 @@ import Animated, {
   LinearTransition,
   useReducedMotion,
 } from 'react-native-reanimated';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 import type { Schemas } from '../api/client';
 import { errorMessage } from '../api/errorMessages';
@@ -74,10 +74,12 @@ export function LibraryScreen({ kind }: LibraryScreenProps) {
     remove: removePending,
   } = usePendingUploads();
 
-  const filteredPending = useMemo(
-    () => pendingItems.filter((item) => item.kind === kind),
-    [pendingItems, kind],
-  );
+  const filteredPending = useMemo(() => {
+    const query = debouncedSearch.trim().toLowerCase();
+    return pendingItems.filter(
+      (item) => item.kind === kind && item.kind.includes(query),
+    );
+  }, [pendingItems, kind, debouncedSearch]);
 
   const {
     data: recordingsData,
@@ -218,7 +220,10 @@ export function LibraryScreen({ kind }: LibraryScreenProps) {
   };
 
   return (
-    <View style={[styles.container, { backgroundColor: tape.bg }]}>
+    <SafeAreaView
+      edges={['top', 'left', 'right']}
+      style={[styles.container, { backgroundColor: tape.bg }]}
+    >
       <LibraryHeader
         kind={kind}
         search={search}
@@ -246,7 +251,7 @@ export function LibraryScreen({ kind }: LibraryScreenProps) {
           ListEmptyComponent={renderEmptyState}
         />
       )}
-    </View>
+    </SafeAreaView>
   );
 }
 
