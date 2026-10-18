@@ -100,6 +100,7 @@ Versions checked 2026-10-16; majors are pinned.
 - [AGREED] Decision #46: a task that implements a stub route also updates the stub-route tests (explicit `STUBS` list in `backend/tests/api/test_routes_exist.py`).
 - [AGREED] Decision #48: Chat Retry recovers a lost run id from `GET /chats/{id}` (the run id is the stored user message id) and never sends a question twice; only a 4xx on the question's POST means it was not stored; a chat that is gone (404) is replaced by a new chat on Retry.
 - [AGREED] Decision #60: `/health` role readiness means "can process now"; fake speech reports `ready`, and the fake backend is reported only by `speech_backend`.
+- [USER] 2026-10-18: a model whose provider key is missing is skipped in its role's failover list (Chat and analysis alike); a role fails only when none of its models has a key. `/health` reports an LLM role `ready` when at least one of its models has a key; with none, the reason names every missing key.
 
 ## 3. Open
 Each item is safe to decide later; the stage that decides it is named.
@@ -123,6 +124,7 @@ Each item is safe to decide later; the stage that decides it is named.
 - Timestamps and speaker labels "desirable, not decided" (brief) → diarization is in and provides timestamps (2026-10-16, user).
 - Automation platform vs. custom backend open (brief) → all code (2026-10-16, user).
 - Every LLM through `ChatOpenAI` on OpenAI-compatible endpoints (stage 1 spec) → a client per provider (`openai` or `google_genai`) (2026-10-17, user: Gemini 3 rejected multi-turn tool calls on the OpenAI-compatible endpoint; dropping Gemini from Chat was refused as a workaround).
+- `/health` LLM roles `ready` when the first entry's key is set (foundation plan) → `ready` when any entry's key is set, and Chat skips models without a key (2026-10-18, user: with only `GROQ_API_KEY`, Chat failed every question while `/health` said `llm` was ready, and analysis worked while `/health` said it was missing a key).
 
 ## 6. Files
 - `project_knowledge.md`: this file.
