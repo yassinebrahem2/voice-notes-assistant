@@ -43,6 +43,21 @@ jest.mock('./mutations', () => ({
   useDeleteRecording: jest.fn(() => ({ mutate: jest.fn(), isPending: false })),
 }));
 
+const mockPlayer = {
+  isPlaying: false,
+  positionMs: 0,
+  durationMs: 60000,
+  error: null,
+  playFrom: jest.fn().mockResolvedValue(undefined),
+  toggle: jest.fn(),
+  seekTo: jest.fn().mockResolvedValue(undefined),
+  retry: jest.fn(),
+};
+
+jest.mock('../../src/player/usePlayer', () => ({
+  usePlayer: jest.fn(() => mockPlayer),
+}));
+
 const mockUseRecording = jest.mocked(useRecording);
 const mockUseRetryRecording = jest.mocked(useRetryRecording);
 const mockUseLocalSearchParams = jest.mocked(useLocalSearchParams);
@@ -219,9 +234,14 @@ describe('RecordingScreen', () => {
     expect(screen.getByText('Discussed sprint timeline.')).toBeTruthy();
     expect(screen.getByText('Ship on Tuesday.')).toBeTruthy();
 
+    // PlayerBar is rendered
+    expect(screen.getByTestId('player-bar')).toBeTruthy();
+    expect(screen.getByLabelText('Play')).toBeTruthy();
+
     // Citation chip with Plex Mono time: 00:12
     const citationChip = screen.getByLabelText('Jump to 00:12');
     fireEvent.press(citationChip);
+    expect(mockPlayer.playFrom).toHaveBeenCalledWith(12000);
 
     // After clicking citation, it switches to transcript and shows the transcript text
     await waitFor(() =>

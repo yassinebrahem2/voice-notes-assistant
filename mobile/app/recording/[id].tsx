@@ -76,17 +76,13 @@ export function RecordingScreen(props: RecordingScreenProps = {}) {
     [segments, speakers],
   );
 
-  const activeIdx =
-    segments && player.isPlaying
-      ? activeSegmentIndex(segments, player.positionMs)
-      : -1;
+  const activeIdx = segments
+    ? activeSegmentIndex(segments, player.positionMs)
+    : -1;
   const playbackActiveSegmentId =
     activeIdx >= 0 && segments ? (segments[activeIdx]?.id ?? null) : null;
 
-  const activeSegmentId =
-    player.isPlaying && playbackActiveSegmentId
-      ? playbackActiveSegmentId
-      : selectedSegmentId;
+  const activeSegmentId = playbackActiveSegmentId ?? selectedSegmentId;
 
   const handleSelectSegment = (segmentId: string) => {
     setSelectedSegmentId(segmentId);
@@ -298,9 +294,7 @@ export function RecordingScreen(props: RecordingScreenProps = {}) {
                   recordingId={recording.id}
                   onShowSnackbar={setSnackbarMessage}
                   onScrollBeginDrag={() => {
-                    if (player.isPlaying) {
-                      setIsFollowing(false);
-                    }
+                    setIsFollowing(false);
                   }}
                   isFollowing={isFollowing}
                   onFollow={() => {

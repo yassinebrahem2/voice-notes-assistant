@@ -69,7 +69,7 @@ export function Scrubber({
       style={styles.container}
     >
       {sampledPeaks ? (
-        <View style={styles.barsContainer}>
+        <View pointerEvents="none" style={styles.barsContainer}>
           {sampledPeaks.map((peak, idx) => {
             const barRatio = (idx + 0.5) / BAR_COUNT;
             const isPlayed = barRatio <= progressRatio;
@@ -93,7 +93,10 @@ export function Scrubber({
           })}
         </View>
       ) : (
-        <View style={[styles.track, { backgroundColor: tape.line }]}>
+        <View
+          pointerEvents="none"
+          style={[styles.track, { backgroundColor: tape.line }]}
+        >
           <View
             style={[
               styles.progressFill,
