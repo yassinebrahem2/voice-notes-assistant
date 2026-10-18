@@ -3,10 +3,10 @@ from typing import Literal
 
 import pytest
 
+from app.agents.summarizer import SummarizerAnalyzer
 from app.config.settings import Settings
 from app.container import Container, build_container
 from app.db.connection import connect
-from app.processing.fakes import FakeAnalyzer
 from app.rag.fakes import FakeEmbedder
 from app.speech.fakes import FakeAsr, FakeDiarizer
 
@@ -21,7 +21,7 @@ def test_build_container_uses_fakes(tmp_path: Path, backend: Literal["real", "fa
     assert isinstance(container.asr, FakeAsr)
     assert isinstance(container.diarizer, FakeDiarizer)
     assert isinstance(container.embedder, FakeEmbedder)
-    assert isinstance(container.analyzer, FakeAnalyzer)
+    assert isinstance(container.analyzer, SummarizerAnalyzer)
     assert not container.db_path.exists()
 
 

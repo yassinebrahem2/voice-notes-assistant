@@ -5,6 +5,7 @@ description = "Backend service"
 requires-python = ">=3.12"
 dependencies = [
     "fastapi~=0.143.0",
+    "httpx2<3",
     "numpy>=2.5.4,<3",
     "platformdirs>=4.13.3,<5",
     "pydantic>=2.13.4,<3",
@@ -15,11 +16,16 @@ dependencies = [
     "pyyaml>=6.0.3,<7",
     "sqlite-vec==0.1.9",
     "uvicorn[standard]~=0.54.0",
+    "langchain~=1.4",
+    "langgraph~=1.2",
+    "langchain-openai~=1.7",
+    "langchain-google-genai~=4.4",
+    "google-genai>=2.20,<3",
+    "httpx~=0.28.1",
 ]
 
 [dependency-groups]
 dev = [
-    "httpx2<3",
     "pyright>=1.1.414,<2",
     "pytest>=9.1.1,<10",
     "ruff~=0.17.1",

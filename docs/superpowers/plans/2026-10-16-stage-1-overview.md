@@ -40,4 +40,6 @@ Every must-have feature working end to end on a real Android phone talking to th
 | 4 | Mobile recording: record fan-out and recorder, waveform, upload queue, libraries, recording detail, player, Tier 2 polish | `plan/stage-1-mobile-recording` | 1 | issue #19: `2026-10-17-stage-1-mobile-recording.md` |
 | 5 | Mobile Chat and Settings: Chat screen, Settings, server banner, error messages | `plan/stage-1-mobile-chat-settings` | 1 | issue #20: `2026-10-17-stage-1-mobile-chat-settings.md` |
 
+Merge order note (Decision #46): the processing and agents branches each keep the other plan's routes in `STUBS` in `backend/tests/api/test_routes_exist.py`, so neither empties the list and the second of the two PRs into `main` conflicts in that file. Whoever resolves that conflict deletes `STUBS` and `test_every_stub_returns_501` (every route is implemented by then); never resolve it by keeping routes as stubs.
+
 After plans 2–5 merge, the lead runs the demo checklist (spec platform file §4) on the phone.

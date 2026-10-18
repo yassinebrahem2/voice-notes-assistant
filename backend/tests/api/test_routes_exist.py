@@ -33,15 +33,26 @@ def test_routes_exist(container: Container) -> None:
     assert len(set(operation_ids)) == len(ROUTES)
 
 
-@pytest.mark.parametrize(("method", "path"), [route for route in ROUTES if route[1] != "/health"])
+STUBS = [
+    ("get", "/recordings"),
+    ("post", "/recordings"),
+    ("get", "/recordings/{id}"),
+    ("patch", "/recordings/{id}"),
+    ("delete", "/recordings/{id}"),
+    ("patch", "/recordings/{id}/speakers/{speaker_id}"),
+    ("post", "/recordings/{id}/retry"),
+    ("get", "/recordings/{id}/audio"),
+    ("get", "/tags"),
+]
+
+
+@pytest.mark.parametrize(("method", "path"), STUBS)
 def test_every_stub_returns_501(client: TestClient, method: str, path: str) -> None:
-    url = "/api/v1" + path.format(id="rec_x", chat_id="cht_x", speaker_id="spk_x", run_id="msg_x")
+    url = "/api/v1" + path.format(id="rec_x", speaker_id="spk_x")
     if method == "post" and path == "/recordings":
         response = client.post(
             url, data={"kind": "meeting", "client_upload_id": "upload-x"}, files={"file": ("test.m4a", b"audio")}
         )
-    elif path.endswith("/messages"):
-        response = client.post(url, json={"text": "What was decided?", "scope": "both"})
     elif method == "patch":
         body = {"name": "Sarah"} if "speakers" in path else {"title": "Meeting"}
         response = client.patch(url, json=body)
