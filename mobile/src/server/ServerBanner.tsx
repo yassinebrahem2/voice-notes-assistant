@@ -4,10 +4,10 @@ import { Animated, Pressable, StyleSheet, View } from 'react-native';
 import { Text, useTheme } from 'react-native-paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { useReduceMotion } from '../chat/useReduceMotion';
 import { motion } from '../theme/motion';
 import type { TapeTheme } from '../theme/paperTheme';
 import { spacing } from '../theme/tokens';
+import { useReduceMotion } from '../theme/useReduceMotion';
 import { useServerStatus } from './useServerStatus';
 
 type Problem = 'unreachable' | 'no_server';

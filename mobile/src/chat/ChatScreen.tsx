@@ -17,12 +17,12 @@ import { openFanOut } from '../recording/fanOutStore';
 import { fontFamilies } from '../theme/fonts';
 import type { TapeTheme } from '../theme/paperTheme';
 import { radius, spacing, typeScale } from '../theme/tokens';
+import { useReduceMotion } from '../theme/useReduceMotion';
 import { AnswerText } from './AnswerText';
 import { ScopeBar } from './ScopeBar';
 import { isActive, type RunView } from './runMachine';
 import { Starters } from './Starters';
 import { StatusLine } from './StatusLine';
-import { useReduceMotion } from './useReduceMotion';
 import { useHasReadyRecording, useTags } from './useChatData';
 import { useChatSession } from './useChatSession';
 

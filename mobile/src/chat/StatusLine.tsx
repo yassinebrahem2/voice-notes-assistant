@@ -5,7 +5,7 @@ import { Text, useTheme } from 'react-native-paper';
 import { motion } from '../theme/motion';
 import type { TapeTheme } from '../theme/paperTheme';
 import { radius, spacing } from '../theme/tokens';
-import { useReduceMotion } from './useReduceMotion';
+import { useReduceMotion } from '../theme/useReduceMotion';
 
 const DOTS = 3;
 
