@@ -36,7 +36,8 @@ class Settings(BaseSettings):
     chunk_max_tokens: int = 200
     chunk_min_tokens_at_speaker_change: int = 80
     retrieval_k: int = 8
-    retrieval_max_distance: float = 0.6
+    # Calibrated on seed-demo data (calibrate-retrieval, 2026-10-18): expected <= 0.332, unrelated >= 0.541.
+    retrieval_max_distance: float = 0.436
     chat_deadline_s: float = 75
     speech_step_timeout_s: float = 1800
     asr_device: str | None = None
