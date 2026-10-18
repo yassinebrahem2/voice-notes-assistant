@@ -3,6 +3,7 @@ from typing import Literal
 
 import pytest
 
+from app.agents.summarizer import SummarizerAnalyzer
 from app.config.models_registry import ModelsRegistry
 from app.config.settings import Settings
 from app.container import Container, build_container
@@ -24,7 +25,7 @@ def test_build_container_uses_fakes(tmp_path: Path) -> None:
     assert isinstance(container.asr, FakeAsr)
     assert isinstance(container.diarizer, FakeDiarizer)
     assert isinstance(container.embedder, FastEmbedEmbedder)
-    assert isinstance(container.analyzer, FakeAnalyzer)
+    assert isinstance(container.analyzer, SummarizerAnalyzer)
     assert not container.db_path.exists()
 
 

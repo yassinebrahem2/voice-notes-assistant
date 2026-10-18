@@ -158,6 +158,34 @@ Keep several GB free: the model cache (`MODEL_CACHE_DIR`, by default the `models
 folder in the data directory) holds a few GB of models, and torch with CUDA adds
 several GB more to `backend/.venv`.
 
+## Provider smoke test and relevance calibration
+
+Once provider keys (`GROQ_API_KEY`, `GEMINI_API_KEY`) are set in `backend/.env`,
+you can run the LLM smoke tests from `backend/`:
+
+```powershell
+uv run python -m app.cli smoke-llm
+```
+
+This verifies that:
+1. Configured models exist on each provider (via `GET /models` for OpenAI/Groq, or `genai_client.models.list()` for Google GenAI).
+2. For every distinct configured model across all roles:
+   - The orchestrator can invoke tool calls.
+   - The forced final turn succeeds with tool history and `tool_choice="required"`.
+   - The summarizer produces valid analysis.
+3. Cross-provider failover: for every ordered pair `(A, B)` of distinct configured models whose providers differ, an earlier tool call from model A's orchestrator turn can be passed in history to model B and returns without error.
+
+To calibrate the retrieval distance cutoff (`retrieval_max_distance` in `backend/app/config/settings.py`)
+against seeded demo recordings:
+
+```powershell
+uv run python -m app.cli seed-demo
+uv run python -m app.cli calibrate-retrieval --questions ../docs/calibration-questions.example.yaml
+```
+
+The script reports the best cosine distance for expected and unrelated queries, detects any
+overlap between expected hits and unrelated hits, and suggests an optimal `retrieval_max_distance` threshold.
+
 ## Private HTTPS from the phone
 
 1. Connect both devices to Tailscale and confirm they appear in the same tailnet.

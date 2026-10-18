@@ -74,10 +74,29 @@ def main(argv: list[str] | None = None) -> None:
     export.add_argument("--check", action="store_true", help="Fail if the committed schema is stale.")
     commands.add_parser("seed-demo", help="Seed demo data for mobile development.")
     commands.add_parser("setup", help="Create the data folders, download every model and check the environment.")
+    commands.add_parser("smoke-llm", help="Run provider model and LLM smoke tests.")
+    calibrate = commands.add_parser(
+        "calibrate-retrieval", help="Calibrate retrieval distance threshold against questions."
+    )
+    calibrate.add_argument("--questions", required=True, type=Path, help="Path to YAML calibration questions file.")
     args = parser.parse_args(argv)
     settings = load_settings(load_app_config())
     container = build_container(settings)
     app = create_app(container, start_worker=args.command == "serve")
+    if args.command == "smoke-llm":
+        from app.llm.smoke import run_smoke_tests
+
+        exit_code = run_smoke_tests(container)
+        if exit_code != 0:
+            raise SystemExit(exit_code)
+        return
+    if args.command == "calibrate-retrieval":
+        from app.rag.calibrate import run_calibration
+
+        exit_code = run_calibration(container, args.questions)
+        if exit_code != 0:
+            raise SystemExit(exit_code)
+        return
     if args.command == "export-openapi":
         schema = json.dumps(app.openapi(), indent=2, sort_keys=True, ensure_ascii=False) + "\n"
         if args.check:

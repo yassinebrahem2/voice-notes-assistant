@@ -2,10 +2,10 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Literal
 
+from app.agents.summarizer import SummarizerAnalyzer
 from app.config.app_config import AppConfig, load_app_config
 from app.config.models_registry import ModelsRegistry, load_models_registry
 from app.config.settings import Settings
-from app.processing.fakes import FakeAnalyzer
 from app.processing.protocols import Analyzer
 from app.rag.fastembed_embedder import FastEmbedEmbedder
 from app.rag.protocols import Embedder
@@ -15,6 +15,7 @@ from app.speech.real import RealAsr, RealDiarizer
 
 if TYPE_CHECKING:
     # The worker imports this module, so a runtime import would be circular.
+    from app.chats.runs import ChatRuns
     from app.processing.worker import Worker
 
 
@@ -30,6 +31,7 @@ class Container:
     embedder: Embedder
     analyzer: Analyzer
     worker: "Worker | None" = None
+    chat_runs: "ChatRuns | None" = None
 
 
 def build_container(settings: Settings) -> Container:
@@ -44,9 +46,8 @@ def build_container(settings: Settings) -> Container:
     else:
         asr, diarizer = FakeAsr(), FakeDiarizer()
     embedder = FastEmbedEmbedder(models.roles.embedder.model, settings.model_cache_dir)
-    # The agents plan binds the real analyzer here.
-    analyzer = FakeAnalyzer()
-    return Container(
+    analyzer = SummarizerAnalyzer(models)
+    container = Container(
         settings,
         app_config,
         models,
@@ -57,3 +58,8 @@ def build_container(settings: Settings) -> Container:
         embedder,
         analyzer,
     )
+    from app.agents.chat_graph import build_chat_graph
+    from app.chats.runs import ChatRuns
+
+    container.chat_runs = ChatRuns(container, build_chat_graph)
+    return container

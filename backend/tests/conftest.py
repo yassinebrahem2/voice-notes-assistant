@@ -33,6 +33,7 @@ def isolate_provider_keys(monkeypatch: pytest.MonkeyPatch) -> None:
     for provider in registry["providers"].values():
         monkeypatch.delenv(provider["key_env"], raising=False)
     monkeypatch.delenv("HF_TOKEN", raising=False)
+    monkeypatch.delenv("GOOGLE_API_KEY", raising=False)
 
 
 @pytest.fixture
@@ -43,15 +44,22 @@ def container(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Container:
     monkeypatch.setenv("MODEL_CACHE_DIR", str(tmp_path / "models"))
     monkeypatch.setenv("SPEECH_BACKEND", "fake")
     settings = load_settings(load_app_config(), env_file=env_file)
-    result = build_container(settings)
+    # Real models would download or need keys as soon as a test indexes or analyzes.
+    result = dataclasses.replace(
+        build_container(settings), embedder=FakeEmbedder(), analyzer=FakeAnalyzer(), chat_runs=None
+    )
+    from app.agents.chat_graph import build_chat_graph
+    from app.chats.runs import ChatRuns
+
+    # Chat runs hold their container, so they are rebuilt on the one carrying the fakes.
+    result.chat_runs = ChatRuns(result, build_chat_graph)
     result.settings.data_dir.mkdir(parents=True)
     connection = connect(result.db_path)
     try:
         apply_migrations(connection)
     finally:
         connection.close()
-    # Real models would download or need keys as soon as a test indexes or analyzes.
-    return dataclasses.replace(result, embedder=FakeEmbedder(), analyzer=FakeAnalyzer())
+    return result
 
 
 @pytest.fixture
