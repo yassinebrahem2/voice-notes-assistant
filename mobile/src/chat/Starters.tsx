@@ -4,11 +4,11 @@ import { Text, useTheme } from 'react-native-paper';
 import type { TapeTheme } from '../theme/paperTheme';
 import { radius, spacing } from '../theme/tokens';
 
+// From HELP in backend/app/agents/citations.py (agents plan)
 export const STARTERS = [
-  'What did I decide this week?',
-  'What action items are still open?',
-  'Summarize my latest meeting.',
-  'What did I note about ideas?',
+  'What was decided in our last sync?',
+  'What are my open action items?',
+  'Summarize my notes on architecture.',
 ] as const;
 
 export function Starters({ onPick }: { onPick: (question: string) => void }) {

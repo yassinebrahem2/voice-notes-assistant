@@ -87,8 +87,13 @@ beforeEach(() => {
 
 test('shows the starter questions when the chat is empty', async () => {
   await setup();
-  expect(await screen.findByText(/^What did I decide/)).toBeTruthy();
-  expect(screen.getAllByTestId('starter').length).toBeGreaterThanOrEqual(3);
+  const starters = await screen.findAllByTestId('starter');
+  expect(starters).toHaveLength(3);
+  expect(starters.map((s) => s.props.accessibilityLabel)).toEqual([
+    'What was decided in our last sync?',
+    'What are my open action items?',
+    'Summarize my notes on architecture.',
+  ]);
 });
 
 test('a starter sends its question', async () => {
