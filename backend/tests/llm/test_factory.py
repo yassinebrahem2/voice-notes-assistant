@@ -186,6 +186,26 @@ def test_role_models_names_a_shared_provider_key_once(monkeypatch: pytest.Monkey
     assert message.index("GROQ_API_KEY") < message.index("GEMINI_API_KEY")
 
 
+def test_role_models_keeps_configured_order(monkeypatch: pytest.MonkeyPatch) -> None:
+    registry = make_test_registry()
+    monkeypatch.setenv("GROQ_API_KEY", "sk-test-groq-key")
+    monkeypatch.setenv("GEMINI_API_KEY", "test-gemini-key")
+    provider_of: dict[int, str] = {}
+
+    def fake_chat_model(entry: LlmEntry, _registry: ModelsRegistry) -> BaseChatModel:
+        model = ScriptedChatModel(messages=iter([]))
+        provider_of[id(model)] = entry.provider
+        return model
+
+    monkeypatch.setattr("app.llm.factory.chat_model", fake_chat_model)
+
+    models = role_models(registry, "llm")
+
+    # Checks the returned list, not only the build calls, so a reorder after building is caught too.
+    assert [provider_of[id(model)] for model in models] == [entry.provider for entry in registry.roles.llm]
+    assert [entry.provider for entry in registry.roles.llm] == ["groq", "gemini"]
+
+
 def test_build_agent_with_one_keyed_model_has_no_fallback(monkeypatch: pytest.MonkeyPatch) -> None:
     registry = make_test_registry()
     monkeypatch.setenv("GROQ_API_KEY", "sk-test-groq-key")
