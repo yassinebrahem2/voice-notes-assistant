@@ -151,10 +151,11 @@ function Readiness({ url }: { url: string | null }) {
   const { tape } = useTheme<TapeTheme>();
   const health = useQuery({
     queryKey: ['health', url],
-    // apiFetch only casts the body; a wrong server can answer 200 with anything, and null marks that.
+    // apiFetch only casts the body; a wrong server can answer 200 with anything, or with another app's health, and
+    // null marks that, as Test connection does.
     queryFn: async (): Promise<HealthOut | null> => {
       const body = await apiFetch<unknown>('health');
-      return isHealth(body) ? body : null;
+      return isHealth(body) && body.app_name === appInfo.name ? body : null;
     },
     enabled: url !== null,
     retry: false,

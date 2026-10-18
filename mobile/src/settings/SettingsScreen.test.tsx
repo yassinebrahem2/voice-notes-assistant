@@ -66,6 +66,19 @@ test('a stored server that answers with a non-health body does not crash', async
   expect(screen.getByLabelText('Server URL')).toBeOnTheScreen();
 });
 
+test("a health body from another app is not this app's server", async () => {
+  await setup('https://s.example', async () => ({
+    app_name: 'Other App',
+    version: '0.1.0',
+    speech_backend: 'real',
+    roles: { llm: 'ready' },
+  }));
+  expect(
+    await screen.findByText("That isn't this app's server"),
+  ).toBeOnTheScreen();
+  expect(screen.queryByLabelText('Chat AI: ready')).not.toBeOnTheScreen();
+});
+
 test('a null health body is reported, not left on Checking', async () => {
   await setup('https://s.example', async () => null);
   expect(
