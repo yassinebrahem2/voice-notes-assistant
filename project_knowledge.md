@@ -105,6 +105,7 @@ Versions checked 2026-10-16; majors are pinned.
 - [USER] 2026-10-18: `retrieval_max_distance` is 0.436, calibrated with `calibrate-retrieval` on fresh `seed-demo` data and `docs/calibration-questions.example.yaml`: expected passages at most 0.332, unrelated at least 0.541 (margin 0.209, no overlap). It replaces the provisional 0.6.
 - [USER] 2026-10-18: pyannote's telemetry is turned off (`PYANNOTE_METRICS_ENABLED=false` in the diarize child and in `setup`): nothing goes out to third parties during processing or the demo.
 - [USER] 2026-10-18: with the real speech backend bound, `/health` reports the speech roles not ready when the speech extra is not installed; otherwise speech readiness comes from the download record `setup` writes (a model fetched another way reads "Model not downloaded" until `setup` runs).
+- [USER] 2026-10-18: a library search never hides "Not uploaded" rows; they stay on top of their tab so an unsent recording can't be missed.
 
 ## 3. Open
 Each item is safe to decide later; the stage that decides it is named.
@@ -129,6 +130,7 @@ Each item is safe to decide later; the stage that decides it is named.
 - Automation platform vs. custom backend open (brief) → all code (2026-10-16, user).
 - Every LLM through `ChatOpenAI` on OpenAI-compatible endpoints (stage 1 spec) → a client per provider (`openai` or `google_genai`) (2026-10-17, user: Gemini 3 rejected multi-turn tool calls on the OpenAI-compatible endpoint; dropping Gemini from Chat was refused as a workaround).
 - `/health` LLM roles `ready` when the first entry's key is set (foundation plan) → `ready` when any entry's key is set, and Chat skips models without a key (2026-10-18, user: with only `GROQ_API_KEY`, Chat failed every question while `/health` said `llm` was ready, and analysis worked while `/health` said it was missing a key).
+- Expo Go detected with `Constants.executionEnvironment === 'storeClient'` (platform spec) → `isRunningInExpoGo()` from `expo` (2026-10-18, #76: on an Android 13 phone in Expo Go, Constants reported `bare`, so every recording failed to start).
 
 ## 6. Files
 - `project_knowledge.md`: this file.

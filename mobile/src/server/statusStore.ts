@@ -37,6 +37,10 @@ export function resetStatus(): void {
   set('unknown');
 }
 
+export function getServerStatus(): ServerStatus {
+  return status;
+}
+
 export function useServerStatusValue(): ServerStatus {
   return useSyncExternalStore(subscribe, () => status);
 }

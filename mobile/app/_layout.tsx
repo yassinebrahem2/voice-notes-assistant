@@ -9,12 +9,16 @@ import { PaperProvider } from 'react-native-paper';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { queryClient } from '../src/api/queryClient';
+import { AppSnackbar } from '../src/components/AppSnackbar';
+import { FanOutOverlay } from '../src/recording/FanOutOverlay';
 import { ServerBanner } from '../src/server/ServerBanner';
 import { useThemePreference } from '../src/settings/themePreference';
 import { fontAssets } from '../src/theme/fonts';
 import { paperTheme } from '../src/theme/paperTheme';
 
 void SplashScreen.preventAutoHideAsync();
+
+export const unstable_settings = { anchor: '(tabs)' };
 
 export default function RootLayout() {
   const systemScheme = useColorScheme() === 'dark' ? 'dark' : 'light';
@@ -44,7 +48,17 @@ export default function RootLayout() {
             }}
           >
             <Stack.Screen name="(tabs)" />
+            <Stack.Screen
+              name="record"
+              options={{
+                animation: 'none',
+                gestureEnabled: false,
+                headerShown: false,
+              }}
+            />
           </Stack>
+          <FanOutOverlay />
+          <AppSnackbar />
         </PaperProvider>
       </SafeAreaProvider>
     </QueryClientProvider>

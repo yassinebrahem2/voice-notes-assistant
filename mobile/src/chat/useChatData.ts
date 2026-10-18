@@ -4,13 +4,6 @@ import { apiFetch, type Schemas } from '../api/client';
 
 const READY_POLL_MS = 5_000;
 
-export function useTags() {
-  return useQuery({
-    queryKey: ['tags'],
-    queryFn: () => apiFetch<Schemas['TagOut'][]>('tags'),
-  });
-}
-
 // undefined until the list is known, so the screen does not flash the wrong empty state.
 export function useHasReadyRecording(): boolean | undefined {
   const { data, isError } = useQuery({
