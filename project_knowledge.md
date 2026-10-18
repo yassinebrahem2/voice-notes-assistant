@@ -101,6 +101,7 @@ Versions checked 2026-10-16; majors are pinned.
 - [AGREED] Decision #48: Chat Retry recovers a lost run id from `GET /chats/{id}` (the run id is the stored user message id) and never sends a question twice; only a 4xx on the question's POST means it was not stored; a chat that is gone (404) is replaced by a new chat on Retry.
 - [AGREED] Decision #60: `/health` role readiness means "can process now"; fake speech reports `ready`, and the fake backend is reported only by `speech_backend`.
 - [USER] 2026-10-18: commits are authored and committed under the name and email of the person running the agent, never an AI identity (e.g. `Claude <noreply@anthropic.com>`); this counts as AI attribution. Earlier commits with that identity are not rewritten.
+- [USER] 2026-10-18: a library search never hides "Not uploaded" rows; they stay on top of their tab so an unsent recording can't be missed.
 
 ## 3. Open
 Each item is safe to decide later; the stage that decides it is named.
@@ -124,6 +125,7 @@ Each item is safe to decide later; the stage that decides it is named.
 - Timestamps and speaker labels "desirable, not decided" (brief) → diarization is in and provides timestamps (2026-10-16, user).
 - Automation platform vs. custom backend open (brief) → all code (2026-10-16, user).
 - Every LLM through `ChatOpenAI` on OpenAI-compatible endpoints (stage 1 spec) → a client per provider (`openai` or `google_genai`) (2026-10-17, user: Gemini 3 rejected multi-turn tool calls on the OpenAI-compatible endpoint; dropping Gemini from Chat was refused as a workaround).
+- Expo Go detected with `Constants.executionEnvironment === 'storeClient'` (platform spec) → `isRunningInExpoGo()` from `expo` (2026-10-18, #76: on an Android 13 phone in Expo Go, Constants reported `bare`, so every recording failed to start).
 
 ## 6. Files
 - `project_knowledge.md`: this file.
