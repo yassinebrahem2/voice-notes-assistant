@@ -115,4 +115,27 @@ describe('useRecording', () => {
     expect(result.current.isLoading).toBe(false);
     expect(mockApiFetch).not.toHaveBeenCalled();
   });
+
+  test('returns isFetching indicating network activity', async () => {
+    let resolveFetch: (val: unknown) => void = () => {};
+    mockApiFetch.mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolveFetch = resolve;
+      }),
+    );
+
+    const { result } = await renderHook(() => useRecording('rec_fetch'), {
+      wrapper: createWrapper(),
+    });
+
+    expect(result.current.isFetching).toBe(true);
+
+    resolveFetch({
+      id: 'rec_fetch',
+      kind: 'meeting',
+      status: 'ready',
+    });
+
+    await waitFor(() => expect(result.current.isFetching).toBe(false));
+  });
 });

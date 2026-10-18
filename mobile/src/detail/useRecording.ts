@@ -11,7 +11,17 @@ export function recordingQuery(id: string) {
   };
 }
 
-export function useRecording(id: string) {
+export interface UseRecordingResult {
+  data: Schemas['RecordingDetailOut'] | undefined;
+  isLoading: boolean;
+  isFetching?: boolean;
+  isError: boolean;
+  error: unknown;
+  deleted: boolean;
+  refetch: () => Promise<unknown>;
+}
+
+export function useRecording(id: string): UseRecordingResult {
   const query = useQuery({
     ...recordingQuery(id),
     enabled: Boolean(id),
@@ -27,6 +37,7 @@ export function useRecording(id: string) {
   return {
     data: query.data,
     isLoading: query.isLoading,
+    isFetching: query.isFetching,
     isError: query.isError,
     error: query.error,
     deleted,

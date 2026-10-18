@@ -11,9 +11,15 @@ import { PaperProvider } from 'react-native-paper';
 import { useReducedMotion } from 'react-native-reanimated';
 
 import { RecordingScreen } from '../../app/recording/[id]';
-import { ApiError, type Schemas } from '../api/client';
+import { ApiError } from '../api/client';
 import { paperTheme } from '../theme/paperTheme';
 import { useRetryRecording } from './mutations';
+import {
+  makeMockRecording,
+  mockMeetingWithSummary,
+  mockNoteWithKeyPoints,
+  mockPlayer,
+} from './recordingFixtures';
 import { useRecording } from './useRecording';
 
 jest.mock('expo-font', () => ({
@@ -43,17 +49,6 @@ jest.mock('./mutations', () => ({
   useDeleteRecording: jest.fn(() => ({ mutate: jest.fn(), isPending: false })),
 }));
 
-const mockPlayer = {
-  isPlaying: false,
-  positionMs: 0,
-  durationMs: 60000,
-  error: null,
-  playFrom: jest.fn().mockResolvedValue(undefined),
-  toggle: jest.fn(),
-  seekTo: jest.fn().mockResolvedValue(undefined),
-  retry: jest.fn(),
-};
-
 jest.mock('../../src/player/usePlayer', () => ({
   usePlayer: jest.fn(() => mockPlayer),
 }));
@@ -62,30 +57,6 @@ const mockUseRecording = jest.mocked(useRecording);
 const mockUseRetryRecording = jest.mocked(useRetryRecording);
 const mockUseLocalSearchParams = jest.mocked(useLocalSearchParams);
 const mockUseReducedMotion = jest.mocked(useReducedMotion);
-
-function makeMockRecording(
-  overrides: Partial<Schemas['RecordingDetailOut']> = {},
-): Schemas['RecordingDetailOut'] {
-  return {
-    id: 'rec_1',
-    kind: 'meeting',
-    status: 'ready',
-    title: 'Meeting',
-    created_at: '2026-10-17T12:00:00Z',
-    duration_ms: 10000,
-    error_code: null,
-    error_message: null,
-    failed_step: null,
-    processing: false,
-    segments: [],
-    speakers: [],
-    tags: [],
-    summary: null,
-    note: null,
-    waveform_peaks: null,
-    ...overrides,
-  };
-}
 
 async function renderScreen(id = 'rec_1', segment?: string) {
   mockUseLocalSearchParams.mockReturnValue({ id, segment });
@@ -126,24 +97,78 @@ describe('RecordingScreen', () => {
     expect(router.back).toHaveBeenCalled();
   });
 
-  test('a 500 shows the message and Retry, Retry refetches', async () => {
+  test('a 500 with no data shows error screen, Retry reflects isFetching, and refetches', async () => {
     const mockRefetch = jest.fn();
     mockUseRecording.mockReturnValue({
       data: undefined,
       isLoading: false,
+      isFetching: true,
       isError: true,
       error: new ApiError(500, 'internal_error', 'Server error'),
       deleted: false,
       refetch: mockRefetch,
     });
 
-    await renderScreen('rec_err');
+    const { rerender } = await renderScreen('rec_err');
     expect(
       screen.getByText('Something went wrong on the server.'),
     ).toBeTruthy();
     const retryBtn = screen.getByLabelText('Retry');
-    fireEvent.press(retryBtn);
+    expect(retryBtn.props.accessibilityState?.disabled).toBe(true);
+    expect(screen.getByRole('progressbar')).toBeTruthy();
+
+    mockUseRecording.mockReturnValue({
+      data: undefined,
+      isLoading: false,
+      isFetching: false,
+      isError: true,
+      error: new ApiError(500, 'internal_error', 'Server error'),
+      deleted: false,
+      refetch: mockRefetch,
+    });
+    await rerender(
+      <PaperProvider theme={paperTheme('dark')}>
+        <RecordingScreen id="rec_err" />
+      </PaperProvider>,
+    );
+    const idleRetryBtn = screen.getByLabelText('Retry');
+    expect(idleRetryBtn.props.accessibilityState?.disabled).toBeFalsy();
+    expect(screen.queryByRole('progressbar')).toBeNull();
+    fireEvent.press(idleRetryBtn);
     expect(mockRefetch).toHaveBeenCalled();
+  });
+
+  test('a loaded recording whose refetch fails keeps title and transcript on screen', async () => {
+    const mockRecording = makeMockRecording({
+      id: 'rec_outage',
+      title: 'Meeting in Outage',
+      segments: [
+        {
+          id: 'seg_1',
+          idx: 0,
+          speaker_id: null,
+          start_ms: 0,
+          end_ms: 1000,
+          text: 'Preserved during outage.',
+        },
+      ],
+    });
+    mockUseRecording.mockReturnValue({
+      data: mockRecording,
+      isLoading: false,
+      isFetching: false,
+      isError: true,
+      error: new ApiError(500, 'internal_error', 'Outage'),
+      deleted: false,
+      refetch: jest.fn(),
+    });
+
+    await renderScreen('rec_outage');
+    expect(
+      screen.queryByText('Something went wrong on the server.'),
+    ).toBeNull();
+    expect(screen.getByText('Meeting in Outage')).toBeTruthy();
+    expect(screen.getByText('Preserved during outage.')).toBeTruthy();
   });
 
   test('renders "Nothing was said" when ready recording has no segments', async () => {
@@ -219,50 +244,8 @@ describe('RecordingScreen', () => {
   });
 
   test('renders meeting with summary tabs and clicking citation jumps to transcript', async () => {
-    const mockRecording = makeMockRecording({
-      id: 'rec_meeting',
-      title: 'Sprint Planning',
-      tags: [{ id: 'tag_1', name: 'Work', count: 1 }],
-      duration_ms: 60000,
-      speakers: [
-        {
-          id: 'spk_1',
-          name: 'Sarah',
-          display_name: 'Sarah',
-          label: 'Speaker 1',
-        },
-      ],
-      segments: [
-        {
-          id: 'seg_1',
-          idx: 0,
-          speaker_id: 'spk_1',
-          start_ms: 12000,
-          end_ms: 18000,
-          text: 'We should release next Tuesday.',
-        },
-      ],
-      summary: {
-        overview: 'Discussed sprint timeline.',
-        decisions: [
-          {
-            text: 'Ship on Tuesday.',
-            citations: [
-              {
-                recording_id: 'rec_meeting',
-                segment_id: 'seg_1',
-                start_ms: 12000,
-              },
-            ],
-          },
-        ],
-        action_items: [],
-        open_questions: [],
-      },
-    });
-
     mockUseRecording.mockReturnValue({
-      data: mockRecording,
+      data: mockMeetingWithSummary,
       isLoading: false,
       isError: false,
       error: null,
@@ -350,36 +333,8 @@ describe('RecordingScreen', () => {
   });
 
   test('renders note view with key points and clean note', async () => {
-    const mockRecording = makeMockRecording({
-      id: 'rec_note',
-      kind: 'note',
-      title: 'Idea for feature',
-      duration_ms: 15000,
-      segments: [
-        {
-          id: 'seg_n1',
-          idx: 0,
-          speaker_id: null,
-          start_ms: 0,
-          end_ms: 5000,
-          text: 'Raw speech note.',
-        },
-      ],
-      note: {
-        key_points: [
-          {
-            text: 'Key idea number one.',
-            citations: [
-              { recording_id: 'rec_note', segment_id: 'seg_n1', start_ms: 0 },
-            ],
-          },
-        ],
-        clean_text: 'Cleaned up text of the idea.',
-      },
-    });
-
     mockUseRecording.mockReturnValue({
-      data: mockRecording,
+      data: mockNoteWithKeyPoints,
       isLoading: false,
       isError: false,
       error: null,

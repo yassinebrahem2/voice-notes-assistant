@@ -59,6 +59,7 @@ export function RecordingScreen(props: RecordingScreenProps = {}) {
   const {
     data: recording,
     isLoading,
+    isFetching,
     error,
     deleted,
     refetch,
@@ -152,7 +153,7 @@ export function RecordingScreen(props: RecordingScreenProps = {}) {
     );
   }
 
-  if (error) {
+  if (error && !recording) {
     return (
       <SafeAreaView style={[styles.screen, { backgroundColor: tape.bg }]}>
         <RecordingHeader title="" onBack={() => router.back()} />
@@ -172,6 +173,8 @@ export function RecordingScreen(props: RecordingScreenProps = {}) {
           <Button
             mode="contained"
             onPress={() => refetch()}
+            loading={isFetching}
+            disabled={isFetching}
             accessibilityLabel="Retry"
             buttonColor={tape.signal}
             textColor={tape.onSignal}
