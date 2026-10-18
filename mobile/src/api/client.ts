@@ -18,6 +18,23 @@ function isAbortError(error: unknown): boolean {
   );
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+export function isApiErrorEnvelope(body: unknown): boolean {
+  return (
+    isRecord(body) &&
+    isRecord(body.error) &&
+    typeof body.error.code === 'string' &&
+    typeof body.error.message === 'string'
+  );
+}
+
+export function isGatewayStatus(status: number): boolean {
+  return status === 502 || status === 503 || status === 504;
+}
+
 export async function apiFetch<T>(
   path: string,
   init: RequestInit & { timeoutMs?: number } = {},
@@ -62,21 +79,32 @@ export async function apiFetch<T>(
         signal: controller.signal,
       },
     );
-    // Any HTTP response, error statuses included, proves the server is reachable.
-    reportOk();
-    if (response.ok && response.status === 204) return undefined as T;
+    if (response.ok && response.status === 204) {
+      reportOk();
+      return undefined as T;
+    }
     let body: unknown;
     try {
       body = await response.json();
     } catch (error: unknown) {
       if (controller.signal.aborted || isAbortError(error))
         throw timeoutError();
+      if (isGatewayStatus(response.status)) {
+        reportNetworkError();
+        throw new ApiError(0, 'network_error', 'Could not reach the server.');
+      }
+      reportOk();
       throw new ApiError(
         response.status,
         'internal_error',
         'The server returned an invalid response.',
       );
     }
+    if (isGatewayStatus(response.status) && !isApiErrorEnvelope(body)) {
+      reportNetworkError();
+      throw new ApiError(0, 'network_error', 'Could not reach the server.');
+    }
+    reportOk();
     if (!response.ok) throw parseApiError(response.status, body);
     return body as T;
   }

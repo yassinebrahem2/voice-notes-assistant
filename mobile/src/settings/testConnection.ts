@@ -1,3 +1,4 @@
+import { isApiErrorEnvelope, isGatewayStatus } from '../api/client';
 import type { Schemas } from '../api/errors';
 import { appInfo } from '../config/appInfo';
 import { normalizeServerUrl } from './serverUrl';
@@ -48,9 +49,13 @@ export async function testConnection(input: string): Promise<ConnectionResult> {
       try {
         body = await response.json();
       } catch {
-        return controller.signal.aborted
-          ? { ok: false, problem: 'unreachable' }
-          : { ok: false, problem: 'not_this_server' };
+        if (controller.signal.aborted || isGatewayStatus(response.status)) {
+          return { ok: false, problem: 'unreachable' };
+        }
+        return { ok: false, problem: 'not_this_server' };
+      }
+      if (isGatewayStatus(response.status) && !isApiErrorEnvelope(body)) {
+        return { ok: false, problem: 'unreachable' };
       }
       if (!response.ok || !isHealth(body) || body.app_name !== appInfo.name)
         return { ok: false, problem: 'not_this_server' };

@@ -1,5 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { renderHook } from '@testing-library/react-native';
+import { act, renderHook } from '@testing-library/react-native';
 
 import { resetStatus, useServerStatusValue } from '../server/statusStore';
 
@@ -227,4 +227,95 @@ test('reports reachability to the server status store', async () => {
   await apiFetch('/health');
   expect(result.current).toBe('ok');
   expect(fetch).toHaveBeenCalledTimes(2);
+});
+
+test('502 with a plain-text body is a gateway error treated as unreachable', async () => {
+  const { result } = await renderHook(() => useServerStatusValue());
+  const res = response(502, undefined);
+  jest
+    .mocked(res.json)
+    .mockRejectedValue(new SyntaxError('Unexpected token B in JSON'));
+  jest.spyOn(global, 'fetch').mockResolvedValue(res);
+
+  await act(async () => {
+    await expect(apiFetch('/recordings')).rejects.toMatchObject({
+      status: 0,
+      code: 'network_error',
+      message: 'Could not reach the server.',
+    });
+  });
+  expect(result.current).toBe('unreachable');
+});
+
+test('503 with an HTML body is a gateway error treated as unreachable', async () => {
+  const { result } = await renderHook(() => useServerStatusValue());
+  const res = response(503, undefined);
+  jest
+    .mocked(res.json)
+    .mockRejectedValue(new SyntaxError('Unexpected token < in JSON'));
+  jest.spyOn(global, 'fetch').mockResolvedValue(res);
+
+  await act(async () => {
+    await expect(apiFetch('/recordings')).rejects.toMatchObject({
+      status: 0,
+      code: 'network_error',
+      message: 'Could not reach the server.',
+    });
+  });
+  expect(result.current).toBe('unreachable');
+});
+
+test('504 with JSON that is not the error envelope is treated as unreachable', async () => {
+  const { result } = await renderHook(() => useServerStatusValue());
+  jest
+    .spyOn(global, 'fetch')
+    .mockResolvedValue(response(504, { message: 'gateway timeout' }));
+
+  await act(async () => {
+    await expect(apiFetch('/recordings')).rejects.toMatchObject({
+      status: 0,
+      code: 'network_error',
+      message: 'Could not reach the server.',
+    });
+  });
+  expect(result.current).toBe('unreachable');
+});
+
+test('503 with the error envelope proves reachability and throws the envelope code', async () => {
+  const { result } = await renderHook(() => useServerStatusValue());
+  jest.spyOn(global, 'fetch').mockResolvedValue(
+    response(503, {
+      error: {
+        code: 'ai_unavailable',
+        message: 'The AI provider is currently down.',
+      },
+    }),
+  );
+
+  await act(async () => {
+    await expect(apiFetch('/recordings')).rejects.toMatchObject({
+      status: 503,
+      code: 'ai_unavailable',
+      message: 'The AI provider is currently down.',
+    });
+  });
+  expect(result.current).toBe('ok');
+});
+
+test('500 without the error envelope proves reachability', async () => {
+  const { result } = await renderHook(() => useServerStatusValue());
+  const res = response(500, undefined);
+  jest
+    .mocked(res.json)
+    .mockRejectedValue(new SyntaxError('Unexpected token in JSON'));
+  jest.spyOn(global, 'fetch').mockResolvedValue(res);
+
+  await act(async () => {
+    await expect(apiFetch('/recordings')).rejects.toMatchObject({
+      status: 500,
+      code: 'internal_error',
+      message: 'The server returned an invalid response.',
+    });
+  });
+  expect(result.current).toBe('ok');
 });

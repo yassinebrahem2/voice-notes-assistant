@@ -253,3 +253,40 @@ test.each([
   expect(fetch).not.toHaveBeenCalled();
   expect(jest.getTimerCount()).toBe(0);
 });
+
+test('health polling keeps going every 10 s while /health answers 502 without envelope, and stops once it answers 200', async () => {
+  const badGateway = response(502, undefined);
+  jest
+    .mocked(badGateway.json)
+    .mockRejectedValue(new SyntaxError('Unexpected token < in JSON'));
+  const fetch = jest.spyOn(global, 'fetch').mockResolvedValue(badGateway);
+
+  const { result } = await renderHook(() => useServerStatus());
+  await act(async () => reportNetworkError());
+  expect(result.current).toBe('unreachable');
+
+  await act(async () => {
+    await jest.advanceTimersByTimeAsync(10_000);
+  });
+  expect(fetch).toHaveBeenCalledTimes(1);
+  expect(result.current).toBe('unreachable');
+
+  await act(async () => {
+    await jest.advanceTimersByTimeAsync(10_000);
+  });
+  expect(fetch).toHaveBeenCalledTimes(2);
+  expect(result.current).toBe('unreachable');
+
+  fetch.mockResolvedValue(response(200, {}));
+  await act(async () => {
+    await jest.advanceTimersByTimeAsync(10_000);
+  });
+  expect(fetch).toHaveBeenCalledTimes(3);
+  expect(result.current).toBe('ok');
+
+  await act(async () => {
+    await jest.advanceTimersByTimeAsync(60_000);
+  });
+  expect(fetch).toHaveBeenCalledTimes(3);
+  expect(jest.getTimerCount()).toBe(0);
+});

@@ -122,6 +122,60 @@ test('a non-JSON or error response is not this server', async () => {
   });
 });
 
+test('502 with plain text is unreachable', async () => {
+  jest.spyOn(global, 'fetch').mockResolvedValue({
+    ok: false,
+    status: 502,
+    json: async () => {
+      throw new SyntaxError('Bad Gateway');
+    },
+  } as unknown as Response);
+  expect(await testConnection('https://typed.example')).toEqual({
+    ok: false,
+    problem: 'unreachable',
+  });
+});
+
+test('504 with non-envelope JSON is unreachable', async () => {
+  jest.spyOn(global, 'fetch').mockResolvedValue({
+    ok: false,
+    status: 504,
+    json: async () => ({ message: 'gateway timeout' }),
+  } as unknown as Response);
+  expect(await testConnection('https://typed.example')).toEqual({
+    ok: false,
+    problem: 'unreachable',
+  });
+});
+
+test('503 with error envelope is not this server', async () => {
+  jest.spyOn(global, 'fetch').mockResolvedValue({
+    ok: false,
+    status: 503,
+    json: async () => ({
+      error: { code: 'ai_unavailable', message: 'Down' },
+    }),
+  } as unknown as Response);
+  expect(await testConnection('https://typed.example')).toEqual({
+    ok: false,
+    problem: 'not_this_server',
+  });
+});
+
+test('500 with plain text is not this server', async () => {
+  jest.spyOn(global, 'fetch').mockResolvedValue({
+    ok: false,
+    status: 500,
+    json: async () => {
+      throw new SyntaxError('Internal Server Error');
+    },
+  } as unknown as Response);
+  expect(await testConnection('https://typed.example')).toEqual({
+    ok: false,
+    problem: 'not_this_server',
+  });
+});
+
 test('an unparseable URL throws the normaliser message', async () => {
   await expect(testConnection('nonsense')).rejects.toThrow(
     'Enter a valid HTTP or HTTPS server URL.',
