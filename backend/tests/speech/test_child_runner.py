@@ -3,12 +3,13 @@ import importlib.util
 import json
 import logging
 import os
+import signal
 import subprocess
 import sys
 import tempfile
 import time
 from collections.abc import Mapping
-from contextlib import closing
+from contextlib import closing, suppress
 from pathlib import Path
 
 import pytest
@@ -74,15 +75,27 @@ def test_run_child_nonzero_exit_raises(child_tmp: Path, caplog: pytest.LogCaptur
     assert list(child_tmp.iterdir()) == []
 
 
-def test_run_child_timeout_kills_and_raises(child_tmp: Path, caplog: pytest.LogCaptureFixture) -> None:
+def test_run_child_timeout_kills_and_raises(child_tmp: Path, tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
     caplog.set_level(logging.INFO)
+    heartbeat = tmp_path / "heartbeat"
+    stopped = False
     started = time.monotonic()
-    with pytest.raises(ChildFailed) as raised:
-        run_child(ECHO, ["--mode", "hang"], timeout_s=1, env=os.environ)
-    assert time.monotonic() - started < 15
-    assert raised.value.returncode is None
-    assert "marker" not in str(raised.value)
-    assert list(child_tmp.iterdir()) == []
+    try:
+        with pytest.raises(ChildFailed) as raised:
+            run_child(ECHO, ["--mode", "hang", "--heartbeat", str(heartbeat)], timeout_s=1, env=os.environ)
+        assert time.monotonic() - started < 15
+        assert raised.value.returncode is None
+        assert "marker" not in str(raised.value)
+        assert list(child_tmp.iterdir()) == []
+        # A live child rewrites its heartbeat every 50 ms; a killed one leaves it unchanged.
+        last = heartbeat.read_text(encoding="utf-8")
+        time.sleep(0.5)
+        assert heartbeat.read_text(encoding="utf-8") == last, "the timed-out child is still running"
+        stopped = True
+    finally:
+        if not stopped and heartbeat.is_file():
+            with suppress(OSError, ValueError):
+                os.kill(int(heartbeat.read_text(encoding="utf-8").split()[0]), signal.SIGTERM)
 
 
 def test_run_child_rejects_output_that_is_not_a_json_object(child_tmp: Path) -> None:

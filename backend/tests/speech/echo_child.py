@@ -12,6 +12,7 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--mode", choices=["ok", "fail", "hang", "garbage"], required=True)
     parser.add_argument("--out", type=Path, required=True)
+    parser.add_argument("--heartbeat", type=Path, help="hang mode: keep rewriting '<pid> <count>' here")
     args = parser.parse_args()
     if args.mode == "ok":
         result = {"path_set": bool(os.environ.get("PATH")), "hf_home": os.environ.get("HF_HOME"), "argv": sys.argv[1:]}
@@ -25,7 +26,10 @@ def main() -> None:
     print("echo child stderr marker", file=sys.stderr, flush=True)
     if args.mode == "fail":
         raise SystemExit(3)
-    time.sleep(60)
+    for count in range(1200):
+        if args.heartbeat is not None:
+            args.heartbeat.write_text(f"{os.getpid()} {count}", encoding="utf-8")
+        time.sleep(0.05)
 
 
 if __name__ == "__main__":
