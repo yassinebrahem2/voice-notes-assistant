@@ -1,3 +1,4 @@
+from collections.abc import Sequence
 from typing import Annotated
 
 from fastapi import APIRouter, Depends
@@ -6,19 +7,28 @@ from app.api.deps import get_container
 from app.api.models.health import HealthOut
 from app.config.settings import hf_token, provider_key
 from app.container import Container
+from app.llm.factory import missing_key_envs
 from app.rag.fastembed_embedder import FastEmbedEmbedder
 from app.speech.real import RealAsr, RealDiarizer
 
 router = APIRouter(tags=["health"])
 
 
+def join_key_names(names: Sequence[str]) -> str:
+    """Join names as `A`, `A and B` or `A, B and C`."""
+    if len(names) <= 1:
+        return "".join(names)
+    return f"{', '.join(names[:-1])} and {names[-1]}"
+
+
 @router.get("/health", response_model=HealthOut, operation_id="get_health")
 def get_health(container: Annotated[Container, Depends(get_container)]) -> HealthOut:
     roles: dict[str, str] = dict.fromkeys(("llm", "llm_analysis", "embedder", "asr", "diarizer"), "ready")
     for role in ("llm", "llm_analysis"):
-        first = getattr(container.models.roles, role)[0]
-        if provider_key(container.models, first.provider) is None:
-            roles[role] = f"Missing {container.models.providers[first.provider].key_env}"
+        # A role works as long as one of its models has a key: the others are skipped in its failover list.
+        entries = getattr(container.models.roles, role)
+        if all(provider_key(container.models, entry.provider) is None for entry in entries):
+            roles[role] = f"Missing {join_key_names(missing_key_envs(container.models, entries))}"
     # Bound fakes can always process, so only real speech has model files to check (Decision #60).
     if isinstance(container.asr, RealAsr) and not container.asr.is_cached():
         roles["asr"] = "Model not downloaded"

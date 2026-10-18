@@ -52,13 +52,26 @@ def test_real_bound_diarizer_checks_hf_token(container: Container, monkeypatch: 
 
 
 @pytest.mark.parametrize("role", ["llm", "llm_analysis"])
-def test_fallback_key_does_not_mask_missing_first_key(
-    container: Container, monkeypatch: pytest.MonkeyPatch, role: str
-) -> None:
+def test_fallback_key_makes_role_ready(container: Container, monkeypatch: pytest.MonkeyPatch, role: str) -> None:
     entries = getattr(container.models.roles, role)
     first_key = container.models.providers[entries[0].provider].key_env
     fallback_key = container.models.providers[entries[1].provider].key_env
     assert first_key != fallback_key
     monkeypatch.setenv(fallback_key, "present")
     with TestClient(create_app(container)) as client:
-        assert client.get("/api/v1/health").json()["roles"][role] == f"Missing {first_key}"
+        assert client.get("/api/v1/health").json()["roles"][role] == "ready"
+
+
+def test_no_key_names_every_missing_key_in_role_order(container: Container) -> None:
+    with TestClient(create_app(container)) as client:
+        roles = client.get("/api/v1/health").json()["roles"]
+    assert roles["llm"] == "Missing GROQ_API_KEY and GEMINI_API_KEY"
+    assert roles["llm_analysis"] == "Missing GEMINI_API_KEY and GROQ_API_KEY"
+
+
+def test_join_key_names() -> None:
+    from app.api.routes.health import join_key_names
+
+    assert join_key_names(["A"]) == "A"
+    assert join_key_names(["A", "B"]) == "A and B"
+    assert join_key_names(["A", "B", "C"]) == "A, B and C"

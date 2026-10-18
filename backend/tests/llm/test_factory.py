@@ -5,6 +5,7 @@ from typing import Any, cast
 import httpx2 as httpx
 import openai
 import pytest
+from langchain.agents.middleware import AgentMiddleware, ModelFallbackMiddleware
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import AIMessage, HumanMessage
 from langchain_core.tools import tool
@@ -14,7 +15,7 @@ from app.agents.prompts import load_prompt
 from app.agents.schemas import ChatReply
 from app.config import ConfigError
 from app.config.models_registry import LlmEntry, LocalModel, ModelsRegistry, Provider, Roles
-from app.llm.factory import build_agent, build_entry_agent, chat_middleware, chat_model
+from app.llm.factory import build_agent, build_entry_agent, chat_middleware, chat_model, role_models
 from app.llm.force_output import ForceOutputToolMiddleware
 from tests.agents.fake_models import FailingChatModel, ScriptedChatModel
 
@@ -127,6 +128,114 @@ def test_missing_gemini_key_config_error_names_env_var(monkeypatch: pytest.Monke
     with pytest.raises(ConfigError) as exc_info:
         chat_model(entry, registry)
     assert "GEMINI_API_KEY" in str(exc_info.value)
+
+
+def test_role_models_skips_entry_without_key_only_groq(monkeypatch: pytest.MonkeyPatch) -> None:
+    from langchain_openai import ChatOpenAI
+
+    registry = make_test_registry()
+    monkeypatch.setenv("GROQ_API_KEY", "sk-test-groq-key")
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+
+    models = role_models(registry, "llm")
+
+    assert len(models) == 1
+    assert isinstance(models[0], ChatOpenAI)
+
+
+def test_role_models_skips_entry_without_key_only_gemini(monkeypatch: pytest.MonkeyPatch) -> None:
+    from langchain_google_genai import ChatGoogleGenerativeAI
+
+    registry = make_test_registry()
+    monkeypatch.delenv("GROQ_API_KEY", raising=False)
+    monkeypatch.setenv("GEMINI_API_KEY", "test-gemini-key")
+
+    models = role_models(registry, "llm")
+
+    assert len(models) == 1
+    assert isinstance(models[0], ChatGoogleGenerativeAI)
+
+
+def test_role_models_without_any_key_names_every_missing_key_in_order(monkeypatch: pytest.MonkeyPatch) -> None:
+    registry = make_test_registry()
+    monkeypatch.delenv("GROQ_API_KEY", raising=False)
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+
+    with pytest.raises(ConfigError) as exc_info:
+        role_models(registry, "llm")
+    message = str(exc_info.value)
+    assert "GROQ_API_KEY" in message
+    assert "GEMINI_API_KEY" in message
+    assert message.index("GROQ_API_KEY") < message.index("GEMINI_API_KEY")
+
+
+def test_role_models_names_a_shared_provider_key_once(monkeypatch: pytest.MonkeyPatch) -> None:
+    base = make_test_registry()
+    groq_entry, gemini_entry = base.roles.llm
+    registry = base.model_copy(
+        update={"roles": base.roles.model_copy(update={"llm": [groq_entry, gemini_entry, groq_entry]})}
+    )
+    monkeypatch.delenv("GROQ_API_KEY", raising=False)
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+
+    with pytest.raises(ConfigError) as exc_info:
+        role_models(registry, "llm")
+    message = str(exc_info.value)
+    assert message.count("GROQ_API_KEY") == 1
+    assert message.count("GEMINI_API_KEY") == 1
+    assert message.index("GROQ_API_KEY") < message.index("GEMINI_API_KEY")
+
+
+def test_build_agent_with_one_keyed_model_has_no_fallback(monkeypatch: pytest.MonkeyPatch) -> None:
+    registry = make_test_registry()
+    monkeypatch.setenv("GROQ_API_KEY", "sk-test-groq-key")
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+    scripted = ScriptedChatModel(
+        messages=iter(
+            [
+                AIMessage(
+                    content="",
+                    tool_calls=[
+                        {
+                            "name": "ChatReply",
+                            "args": {"reply_type": "answer", "text": "Groq answered"},
+                            "id": "call_groq",
+                        }
+                    ],
+                )
+            ]
+        )
+    )
+    built: list[str] = []
+
+    def fake_chat_model(entry: LlmEntry, _registry: ModelsRegistry) -> BaseChatModel:
+        built.append(entry.provider)
+        return scripted
+
+    built_middleware: list[AgentMiddleware[Any, Any, Any]] = []
+
+    def spy_chat_middleware(models: list[BaseChatModel]) -> list[AgentMiddleware[Any, Any, Any]]:
+        result = chat_middleware(models)
+        built_middleware.extend(result)
+        return result
+
+    monkeypatch.setattr("app.llm.factory.chat_model", fake_chat_model)
+    monkeypatch.setattr("app.llm.factory.chat_middleware", spy_chat_middleware)
+
+    agent = build_agent(
+        registry,
+        "llm",
+        name="test_agent",
+        system_prompt="You are a helpful assistant.",
+        tools=[],
+        schema=ChatReply,
+    )
+
+    assert built == ["groq"]
+    assert built_middleware
+    assert not any(isinstance(m, ModelFallbackMiddleware) for m in built_middleware)
+    result = invoke_agent(agent, [HumanMessage(content="Hi")])
+    assert result.get("structured_response") == ChatReply(reply_type="answer", text="Groq answered")
 
 
 def test_gemini_request_conversion_thought_signature_and_any_tool_choice() -> None:
