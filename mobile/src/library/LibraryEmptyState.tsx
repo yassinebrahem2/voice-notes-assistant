@@ -12,7 +12,7 @@ import { radius, spacing, typeScale } from '../theme/tokens';
 
 export interface LibraryEmptyStateProps {
   kind: 'meeting' | 'note';
-  isNetworkError: boolean;
+  isNoServer: boolean;
   error: Error | null;
   isFilterActive: boolean;
   onClearFilters: () => void;
@@ -21,7 +21,7 @@ export interface LibraryEmptyStateProps {
 
 export function LibraryEmptyState({
   kind,
-  isNetworkError,
+  isNoServer,
   error,
   isFilterActive,
   onClearFilters,
@@ -29,7 +29,7 @@ export function LibraryEmptyState({
 }: LibraryEmptyStateProps) {
   const { tape } = useTheme<TapeTheme>();
 
-  if (isNetworkError) {
+  if (isNoServer) {
     return (
       <View style={styles.centerContainer}>
         <MaterialCommunityIcons

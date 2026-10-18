@@ -4,7 +4,7 @@ import React from 'react';
 
 import { apiFetch, type Schemas } from '../api/client';
 import { ApiError } from '../api/errors';
-import { useRecording } from './useRecording';
+import { recordingQuery, useRecording } from './useRecording';
 
 jest.mock('../api/client', () => ({
   apiFetch: jest.fn(),
@@ -43,6 +43,15 @@ describe('useRecording', () => {
   afterEach(() => {
     currentQueryClient?.clear();
     currentQueryClient = null;
+  });
+
+  test('recordingQuery produces query options with no-retry-on-404 rule', () => {
+    const q = recordingQuery('rec_abc');
+    expect(q.queryKey).toEqual(['recording', 'rec_abc']);
+    expect(typeof q.queryFn).toBe('function');
+    expect(q.retry(0, new ApiError(404, 'not_found', 'Not found'))).toBe(false);
+    expect(q.retry(0, new ApiError(500, 'internal_error', 'Fail'))).toBe(true);
+    expect(q.retry(2, new ApiError(500, 'internal_error', 'Fail'))).toBe(false);
   });
 
   test('fetches recording by id and returns data', async () => {

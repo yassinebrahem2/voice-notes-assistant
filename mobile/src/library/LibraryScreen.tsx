@@ -13,9 +13,12 @@ import Animated, {
   useReducedMotion,
 } from 'react-native-reanimated';
 
-import { ApiError, type Schemas } from '../api/client';
+import type { Schemas } from '../api/client';
+import { errorMessage } from '../api/errorMessages';
+import { showSnackbar } from '../components/snackbarStore';
 import type { PendingUpload } from '../recording/pending';
 import { usePendingUploads } from '../recording/usePendingUploads';
+import { useServerUrl } from '../settings/serverUrl';
 import { motion } from '../theme/motion';
 import type { TapeTheme } from '../theme/paperTheme';
 import { spacing } from '../theme/tokens';
@@ -27,6 +30,10 @@ import { PendingRow } from './PendingRow';
 import { RecordingRow } from './RecordingRow';
 import { useRecordings } from './useRecordings';
 import { useTags } from './useTags';
+
+export function listStaggerDelay(index: number): number {
+  return Math.min(index, 8) * motion.staggerMs;
+}
 
 export interface LibraryScreenProps {
   kind: 'meeting' | 'note';
@@ -40,6 +47,7 @@ export function LibraryScreen({ kind }: LibraryScreenProps) {
   const { tape } = useTheme<TapeTheme>();
   const reducedMotion = useReducedMotion();
   const listRef = useRef<FlatList<ListItem>>(null);
+  const { url: serverUrl } = useServerUrl();
 
   const initialFilters = useMemo(() => getTabFilters(kind), [kind]);
   const [search, setSearch] = useState(initialFilters.search);
@@ -87,8 +95,8 @@ export function LibraryScreen({ kind }: LibraryScreenProps) {
       try {
         await retryUpload(id);
         void refetch();
-      } catch {
-        // retry errors handled/kept in pending queue
+      } catch (error) {
+        showSnackbar(errorMessage(error));
       }
     },
     [retryUpload, refetch],
@@ -102,10 +110,7 @@ export function LibraryScreen({ kind }: LibraryScreenProps) {
 
   const isFilterActive = search.trim().length > 0 || selectedTagIds.length > 0;
 
-  const isNetworkError =
-    recordingsError instanceof ApiError &&
-    (recordingsError.code === 'network_error' ||
-      recordingsError.message.toLowerCase().includes('server url'));
+  const isNoServer = !serverUrl;
 
   const listItems = useMemo<ListItem[]>(() => {
     const pendingList: ListItem[] = filteredPending.map((item) => ({
@@ -166,7 +171,7 @@ export function LibraryScreen({ kind }: LibraryScreenProps) {
     return (
       <LibraryEmptyState
         kind={kind}
-        isNetworkError={isNetworkError}
+        isNoServer={isNoServer}
         error={recordingsError}
         isFilterActive={isFilterActive}
         onClearFilters={handleClearFilters}
@@ -177,7 +182,7 @@ export function LibraryScreen({ kind }: LibraryScreenProps) {
     listItems.length,
     isRecordingsLoading,
     kind,
-    isNetworkError,
+    isNoServer,
     recordingsError,
     isFilterActive,
     handleClearFilters,
@@ -202,7 +207,7 @@ export function LibraryScreen({ kind }: LibraryScreenProps) {
 
     return (
       <Animated.View
-        entering={FadeInDown.delay(index * motion.staggerMs).duration(
+        entering={FadeInDown.delay(listStaggerDelay(index)).duration(
           motion.durations.base,
         )}
         layout={LinearTransition.duration(motion.durations.base)}

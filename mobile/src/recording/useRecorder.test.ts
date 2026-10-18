@@ -303,4 +303,3 @@ describe('useRecorder', () => {
     unmount();
   });
 });
-

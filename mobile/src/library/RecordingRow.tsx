@@ -2,8 +2,9 @@ import { router } from 'expo-router';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useTheme } from 'react-native-paper';
 
-import { apiFetch, type Schemas } from '../api/client';
+import type { Schemas } from '../api/client';
 import { queryClient } from '../api/queryClient';
+import { recordingQuery } from '../detail/useRecording';
 import { fontFamilies } from '../theme/fonts';
 import { motion } from '../theme/motion';
 import type { TapeTheme } from '../theme/paperTheme';
@@ -23,22 +24,17 @@ export function RecordingRow({ recording, onPress }: RecordingRowProps) {
   const title = recording.title?.trim() || 'Untitled recording';
 
   const handlePressIn = () => {
-    void queryClient.prefetchQuery({
-      queryKey: ['recording', recording.id],
-      queryFn: () =>
-        apiFetch<Schemas['RecordingOut']>(`recordings/${recording.id}`),
-    });
+    void queryClient.prefetchQuery(recordingQuery(recording.id));
   };
 
   const handlePress = () => {
     if (onPress) {
       onPress(recording.id);
     } else {
-      router.push(
-        `/recording/${recording.id}` as unknown as Parameters<
-          typeof router.push
-        >[0],
-      );
+      router.push({
+        pathname: '/recording/[id]',
+        params: { id: recording.id },
+      });
     }
   };
 

@@ -53,8 +53,6 @@ export function PendingRow({ item, onRetry, onDelete }: PendingRowProps) {
     setRetrying(true);
     try {
       await onRetry(item.clientUploadId);
-    } catch {
-      // Failed retry keeps item in pending list
     } finally {
       setRetrying(false);
     }
