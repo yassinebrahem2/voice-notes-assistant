@@ -16,6 +16,7 @@ import type { TapeTheme } from '../theme/paperTheme';
 import { radius, spacing } from '../theme/tokens';
 import { useReduceMotion } from '../theme/useReduceMotion';
 import { AnswerText } from './AnswerText';
+import { MessageBubble } from './MessageBubble';
 import { MessageInput } from './MessageInput';
 import { ScopeBar } from './ScopeBar';
 import { isActive, type RunView } from './runMachine';
@@ -140,11 +141,23 @@ export function ChatScreen() {
           )}
           {chat.turns.map((turn, index) => (
             <View key={index} style={styles.turn}>
-              <Text variant="titleMedium">{turn.question}</Text>
-              <TurnResult
-                run={turn.run}
-                onRetry={() => void chat.retry(index)}
-              />
+              <MessageBubble
+                from="user"
+                accessibilityLabel={`You said: ${turn.question}`}
+              >
+                <Text
+                  variant="bodyMedium"
+                  style={{ color: tape.ink, flexShrink: 1 }}
+                >
+                  {turn.question}
+                </Text>
+              </MessageBubble>
+              <MessageBubble from="assistant">
+                <TurnResult
+                  run={turn.run}
+                  onRetry={() => void chat.retry(index)}
+                />
+              </MessageBubble>
             </View>
           ))}
         </ScrollView>
@@ -170,7 +183,7 @@ const styles = StyleSheet.create({
     paddingTop: spacing.md,
   },
   scope: { padding: spacing.md },
-  turns: { padding: spacing.md, gap: spacing.lg },
+  turns: { padding: spacing.md, gap: spacing.md },
   turn: { gap: spacing.sm },
   empty: { gap: spacing.md, alignItems: 'flex-start' },
   failure: { gap: spacing.sm, alignItems: 'flex-start' },

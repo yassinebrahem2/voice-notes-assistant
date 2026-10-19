@@ -278,3 +278,54 @@ test('polling stops once a recording is ready', async () => {
     jest.useRealTimers();
   }
 });
+
+test('a done turn renders user and assistant message bubbles with correct styles and accessibility', async () => {
+  session([
+    {
+      question: 'What was decided?',
+      run: { phase: 'done', steps: [], message },
+    },
+  ]);
+  await setup();
+
+  const userBubble = await screen.findByTestId('bubble-user');
+  expect(userBubble).toHaveStyle({
+    alignSelf: 'flex-end',
+    maxWidth: '80%',
+  });
+  expect(userBubble.props.accessibilityLabel).toBe(
+    'You said: What was decided?',
+  );
+
+  const assistantBubble = screen.getByTestId('bubble-assistant');
+  expect(assistantBubble).toHaveStyle({
+    alignSelf: 'flex-start',
+    maxWidth: '85%',
+  });
+});
+
+test("a running turn's status line sits inside the assistant bubble", async () => {
+  session([
+    {
+      question: 'Q?',
+      run: { phase: 'running', steps: ['Searching'] },
+    },
+  ]);
+  await setup();
+
+  const assistantBubble = await screen.findByTestId('bubble-assistant');
+  expect(within(assistantBubble).getByText('Searching')).toBeTruthy();
+});
+
+test("an interrupted turn's Retry button sits inside the assistant bubble and retries when pressed", async () => {
+  session([{ question: 'Q?', run: { phase: 'interrupted', steps: [] } }]);
+  await setup();
+
+  const assistantBubble = await screen.findByTestId('bubble-assistant');
+  const retryBtn = within(assistantBubble).getByRole('button', {
+    name: 'Retry',
+  });
+  expect(retryBtn).toBeTruthy();
+  await fireEvent.press(retryBtn);
+  expect(retry).toHaveBeenCalledWith(0);
+});
