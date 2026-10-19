@@ -50,7 +50,7 @@ export function ScopeBar({ scope, onScope, tags, tagIds, onTagIds }: Props) {
               ]}
             >
               <Text
-                variant="labelMedium"
+                variant="labelLarge"
                 style={{ color: selected ? tape.ink : tape.inkMuted }}
               >
                 {label}
@@ -92,7 +92,7 @@ const styles = StyleSheet.create({
   },
   segment: {
     flex: 1,
-    minHeight: 48,
+    minHeight: 40,
     alignItems: 'center',
     justifyContent: 'center',
   },

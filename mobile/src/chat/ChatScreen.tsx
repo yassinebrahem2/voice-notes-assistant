@@ -30,7 +30,15 @@ import { useChatSession } from './useChatSession';
 export const NO_RECORDING =
   'Chat answers from your recordings. Record something first.';
 
-function Pill({ label, onPress }: { label: string; onPress: () => void }) {
+function Pill({
+  label,
+  onPress,
+  size = 'md',
+}: {
+  label: string;
+  onPress: () => void;
+  size?: 'md' | 'sm';
+}) {
   const { tape } = useTheme<TapeTheme>();
   return (
     <Pressable
@@ -38,7 +46,11 @@ function Pill({ label, onPress }: { label: string; onPress: () => void }) {
       accessibilityLabel={label}
       onPress={onPress}
       android_ripple={{ color: tape.line }}
-      style={[styles.pill, { borderColor: tape.outline }]}
+      style={[
+        styles.pill,
+        size === 'sm' && styles.pillSm,
+        { borderColor: tape.outline },
+      ]}
     >
       <Text variant="labelMedium">{label}</Text>
     </Pressable>
@@ -99,7 +111,7 @@ export function ChatScreen() {
           <Text accessibilityRole="header" variant="headlineLarge">
             Chat
           </Text>
-          <Pill label="New chat" onPress={chat.newChat} />
+          <Pill label="New chat" onPress={chat.newChat} size="sm" />
         </View>
         <View style={styles.scope}>
           <ScopeBar
@@ -195,6 +207,9 @@ const styles = StyleSheet.create({
     borderWidth: StyleSheet.hairlineWidth,
     borderRadius: radius.card,
     overflow: 'hidden',
+  },
+  pillSm: {
+    minHeight: 32,
   },
   inputRow: {
     flexDirection: 'row',

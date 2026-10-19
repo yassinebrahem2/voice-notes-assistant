@@ -1,5 +1,11 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { act, fireEvent, render, screen } from '@testing-library/react-native';
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  within,
+} from '@testing-library/react-native';
 import { router } from 'expo-router';
 import { PaperProvider } from 'react-native-paper';
 
@@ -144,8 +150,22 @@ test('an interrupted run shows its label and a Retry that retries it', async () 
   session([{ question: 'Q?', run: { phase: 'interrupted', steps: [] } }]);
   await setup();
   expect(await screen.findByText('Interrupted')).toBeTruthy();
-  await fireEvent.press(screen.getByRole('button', { name: 'Retry' }));
+  const retryBtn = screen.getByRole('button', { name: 'Retry' });
+  expect(retryBtn).toHaveStyle({ minHeight: 48 });
+  await fireEvent.press(retryBtn);
   expect(retry).toHaveBeenCalledWith(0);
+});
+
+test('New chat button has 32 dp minHeight and scope radios have 40 dp minHeight with 16 sp text', async () => {
+  await setup();
+  expect(screen.getByRole('button', { name: 'New chat' })).toHaveStyle({
+    minHeight: 32,
+  });
+  for (const label of ['Notes', 'Meetings', 'Both']) {
+    const radio = screen.getByRole('radio', { name: label });
+    expect(radio).toHaveStyle({ minHeight: 40 });
+    expect(within(radio).getByText(label)).toHaveStyle({ fontSize: 16 });
+  }
 });
 
 test('failed and too slow runs show their message and Retry', async () => {
