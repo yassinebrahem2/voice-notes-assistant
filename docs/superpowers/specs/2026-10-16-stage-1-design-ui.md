@@ -42,24 +42,26 @@ Routes (expo-router): `(tabs)/meetings`, `(tabs)/notes`, `(tabs)/chat`, `(tabs)/
 - A citation to a deleted recording opens a "This recording was deleted" state.
 
 **Chat.**
-- Top: scope selector (Notes / Meetings / Both) and tag chips. Empty chat: 3–4 starter questions. Until a recording is ready: an explanation and a Record button.
+- Top: scope selector (Notes / Meetings / Both; 16 sp labels, 40 dp tall) and tag chips. Empty chat: 3–4 starter questions. Until a recording is ready: an explanation and a Record button.
 - While a run is going: a live status line from the run's steps ("Searching meetings… Found 6 passages… Writing answer…").
-- Answers show numbered citation chips (recording title + time); tapping one opens `recording/[id]?segment=…`. Fixed replies for greeting, help (with the starter questions), out-of-scope, and "Not in your recordings."
-- "New chat" starts a new chat. The current chat survives switching tabs while the app is open.
+- The conversation is shown as message bubbles: the user's questions on the right, the assistant's replies (answers, fixed replies, the live status line, failures with Retry) on the left. The user's text is shown as typed; the assistant's text is rendered as Markdown (paragraphs, bold, italic, inline code, bullet and numbered lists, headings; anything else as plain text, never raw markup).
+- Answers cite inline: each citation marker in the answer text is a small tappable time link (`mm:ss`, monospace, signal colour); tapping it opens `recording/[id]?segment=…`. No chips under the answer. Fixed replies for greeting, help (with the starter questions), out-of-scope, and "Not in your recordings."
+- The message input keeps its text vertically centred and grows one line at a time up to 5 lines, then scrolls inside itself.
+- "New chat" (32 dp tall) starts a new chat. The current chat survives switching tabs while the app is open.
 
 **Settings.** Server URL with Test connection (reports unreachable / not HTTPS / not this server), theme (System / Light / Dark), readiness per role from `/health` (e.g. "Speech: fake (dev)", missing keys), app name and version from config.
 
-**Everywhere.** "Can't reach the server" banner with a Settings link; skeletons while loading; all touch targets ≥ 48 dp with ripple feedback.
+**Everywhere.** "Can't reach the server" banner with a Settings link; skeletons while loading; all touch targets ≥ 48 dp with ripple feedback, except filter tag chips and speaker chips (32 dp), the chat scope selector (40 dp), the "New chat" button (32 dp) and inline citation links (text height). Each of these exceptions is touched exactly where it is drawn: no invisible touch zone larger than the control.
 
 ## 4. Visual direction: "Tape"
-A studio instrument, not a chatbot. Typography-led, one saturated colour, monospace numbers.
+A studio instrument, not a chatbot (the Chat tab's message bubbles are the one deliberate exception). Typography-led, one saturated colour, monospace numbers.
 - Tokens (semantic, both themes from the same names):
   - dark: bg `#121110`, surface `#1C1A18`, raised `#26231F`, ink `#F2EDE4`, ink-muted `#A39B90`, line `#34302B` (decorative only), outline `#6E665C`, signal `#FF4D2E`, on-signal `#121110`.
   - light: bg `#F6F3EE`, surface `#FFFFFF`, raised `#EDE8E0`, ink `#161412`, ink-muted `#6B645B`, line `#E3DDD3` (decorative only), outline `#8C8378`, signal `#C4351A`, on-signal `#FFFFFF`.
   - speaker hues, dark: clay `#D98A6C`, sage `#8FB394`, slate `#8EA4C8`, ochre `#D4B05E`, plum `#C495C0`, teal `#6FB8B0`; light: `#A4532F`, `#48724F`, `#4A6694`, `#8A6A12`, `#87507F`, `#2F7A72`.
   - Contrast checked with a WCAG script: all text pairs ≥ 4.5:1 on bg and surface; outlines and speaker hues ≥ 3:1 (speaker hues ≥ 4.5:1, so they can colour names).
 - Type: IBM Plex Sans (400, 600) for UI; IBM Plex Mono (500) for timer, timestamps, durations, counts; at most 4 sizes. Loaded with `@expo-google-fonts` packages and expo-font.
-- Shape: radius 10 on cards and sheets; full round only for the record disc and chips; hairlines instead of shadows; 8 dp grid.
+- Shape: radius 10 on cards, sheets and chat bubbles; radius 6 on chips (filter tags, speakers); full round only for the record disc and the tag chips under a recording's title; hairlines instead of shadows; 8 dp grid.
 - Icons: MaterialCommunityIcons outline set (bundled with Paper).
 - React Native Paper 5 with a custom MD3 theme built from the tokens, used for dialogs, menus, snackbars and inputs. Custom components: tab bar, record disc and fan-out, recorder, waveform, transcript, step timeline, player.
 - Never: gradients, glassmorphism, sparkle icons for AI, purple/blue defaults, emoji, pill-everything, marketing copy. Plain words: "Record", "Ask", "Summary".
