@@ -2,7 +2,7 @@
 
 > **For agentic workers:** implement this plan task by task as described in `docs/implementing-plan-tasks.md` (fresh implementer, fresh reviewer, fix loop per task); follow `AGENTS.md`. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-> **Status:** draft, awaiting the lead's approval. Branch `plan/stage-2-n8n-mode`. Standalone plan (no stage-2 overview). Task 3 has no code dependency and goes first, so the lead can import and try the workflows while Tasks 1–2 are built.
+> **Status:** approved. Branch `plan/stage-2-n8n-mode`. Standalone plan (no stage-2 overview). Task 3 has no code dependency and goes first, so the lead can import and try the workflows while Tasks 1–2 are built.
 
 **Goal:** An add-on n8n mode (`AI_BACKEND=n8n`) in which analysis, embedding and the Chat agent run as n8n workflows with Gemini, while builtin mode (the default) stays exactly as it is.
 
