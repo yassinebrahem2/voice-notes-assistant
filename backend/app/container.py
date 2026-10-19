@@ -16,6 +16,7 @@ from app.speech.real import RealAsr, RealDiarizer
 if TYPE_CHECKING:
     # The worker imports this module, so a runtime import would be circular.
     from app.chats.runs import ChatRuns
+    from app.n8n.wiring import N8nParts
     from app.processing.worker import Worker
 
 
@@ -32,6 +33,7 @@ class Container:
     analyzer: Analyzer
     worker: "Worker | None" = None
     chat_runs: "ChatRuns | None" = None
+    n8n: "N8nParts | None" = None
 
 
 def build_container(settings: Settings) -> Container:
@@ -45,21 +47,43 @@ def build_container(settings: Settings) -> Container:
         asr, diarizer = RealAsr(models, settings), RealDiarizer(models, settings)
     else:
         asr, diarizer = FakeAsr(), FakeDiarizer()
-    embedder = FastEmbedEmbedder(models.roles.embedder.model, settings.model_cache_dir)
-    analyzer = SummarizerAnalyzer(models)
-    container = Container(
-        settings,
-        app_config,
-        models,
-        settings.data_dir / "app.db",
-        settings.speech_backend,
-        asr,
-        diarizer,
-        embedder,
-        analyzer,
-    )
-    from app.agents.chat_graph import build_chat_graph
-    from app.chats.runs import ChatRuns
 
-    container.chat_runs = ChatRuns(container, build_chat_graph)
-    return container
+    if settings.ai_backend == "n8n":
+        from app.chats.runs import ChatRuns
+        from app.n8n.chat_graph import build_n8n_chat_graph
+        from app.n8n.wiring import build_n8n_parts
+
+        n8n_parts = build_n8n_parts(models)
+        container = Container(
+            settings,
+            app_config,
+            models,
+            settings.data_dir / "app.db",
+            settings.speech_backend,
+            asr,
+            diarizer,
+            n8n_parts.embedder,
+            n8n_parts.analyzer,
+            n8n=n8n_parts,
+        )
+        container.chat_runs = ChatRuns(container, build_n8n_chat_graph)
+        return container
+    else:
+        embedder = FastEmbedEmbedder(models.roles.embedder.model, settings.model_cache_dir)
+        analyzer = SummarizerAnalyzer(models)
+        container = Container(
+            settings,
+            app_config,
+            models,
+            settings.data_dir / "app.db",
+            settings.speech_backend,
+            asr,
+            diarizer,
+            embedder,
+            analyzer,
+        )
+        from app.agents.chat_graph import build_chat_graph
+        from app.chats.runs import ChatRuns
+
+        container.chat_runs = ChatRuns(container, build_chat_graph)
+        return container
