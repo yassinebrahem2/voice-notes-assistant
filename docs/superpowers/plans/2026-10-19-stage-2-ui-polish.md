@@ -2,7 +2,7 @@
 
 > **For agentic workers:** implement this plan task by task as described in `docs/implementing-plan-tasks.md` (fresh implementer, fresh reviewer, fix loop per task); follow `AGENTS.md`. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-> **Status:** draft, awaiting the lead's approval. Branch `plan/stage-2-ui-polish`, plan issue to be opened after approval. Fixes Bug #86.
+> **Status:** approved. Branch `plan/stage-2-ui-polish`, plan issue #87 (tasks #88–#93). Fixes Bug #86.
 
 **Goal:** Slimmer, less rounded filter and speaker chips; a tighter Chat header; a chat input that stays centred and grows; message bubbles; inline citation links; Markdown in assistant replies.
 
