@@ -33,6 +33,7 @@ Anything not listed here is unknown.
 - [USER] LLMs are always hosted (free options), never self-hosted. Embedders may run on the laptop or be hosted.
 - [USER] Light models.
 - [USER] No automation platform. Everything is code.
+- [USER] n8n mode (2026-10-19): a course requirement asks for n8n, so an add-on mode (`AI_BACKEND=n8n`, off by default) runs analysis, embedding and the Chat agent as n8n workflows with Gemini, for the demo. The app itself is unchanged. Spec: `docs/superpowers/specs/2026-10-18-n8n-mode-design.md`.
 - [USER] The transcription and diarization approach comes from `yassinebrahem2/live-debate-analysis` (faster-whisper + pyannote `speaker-diarization-community-1`, batch over files, benchmarked on a Windows laptop with a 6 GB RTX 4050).
 - [BRIEF] Transcription, tagging and retrieval are deterministic workflows, not agents. Only the reasoning parts are agents.
 - [BRIEF] RAG: transcripts are chunked, embedded and stored in a vector store; questions retrieve relevant chunks first.
