@@ -46,7 +46,7 @@ export const spacing = {
   xl: 32,
   xxl: 48,
 } as const;
-export const radius = { card: 10, round: 999 } as const;
+export const radius = { card: 10, round: 999, chip: 6 } as const;
 export const typeScale = {
   small: 12,
   body: 16,

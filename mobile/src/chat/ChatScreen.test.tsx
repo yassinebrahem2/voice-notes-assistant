@@ -1,5 +1,11 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { act, fireEvent, render, screen } from '@testing-library/react-native';
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  within,
+} from '@testing-library/react-native';
 import { router } from 'expo-router';
 import { PaperProvider } from 'react-native-paper';
 
@@ -115,14 +121,61 @@ test('without a ready recording it asks to record first', async () => {
   expect(openFanOut).toHaveBeenCalledTimes(1);
 });
 
-test('a citation chip opens the recording at its segment', async () => {
+test('a citation link opens the recording at its segment', async () => {
   session([{ question: 'Q?', run: { phase: 'done', steps: [], message } }]);
   await setup();
   expect(await screen.findByText('Q?')).toBeTruthy();
+  expect(await screen.findByText('We chose Postgres 01:23.')).toBeTruthy();
+  expect(screen.queryByText('[1]')).toBeNull();
+  expect(screen.queryByText('Standup · 01:23')).toBeNull();
   await fireEvent.press(screen.getByLabelText('Open Standup · 01:23'));
   expect(router.push).toHaveBeenCalledWith({
     pathname: '/recording/[id]',
     params: { id: 'rec_1', segment: 'seg_9' },
+  });
+});
+
+test('adjacent citations are joined by a dot and each links to its segment', async () => {
+  const multiCitationMessage: Schemas['MessageOut'] = {
+    id: 'msg_2',
+    role: 'assistant',
+    reply_type: 'answer',
+    text: 'A [1][2].',
+    created_at: '',
+    citations: [
+      {
+        n: 1,
+        recording_id: 'rec_1',
+        recording_title: 'Standup',
+        segment_id: 'seg_9',
+        start_ms: 83_000,
+      },
+      {
+        n: 2,
+        recording_id: 'rec_2',
+        recording_title: 'Planning',
+        segment_id: 'seg_10',
+        start_ms: 296_000,
+      },
+    ],
+  };
+  session([
+    {
+      question: 'Q?',
+      run: { phase: 'done', steps: [], message: multiCitationMessage },
+    },
+  ]);
+  await setup();
+  expect(await screen.findByText('A 01:23 · 04:56.')).toBeTruthy();
+  await fireEvent.press(screen.getByLabelText('Open Standup · 01:23'));
+  expect(router.push).toHaveBeenCalledWith({
+    pathname: '/recording/[id]',
+    params: { id: 'rec_1', segment: 'seg_9' },
+  });
+  await fireEvent.press(screen.getByLabelText('Open Planning · 04:56'));
+  expect(router.push).toHaveBeenCalledWith({
+    pathname: '/recording/[id]',
+    params: { id: 'rec_2', segment: 'seg_10' },
   });
 });
 
@@ -144,8 +197,22 @@ test('an interrupted run shows its label and a Retry that retries it', async () 
   session([{ question: 'Q?', run: { phase: 'interrupted', steps: [] } }]);
   await setup();
   expect(await screen.findByText('Interrupted')).toBeTruthy();
-  await fireEvent.press(screen.getByRole('button', { name: 'Retry' }));
+  const retryBtn = screen.getByRole('button', { name: 'Retry' });
+  expect(retryBtn).toHaveStyle({ minHeight: 48 });
+  await fireEvent.press(retryBtn);
   expect(retry).toHaveBeenCalledWith(0);
+});
+
+test('New chat button has 32 dp minHeight and scope radios have 40 dp minHeight with 16 sp text', async () => {
+  await setup();
+  expect(screen.getByRole('button', { name: 'New chat' })).toHaveStyle({
+    minHeight: 32,
+  });
+  for (const label of ['Notes', 'Meetings', 'Both']) {
+    const radio = screen.getByRole('radio', { name: label });
+    expect(radio).toHaveStyle({ minHeight: 40 });
+    expect(within(radio).getByText(label)).toHaveStyle({ fontSize: 16 });
+  }
 });
 
 test('failed and too slow runs show their message and Retry', async () => {
@@ -257,4 +324,55 @@ test('polling stops once a recording is ready', async () => {
   } finally {
     jest.useRealTimers();
   }
+});
+
+test('a done turn renders user and assistant message bubbles with correct styles and accessibility', async () => {
+  session([
+    {
+      question: 'What was decided?',
+      run: { phase: 'done', steps: [], message },
+    },
+  ]);
+  await setup();
+
+  const userBubble = await screen.findByTestId('bubble-user');
+  expect(userBubble).toHaveStyle({
+    alignSelf: 'flex-end',
+    maxWidth: '80%',
+  });
+  expect(userBubble.props.accessibilityLabel).toBe(
+    'You said: What was decided?',
+  );
+
+  const assistantBubble = screen.getByTestId('bubble-assistant');
+  expect(assistantBubble).toHaveStyle({
+    alignSelf: 'flex-start',
+    maxWidth: '85%',
+  });
+});
+
+test("a running turn's status line sits inside the assistant bubble", async () => {
+  session([
+    {
+      question: 'Q?',
+      run: { phase: 'running', steps: ['Searching'] },
+    },
+  ]);
+  await setup();
+
+  const assistantBubble = await screen.findByTestId('bubble-assistant');
+  expect(within(assistantBubble).getByText('Searching')).toBeTruthy();
+});
+
+test("an interrupted turn's Retry button sits inside the assistant bubble and retries when pressed", async () => {
+  session([{ question: 'Q?', run: { phase: 'interrupted', steps: [] } }]);
+  await setup();
+
+  const assistantBubble = await screen.findByTestId('bubble-assistant');
+  const retryBtn = within(assistantBubble).getByRole('button', {
+    name: 'Retry',
+  });
+  expect(retryBtn).toBeTruthy();
+  await fireEvent.press(retryBtn);
+  expect(retry).toHaveBeenCalledWith(0);
 });

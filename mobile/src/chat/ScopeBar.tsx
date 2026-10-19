@@ -2,6 +2,7 @@ import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { Text, useTheme } from 'react-native-paper';
 
 import type { Schemas } from '../api/client';
+import { Chip } from '../components/Chip';
 import type { TapeTheme } from '../theme/paperTheme';
 import { radius, spacing } from '../theme/tokens';
 
@@ -49,7 +50,7 @@ export function ScopeBar({ scope, onScope, tags, tagIds, onTagIds }: Props) {
               ]}
             >
               <Text
-                variant="labelMedium"
+                variant="labelLarge"
                 style={{ color: selected ? tape.ink : tape.inkMuted }}
               >
                 {label}
@@ -64,26 +65,17 @@ export function ScopeBar({ scope, onScope, tags, tagIds, onTagIds }: Props) {
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={styles.tags}
         >
-          {tags.map((tag) => {
-            const selected = tagIds.includes(tag.id);
-            return (
-              <Pressable
-                key={tag.id}
-                accessibilityRole="checkbox"
-                accessibilityLabel={`Tag ${tag.name}`}
-                accessibilityState={{ checked: selected }}
-                onPress={() => toggle(tag.id)}
-                android_ripple={{ color: tape.line }}
-                style={[
-                  styles.tag,
-                  { borderColor: selected ? tape.ink : tape.line },
-                  selected && { backgroundColor: tape.raised },
-                ]}
-              >
-                <Text variant="labelMedium">{tag.name}</Text>
-              </Pressable>
-            );
-          })}
+          {tags.map((tag) => (
+            <Chip
+              key={tag.id}
+              label={tag.name}
+              onPress={() => toggle(tag.id)}
+              accessibilityRole="checkbox"
+              accessibilityLabel={`Tag ${tag.name}`}
+              selected={tagIds.includes(tag.id)}
+              selectedVariant="outline"
+            />
+          ))}
         </ScrollView>
       )}
     </View>
@@ -100,17 +92,9 @@ const styles = StyleSheet.create({
   },
   segment: {
     flex: 1,
-    minHeight: 48,
+    minHeight: 40,
     alignItems: 'center',
     justifyContent: 'center',
   },
   tags: { gap: spacing.sm },
-  tag: {
-    minHeight: 48,
-    justifyContent: 'center',
-    paddingHorizontal: spacing.md,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderRadius: radius.round,
-    overflow: 'hidden',
-  },
 });

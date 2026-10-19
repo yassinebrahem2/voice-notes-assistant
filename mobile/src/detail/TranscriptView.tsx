@@ -6,6 +6,7 @@ import { useTheme } from 'react-native-paper';
 import { useReducedMotion } from 'react-native-reanimated';
 
 import type { Schemas } from '../api/client';
+import { Chip } from '../components/Chip';
 import { formatDuration } from '../format';
 import { fontFamilies } from '../theme/fonts';
 import type { TapeTheme } from '../theme/paperTheme';
@@ -94,27 +95,20 @@ export function TranscriptView({
             const name = spk.name?.trim() || spk.display_name.trim();
 
             return (
-              <Pressable
+              <Chip
                 key={spk.id}
+                label={name}
+                onPress={() => setSelectedSpeaker(spk)}
                 accessibilityRole="button"
                 accessibilityLabel={`Rename speaker ${name}`}
-                onPress={() => setSelectedSpeaker(spk)}
-                android_ripple={{ color: tape.line }}
-                style={[
-                  styles.speakerChip,
-                  { backgroundColor: tape.surface, borderColor: tape.line },
-                ]}
-              >
-                <View style={[styles.speakerDot, { backgroundColor: color }]} />
-                <Text
-                  style={[
-                    styles.speakerChipText,
-                    { color: tape.ink, fontFamily: fontFamilies.regular },
-                  ]}
-                >
-                  {name}
-                </Text>
-              </Pressable>
+                selected={undefined}
+                selectedVariant="signal"
+                leading={
+                  <View
+                    style={[styles.speakerDot, { backgroundColor: color }]}
+                  />
+                }
+              />
             );
           })}
         </ScrollView>
@@ -290,7 +284,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   speakerChipsScrollView: {
-    maxHeight: 52,
+    flexGrow: 0,
     marginBottom: spacing.md,
   },
   speakerChipsRow: {
@@ -299,22 +293,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 2,
     alignItems: 'center',
   },
-  speakerChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-    paddingHorizontal: spacing.md,
-    height: 48,
-    borderRadius: radius.round,
-    borderWidth: 1,
-  },
   speakerDot: {
     width: 10,
     height: 10,
     borderRadius: radius.round,
-  },
-  speakerChipText: {
-    fontSize: typeScale.small,
   },
   turnsContainer: {
     gap: spacing.lg,

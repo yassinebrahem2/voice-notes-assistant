@@ -1,4 +1,3 @@
-import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import { useRef, useState } from 'react';
 import {
   KeyboardAvoidingView,
@@ -7,18 +6,18 @@ import {
   ScrollView,
   type ScrollViewInstance,
   StyleSheet,
-  TextInput,
   View,
 } from 'react-native';
 import { Text, useTheme } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { openFanOut } from '../recording/fanOutStore';
-import { fontFamilies } from '../theme/fonts';
 import type { TapeTheme } from '../theme/paperTheme';
-import { radius, spacing, typeScale } from '../theme/tokens';
+import { radius, spacing } from '../theme/tokens';
 import { useReduceMotion } from '../theme/useReduceMotion';
 import { AnswerText } from './AnswerText';
+import { MessageBubble } from './MessageBubble';
+import { MessageInput } from './MessageInput';
 import { ScopeBar } from './ScopeBar';
 import { isActive, type RunView } from './runMachine';
 import { Starters } from './Starters';
@@ -30,7 +29,15 @@ import { useChatSession } from './useChatSession';
 export const NO_RECORDING =
   'Chat answers from your recordings. Record something first.';
 
-function Pill({ label, onPress }: { label: string; onPress: () => void }) {
+function Pill({
+  label,
+  onPress,
+  size = 'md',
+}: {
+  label: string;
+  onPress: () => void;
+  size?: 'md' | 'sm';
+}) {
   const { tape } = useTheme<TapeTheme>();
   return (
     <Pressable
@@ -38,7 +45,11 @@ function Pill({ label, onPress }: { label: string; onPress: () => void }) {
       accessibilityLabel={label}
       onPress={onPress}
       android_ripple={{ color: tape.line }}
-      style={[styles.pill, { borderColor: tape.outline }]}
+      style={[
+        styles.pill,
+        size === 'sm' && styles.pillSm,
+        { borderColor: tape.outline },
+      ]}
     >
       <Text variant="labelMedium">{label}</Text>
     </Pressable>
@@ -99,7 +110,7 @@ export function ChatScreen() {
           <Text accessibilityRole="header" variant="headlineLarge">
             Chat
           </Text>
-          <Pill label="New chat" onPress={chat.newChat} />
+          <Pill label="New chat" onPress={chat.newChat} size="sm" />
         </View>
         <View style={styles.scope}>
           <ScopeBar
@@ -130,44 +141,32 @@ export function ChatScreen() {
           )}
           {chat.turns.map((turn, index) => (
             <View key={index} style={styles.turn}>
-              <Text variant="titleMedium">{turn.question}</Text>
-              <TurnResult
-                run={turn.run}
-                onRetry={() => void chat.retry(index)}
-              />
+              <MessageBubble
+                from="user"
+                accessibilityLabel={`You said: ${turn.question}`}
+              >
+                <Text
+                  variant="bodyMedium"
+                  style={{ color: tape.ink, flexShrink: 1 }}
+                >
+                  {turn.question}
+                </Text>
+              </MessageBubble>
+              <MessageBubble from="assistant">
+                <TurnResult
+                  run={turn.run}
+                  onRetry={() => void chat.retry(index)}
+                />
+              </MessageBubble>
             </View>
           ))}
         </ScrollView>
-        <View style={[styles.inputRow, { borderTopColor: tape.line }]}>
-          <TextInput
-            accessibilityLabel="Message"
-            value={draft}
-            onChangeText={setDraft}
-            placeholder="Ask about your recordings"
-            placeholderTextColor={tape.inkMuted}
-            multiline
-            style={[styles.input, { color: tape.ink, borderColor: tape.line }]}
-          />
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Send"
-            accessibilityState={{ disabled: !canSend }}
-            disabled={!canSend}
-            onPress={send}
-            android_ripple={{ color: tape.onSignal }}
-            style={[
-              styles.send,
-              { backgroundColor: canSend ? tape.signal : tape.raised },
-            ]}
-          >
-            <MaterialCommunityIcons
-              name="arrow-up"
-              size={24}
-              color={canSend ? tape.onSignal : tape.inkMuted}
-              accessible={false}
-            />
-          </Pressable>
-        </View>
+        <MessageInput
+          value={draft}
+          onChangeText={setDraft}
+          onSend={send}
+          canSend={canSend}
+        />
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
@@ -184,7 +183,7 @@ const styles = StyleSheet.create({
     paddingTop: spacing.md,
   },
   scope: { padding: spacing.md },
-  turns: { padding: spacing.md, gap: spacing.lg },
+  turns: { padding: spacing.md, gap: spacing.md },
   turn: { gap: spacing.sm },
   empty: { gap: spacing.md, alignItems: 'flex-start' },
   failure: { gap: spacing.sm, alignItems: 'flex-start' },
@@ -196,29 +195,7 @@ const styles = StyleSheet.create({
     borderRadius: radius.card,
     overflow: 'hidden',
   },
-  inputRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-    gap: spacing.sm,
-    padding: spacing.md,
-    borderTopWidth: StyleSheet.hairlineWidth,
-  },
-  input: {
-    flex: 1,
-    minHeight: 48,
-    maxHeight: 120,
-    paddingHorizontal: spacing.md,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderRadius: radius.card,
-    fontFamily: fontFamilies.regular,
-    fontSize: typeScale.body,
-  },
-  send: {
-    width: 48,
-    height: 48,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: radius.round,
-    overflow: 'hidden',
+  pillSm: {
+    minHeight: 32,
   },
 });
