@@ -17,6 +17,7 @@
         100,
         300
       ],
+      "webhookId": "9b1226b8-297b-4022-8700-1cbb43f2956c",
       "credentials": {
         "httpHeaderAuth": {
           "id": "",
@@ -30,7 +31,7 @@
         "text": "={{ $('Webhook').first().json.body.prompt }}",
         "hasOutputParser": true,
         "options": {
-          "systemMessage": "={{ $('Webhook').first().json.body.system_prompt }}",
+          "systemMessage": "={{ $('Webhook').first().json.body.system_prompt + '\\n\\nCRITICAL: When you are ready to respond to the user, you MUST call the format_final_json_response tool to provide your final answer with reply_type and text. Never reply with plain text.' }}",
           "maxIterations": 6
         }
       },
@@ -64,8 +65,8 @@
     },
     {
       "parameters": {
-        "schemaType": "fromJson",
-        "jsonSchema": "{\n  \"type\": \"object\",\n  \"title\": \"ChatReply\",\n  \"properties\": {\n    \"reply_type\": {\n      \"type\": \"string\",\n      \"title\": \"Reply Type\",\n      \"enum\": [\"answer\", \"greeting\", \"help\", \"out_of_scope\"]\n    },\n    \"text\": {\n      \"title\": \"Text\",\n      \"anyOf\": [{\"type\": \"string\"}, {\"type\": \"null\"}]\n    }\n  },\n  \"required\": [\"reply_type\", \"text\"]\n}"
+        "schemaType": "manual",
+        "inputSchema": "{\n  \"type\": \"object\",\n  \"title\": \"ChatReply\",\n  \"properties\": {\n    \"reply_type\": {\n      \"type\": \"string\",\n      \"title\": \"Reply Type\",\n      \"enum\": [\"answer\", \"greeting\", \"help\", \"out_of_scope\"]\n    },\n    \"text\": {\n      \"type\": \"string\",\n      \"title\": \"Text\"\n    }\n  },\n  \"required\": [\"reply_type\", \"text\"]\n}"
       },
       "id": "f6c0a2b3-3333-4000-8000-000000000004",
       "name": "Structured Output Parser",
@@ -114,7 +115,7 @@
         "genericAuthType": "httpHeaderAuth",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ { run_id: $('Webhook').first().json.body.run_id, text: $fromAI('text', 'Text search in title or analysis', 'string'), date_from: $fromAI('date_from', 'Earliest creation date (YYYY-MM-DD)', 'string'), date_to: $fromAI('date_to', 'Latest creation date (YYYY-MM-DD)', 'string'), tags: $fromAI('tags', 'Tag names or IDs to filter by', 'json') } }}",
+        "jsonBody": "={{ { run_id: $('Webhook').first().json.body.run_id, text: $fromAI('text', 'Text search in title or analysis', 'string', ''), date_from: $fromAI('date_from', 'Earliest creation date (YYYY-MM-DD)', 'string', ''), date_to: $fromAI('date_to', 'Latest creation date (YYYY-MM-DD)', 'string', ''), tags: $fromAI('tags', 'Optional comma-separated tag names or IDs to filter by', 'string', '') } }}",
         "options": {}
       },
       "id": "f6c0a2b3-3333-4000-8000-000000000006",
@@ -142,7 +143,7 @@
         "genericAuthType": "httpHeaderAuth",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ { run_id: $('Webhook').first().json.body.run_id, sources: $fromAI('sources', 'List of source labels to summarize (e.g. [\"P1\", \"P2\"])', 'json'), focus: $fromAI('focus', 'Optional focus or topic for the summary', 'string') } }}",
+        "jsonBody": "={{ { run_id: $('Webhook').first().json.body.run_id, sources: $fromAI('sources', 'List of source labels to summarize (e.g. [\"P1\", \"P2\"])', 'json'), focus: $fromAI('focus', 'Optional focus or topic for the summary', 'string', '') } }}",
         "options": {}
       },
       "id": "f6c0a2b3-3333-4000-8000-000000000007",

@@ -2,6 +2,7 @@ from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.errors import ErrorOut, register_error_handlers
 from app.api.routes import chats, health, recordings, tags
@@ -37,6 +38,12 @@ def create_app(container: Container, *, start_worker: bool = False) -> FastAPI:
             "4XX": {"model": ErrorOut, "description": "Request error"},
             "5XX": {"model": ErrorOut, "description": "Server error"},
         },
+    )
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=["*"],
+        allow_methods=["*"],
+        allow_headers=["*"],
     )
     app.state.container = container
     register_error_handlers(app)

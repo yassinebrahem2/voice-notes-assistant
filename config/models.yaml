@@ -13,12 +13,12 @@ roles:
       max_request_tokens: 8192
       timeout_s: 30
     - provider: gemini
-      model: gemini-3.1-flash-lite
+      model: gemini-3.5-flash-lite
       max_request_tokens: 8192
       timeout_s: 30
   llm_analysis:
     - provider: gemini
-      model: gemini-3.1-flash-lite
+      model: gemini-3.5-flash-lite
       max_request_tokens: 32768
       timeout_s: 60
     - provider: groq

@@ -80,7 +80,8 @@ def test_n8n_chat_answer_cites_registered_source(
         run_data = _poll_run(client, chat_id, run_id)
         assert run_data["status"] == "done"
         steps: list[str] = run_data["steps"]
-        assert any("Asking n8n…" in s for s in steps)
+        assert "Writing answer…" in steps
+        assert not any("n8n" in s.lower() for s in steps)
 
         msg = run_data["message"]
         assert msg is not None

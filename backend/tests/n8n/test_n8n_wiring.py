@@ -1,3 +1,4 @@
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -113,11 +114,13 @@ def test_builtin_mode_leaves_no_n8n_in_sys_modules(tmp_path: Path) -> None:
         "assert not mods, f'Found n8n modules: {mods}';"
         "print('OK')"
     )
+    env = dict(os.environ, AI_BACKEND="builtin")
     result = subprocess.run(
         [sys.executable, "-c", code],
         capture_output=True,
         text=True,
         check=False,
+        env=env,
     )
     assert result.returncode == 0, f"Subprocess failed:\nstdout: {result.stdout}\nstderr: {result.stderr}"
     assert "OK" in result.stdout

@@ -28,7 +28,6 @@ def build_n8n_chat_graph(container: Container) -> CompiledStateGraph[Any, Any, A
     client = container.n8n.client
 
     async def n8n_agent(state: ChatState, runtime: Runtime[ChatContext]) -> dict[str, Any]:
-        runtime.stream_writer("Asking n8n…")
         run_id = register(runtime.context)
         try:
             base_prompt = load_prompt("orchestrator")
