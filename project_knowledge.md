@@ -1,4 +1,4 @@
-# Project Knowledge File: Voxa (working name)
+# Project Knowledge File: Audia
 
 Current state of the project, rewritten 2026-10-16. Sections: brief, decided, open, ideas, changed, files.
 Sources: [BRIEF] the brief (`project_context.md`). [USER] stated by the user. [AGREED] proposed by Claude and explicitly accepted by the user. [PROPOSED] ruled by the lead's Claude session, not yet confirmed by the user.
@@ -56,6 +56,7 @@ Anything not listed here is unknown.
 ### Models
 - [AGREED] One model configuration file, following the design (not the code) of `multimodal-rag-agent`'s registry, keys only in environment variables (details under Tech stack).
 - [USER] The app name lives in its own single config value.
+- [USER] 2026-10-19: the app is named Audia (replacing the working name Voxa), with a waveform logo: seven rounded bars, the left four orange (#F75F30), the right three warm grey (#7F786F), on a warm near-black (#191512). The icons live in `mobile/assets/`.
 
 ### Mobile
 - [USER] React Native. Android is the target (APK).
