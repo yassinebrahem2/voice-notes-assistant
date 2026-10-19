@@ -121,14 +121,61 @@ test('without a ready recording it asks to record first', async () => {
   expect(openFanOut).toHaveBeenCalledTimes(1);
 });
 
-test('a citation chip opens the recording at its segment', async () => {
+test('a citation link opens the recording at its segment', async () => {
   session([{ question: 'Q?', run: { phase: 'done', steps: [], message } }]);
   await setup();
   expect(await screen.findByText('Q?')).toBeTruthy();
+  expect(await screen.findByText('We chose Postgres 01:23.')).toBeTruthy();
+  expect(screen.queryByText('[1]')).toBeNull();
+  expect(screen.queryByText('Standup · 01:23')).toBeNull();
   await fireEvent.press(screen.getByLabelText('Open Standup · 01:23'));
   expect(router.push).toHaveBeenCalledWith({
     pathname: '/recording/[id]',
     params: { id: 'rec_1', segment: 'seg_9' },
+  });
+});
+
+test('adjacent citations are joined by a dot and each links to its segment', async () => {
+  const multiCitationMessage: Schemas['MessageOut'] = {
+    id: 'msg_2',
+    role: 'assistant',
+    reply_type: 'answer',
+    text: 'A [1][2].',
+    created_at: '',
+    citations: [
+      {
+        n: 1,
+        recording_id: 'rec_1',
+        recording_title: 'Standup',
+        segment_id: 'seg_9',
+        start_ms: 83_000,
+      },
+      {
+        n: 2,
+        recording_id: 'rec_2',
+        recording_title: 'Planning',
+        segment_id: 'seg_10',
+        start_ms: 296_000,
+      },
+    ],
+  };
+  session([
+    {
+      question: 'Q?',
+      run: { phase: 'done', steps: [], message: multiCitationMessage },
+    },
+  ]);
+  await setup();
+  expect(await screen.findByText('A 01:23 · 04:56.')).toBeTruthy();
+  await fireEvent.press(screen.getByLabelText('Open Standup · 01:23'));
+  expect(router.push).toHaveBeenCalledWith({
+    pathname: '/recording/[id]',
+    params: { id: 'rec_1', segment: 'seg_9' },
+  });
+  await fireEvent.press(screen.getByLabelText('Open Planning · 04:56'));
+  expect(router.push).toHaveBeenCalledWith({
+    pathname: '/recording/[id]',
+    params: { id: 'rec_2', segment: 'seg_10' },
   });
 });
 
