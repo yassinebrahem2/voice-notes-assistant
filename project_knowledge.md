@@ -5,7 +5,7 @@ Sources: [BRIEF] the brief (`project_context.md`). [USER] stated by the user. [A
 Anything not listed here is unknown.
 
 ## 1. Brief [BRIEF]
-- Title: Meeting & Voice Notes Assistant. Working name Voxa (placeholder, can be changed).
+- Title: Meeting & Voice Notes Assistant. The brief called it Voxa (placeholder); the app is now named Audia.
 - Goal: a mobile app that records audio from meetings, conversations, or a single person talking and brainstorming. Recordings are transcribed and saved. The user can tag them, ask questions about them in natural language, and get summaries of meetings and conversations.
 - Problem: spoken information (decisions, ideas, action items) gets lost because recordings are rarely re-listened to and transcripts are unorganized. The app makes that audio searchable and queryable.
 - Deadline: Tuesday 2026-10-20, a demo to the professor. [USER]
