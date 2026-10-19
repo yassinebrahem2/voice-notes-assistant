@@ -124,6 +124,39 @@ def test_unknown_label_rejected(
         assert msg["citations"] == []
 
 
+def test_n8n_chat_not_found_reply(
+    n8n_container: Container,
+    n8n_mock: N8nMockDispatcher,
+) -> None:
+    app = create_app(n8n_container)
+
+    def chat_handler(_request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json={"output": {"reply_type": "not_found", "text": "Nothing about war."}},
+        )
+
+    n8n_mock.chat_handler = chat_handler
+
+    with TestClient(app) as client:
+        create_res = client.post("/api/v1/chats")
+        chat_id = create_res.json()["id"]
+
+        ask_res = client.post(
+            f"/api/v1/chats/{chat_id}/messages",
+            json={"text": "Any mention of war?", "scope": "both"},
+        )
+        run_id = ask_res.json()["run_id"]
+
+        run_data = _poll_run(client, chat_id, run_id)
+        assert run_data["status"] == "done"
+        msg = run_data["message"]
+        assert msg is not None
+        assert msg["reply_type"] == "answer"
+        assert msg["text"] == "Nothing about war."
+        assert msg["citations"] == []
+
+
 def test_prompt_renders_history(
     n8n_container: Container,
     n8n_mock: N8nMockDispatcher,

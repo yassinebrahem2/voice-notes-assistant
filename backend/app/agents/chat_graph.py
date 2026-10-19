@@ -83,10 +83,10 @@ def build_chat_graph(container: Container) -> CompiledStateGraph[Any, Any, Any, 
         schema=ChatReply,
         context_schema=ChatContext,
         extra_middleware=[
-            ForceOutputToolMiddleware(from_turn=6),
+            ForceOutputToolMiddleware(from_turn=9),
             DynamicPromptMiddleware(),
-            ModelCallLimitMiddleware(run_limit=7, exit_behavior="end"),
-            ToolCallLimitMiddleware(run_limit=4),
+            ModelCallLimitMiddleware(run_limit=10, exit_behavior="end"),
+            ToolCallLimitMiddleware(run_limit=7),
         ],
     )
 

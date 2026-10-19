@@ -32,14 +32,24 @@ def check_citations(reply: ChatReply | None, registry: SourceRegistry) -> FinalR
     if reply is None:
         return FinalReply("answer", COULD_NOT_FINISH, [])
 
-    if reply.reply_type == "greeting":
-        return FinalReply("greeting", GREETING, [])
+    if reply.reply_type in ("not_found", "greeting", "help", "out_of_scope"):
+        raw_text = reply.text or ""
+        clean_text = re.sub(r"\[\s*([PRpr]\s*\d+)\s*\]", "", raw_text)
+        clean_text = re.sub(r"[ \t]+", " ", clean_text)
+        clean_text = re.sub(r" +([.,;!?])", r"\1", clean_text).strip()
 
-    if reply.reply_type == "help":
-        return FinalReply("help", HELP, [])
+        if not clean_text:
+            if reply.reply_type == "not_found":
+                clean_text = NOT_FOUND
+            elif reply.reply_type == "greeting":
+                clean_text = GREETING
+            elif reply.reply_type == "help":
+                clean_text = HELP
+            else:
+                clean_text = OUT_OF_SCOPE
 
-    if reply.reply_type == "out_of_scope":
-        return FinalReply("out_of_scope", OUT_OF_SCOPE, [])
+        target_reply_type = "answer" if reply.reply_type == "not_found" else reply.reply_type
+        return FinalReply(target_reply_type, clean_text, [])
 
     if reply.reply_type == "answer":
         if not reply.text or not reply.text.strip():

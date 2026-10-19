@@ -126,7 +126,7 @@ def search_transcripts(
         runtime.stream_writer(f"Found {len(hits)} passages")
 
         if not hits:
-            return "<sources>\n</sources>"
+            return "<sources>\n</sources>\nNo passages matched. Try broader or related terms."
 
         passages: list[str] = []
 

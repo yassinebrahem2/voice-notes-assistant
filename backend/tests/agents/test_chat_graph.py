@@ -16,21 +16,21 @@ from tests.agents.fake_models import ScriptedChatModel
 from tests.seed import seed_chunk, seed_recording
 
 
-def test_final_answer_forced_on_sixth_turn(container: Container, monkeypatch: pytest.MonkeyPatch) -> None:
-    # A model that calls search_transcripts on turns 1..5.
-    # On turn 6, ForceOutputToolMiddleware overrides tools=[] leaving only ChatReply.
+def test_final_answer_forced_on_ninth_turn(container: Container, monkeypatch: pytest.MonkeyPatch) -> None:
+    # A model that calls search_transcripts on turns 1..8.
+    # On turn 9, ForceOutputToolMiddleware overrides tools=[] leaving only ChatReply.
     messages = [
         AIMessage(
             content="",
             tool_calls=[{"name": "search_transcripts", "args": {"query": f"search {i}"}, "id": f"call_{i}"}],
         )
-        for i in range(1, 6)
+        for i in range(1, 9)
     ]
-    forced_reply = ChatReply(reply_type="answer", text="Final answer after 5 tool calls [P1]")
+    forced_reply = ChatReply(reply_type="answer", text="Final answer after 8 tool calls [P1]")
     messages.append(
         AIMessage(
             content="",
-            tool_calls=[{"name": "ChatReply", "args": forced_reply.model_dump(), "id": "call_6"}],
+            tool_calls=[{"name": "ChatReply", "args": forced_reply.model_dump(), "id": "call_9"}],
         )
     )
 
@@ -85,15 +85,136 @@ def test_final_answer_forced_on_sixth_turn(container: Container, monkeypatch: py
 
     asyncio.run(run())
 
-    # On call 6 (the 6th model invocation), bound tools must be exactly ChatReply and tool_choice == "any"
-    assert len(model.bindings) >= 6
-    call_6_binding = model.bindings[5]
-    assert call_6_binding["tool_names"] == ["ChatReply"]
-    assert call_6_binding["tool_choice"] == "any"
+    # On call 9 (the 9th model invocation), bound tools must be exactly ChatReply and tool_choice == "any"
+    assert len(model.bindings) >= 9
+    call_9_binding = model.bindings[8]
+    assert call_9_binding["tool_names"] == ["ChatReply"]
+    assert call_9_binding["tool_choice"] == "any"
 
     final = final_state.get("final")
     assert isinstance(final, FinalReply)
     assert final.reply_type == "answer"
+
+
+def test_model_call_limit_ends_at_ten_calls(container: Container, monkeypatch: pytest.MonkeyPatch) -> None:
+    # Model produces tool calls on each turn; run_limit=10 stops it after 10 calls
+    messages = [
+        AIMessage(
+            content="",
+            tool_calls=[{"name": "search_transcripts", "args": {"query": f"q{i}"}, "id": f"call_{i}"}],
+        )
+        for i in range(1, 15)
+    ]
+    model = ScriptedChatModel(messages=iter(messages))
+
+    def fake_role_models(_reg: object, _role: object) -> list[ScriptedChatModel]:
+        return [model]
+
+    monkeypatch.setattr("app.llm.factory.role_models", fake_role_models)
+
+    ctx = ChatContext(
+        db_path=container.db_path,
+        embedder=container.embedder,
+        settings=container.settings,
+        models=container.models,
+        scope="both",
+        tag_ids=[],
+        today=date(2026, 10, 17),
+        sources=SourceRegistry(),
+    )
+
+    graph = build_chat_graph(container)
+
+    final_state: dict[str, Any] = {}
+
+    async def run() -> None:
+        nonlocal final_state
+        stream = cast(Any, graph).astream(
+            {"messages": [HumanMessage(content="Hello")]},
+            context=ctx,
+            stream_mode=["values"],
+            subgraphs=True,
+        )
+        async for chunk in stream:
+            namespace, mode, payload = chunk
+            if namespace == () and mode == "values" and isinstance(payload, dict):
+                final_state = cast(dict[str, Any], payload)
+
+    asyncio.run(run())
+    assert len(model.bindings) == 10
+    messages = final_state.get("messages", [])
+    assert any("limit" in str(m.content).lower() for m in messages)
+
+
+def test_tool_call_limit_refuses_eighth_call(container: Container, monkeypatch: pytest.MonkeyPatch) -> None:
+    tool_calls = [{"name": "search_transcripts", "args": {"query": f"q{i}"}, "id": f"call_{i}"} for i in range(1, 9)]
+    messages = [
+        AIMessage(content="", tool_calls=tool_calls),
+        AIMessage(
+            content="",
+            tool_calls=[
+                {"name": "ChatReply", "args": {"reply_type": "answer", "text": "Done [P1]"}, "id": "call_final"}
+            ],
+        ),
+    ]
+    model = ScriptedChatModel(messages=iter(messages))
+
+    def fake_role_models(_reg: object, _role: object) -> list[ScriptedChatModel]:
+        return [model]
+
+    monkeypatch.setattr("app.llm.factory.role_models", fake_role_models)
+
+    conn = connect(container.db_path)
+    try:
+        rec_id = seed_recording(conn, kind="meeting", title="Sync")
+        seed_chunk(
+            conn,
+            rec_id,
+            first_idx=0,
+            last_idx=0,
+            text="Sync text",
+            vector=container.embedder.embed_query("q1"),
+        )
+    finally:
+        conn.close()
+
+    ctx = ChatContext(
+        db_path=container.db_path,
+        embedder=container.embedder,
+        settings=container.settings,
+        models=container.models,
+        scope="both",
+        tag_ids=[],
+        today=date(2026, 10, 17),
+        sources=SourceRegistry(),
+    )
+
+    graph = build_chat_graph(container)
+
+    final_state: dict[str, Any] = {}
+
+    async def run() -> None:
+        nonlocal final_state
+        stream = cast(Any, graph).astream(
+            {"messages": [HumanMessage(content="Search many")]},
+            context=ctx,
+            stream_mode=["values"],
+            subgraphs=True,
+        )
+        async for chunk in stream:
+            namespace, mode, payload = chunk
+            if namespace == () and mode == "values" and isinstance(payload, dict):
+                final_state = cast(dict[str, Any], payload)
+
+    asyncio.run(run())
+    messages = final_state.get("messages", [])
+    tool_messages = [m for m in messages if getattr(m, "type", None) == "tool"]
+    call_8_msg = next((m for m in tool_messages if getattr(m, "tool_call_id", None) == "call_8"), None)
+    assert call_8_msg is not None
+    assert "Tool call limit exceeded" in str(call_8_msg.content)
+    call_1_msg = next((m for m in tool_messages if getattr(m, "tool_call_id", None) == "call_1"), None)
+    assert call_1_msg is not None
+    assert "Tool call limit exceeded" not in str(call_1_msg.content)
 
 
 def test_graph_answer_with_citations(container: Container, monkeypatch: pytest.MonkeyPatch) -> None:
