@@ -40,6 +40,7 @@ Anything not listed here is unknown.
 - [BRIEF] Transcription, tagging and retrieval are deterministic workflows, not agents. Only the reasoning parts are agents.
 - [BRIEF] RAG: transcripts are chunked, embedded and stored in a vector store; questions retrieve relevant chunks first.
 - [USER] Agent design (stage 1 spec, section 2, approved 2026-10-16): an **Orchestrator** agent decides which tools to call (transcript search, recording lookup, summarize) and writes the cited answer; a deterministic citation check runs after it. The **Summarizer** is an agent too (its own prompt and structured output, called by the orchestrator and by processing); it makes one complete summary per recording during processing, which Chat reuses. Rejected: a fixed router pipeline, agent handoff swarms, and a summarizer that reads transcript parts on demand.
+- [USER] Chat agent tweaks (2026-10-19, both modes): the orchestrator rewords vague questions and searches again with related terms when a search finds little; more iterations (builtin: forced answer on turn 9, 10 model calls, 7 tool calls; n8n: 10 iterations); the model writes its own greeting, help, off-topic and `not_found` replies (no citation labels allowed); only `answer` still needs valid citations. Spec: `docs/superpowers/specs/2026-10-19-chat-agent-tweaks-design.md`. bge-m3 was considered and dropped.
 
 ### Data
 - [AGREED] Everything lives on the laptop: recordings, audio files, transcripts, tags, summaries, the vector index. The phone keeps only its settings (server URL).
