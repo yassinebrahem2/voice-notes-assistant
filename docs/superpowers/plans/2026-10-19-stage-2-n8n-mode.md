@@ -131,3 +131,53 @@ No dependency: it uses only the payload and route shapes this plan pins. Done fi
 
 ### After Task 3 (lead, on the laptop, not a task)
 Import the workflows, create and select credentials, activate, fix and export back; run `app.rag.calibrate` for `RETRIEVAL_MAX_DISTANCE`; do the manual check in spec §6.
+
+## Review fixes (PR #83)
+
+Lead review of PR #83 (head b519982). Backend code, tests and CI are sound; builtin mode is unchanged in behaviour (452 tests, ruff, pyright, `export-openapi --check` all pass). The n8n workflows were never loaded into n8n (Task 3 Step 2's scratch import was not reported), and reading the n8n 2.1.3 node source (`@n8n/n8n-nodes-langchain@2.1.3`, the version n8n 2.1.4 ships) shows two of them cannot work as written.
+
+### Task 4: Workflow and tool-argument fixes (blocks merge)
+No dependency.
+
+**Files:**
+- Modify: `n8n/workflows/analyze.json`, `n8n/workflows/chat.json`, `backend/app/n8n/routes.py`
+- Test: `backend/tests/n8n/test_n8n_routes.py`
+
+Findings:
+1. `analyze`: both Basic LLM Chain nodes (typeVersion 1.4) lack `"hasOutputParser": true`. In 1.4 the parameter defaults to `false`, and `getOptionalOutputParser` only reads the parser when it is `true` (`utils/output_parsers/N8nOutputParser.js`). So each chain returns `{text}`, `$json.output` is empty, and every recording ends `analysis_failed` in n8n mode.
+2. `chat`: the three tools use `@n8n/n8n-nodes-langchain.toolHttpRequest` 1.1, which is hidden ("Replaced by a `usableAsTool` version of the standalone HttpRequest node") and takes `{placeholder}` definitions, not `$fromAI`. The `$fromAI(...)` body values are not tool parameters for that node.
+3. Even with a node that supports `$fromAI`, every call is untyped (`$fromAI('k')` is a string) and has no description (the descriptions are commented out inside the expressions). The routes then reject the values. Checked on b519982:
+   - `SummarizeIn(sources="P1")` → "Input should be a valid list".
+   - `FindRecordingsIn(tags="")` → "Input should be a valid list".
+   - `SearchTranscriptsIn(k="")` → "unable to parse string as an integer".
+   - `FindRecordingsIn(date_to="")` is accepted as `""`, and `find_recordings`' SQL `substr(created_at, 1, 10) <= ''` then matches nothing.
+
+Steps:
+- [ ] **Step 1: Write failing route tests**:
+  - `""` for any optional field is treated as absent;
+  - `tags` and `sources` given as a comma-separated string or a JSON-array string become lists;
+  - `k` given as `""` or omitted becomes 8, and `"5"` becomes 5;
+  - `date_to=""` returns the same recordings as no `date_to`.
+- [ ] **Step 2: Implement the tolerance** in the body models of `app/n8n/routes.py` only (pydantic `field_validator(mode="before")`). The tools in `app/agents/tools.py` stay untouched.
+- [ ] **Step 3: Fix `analyze.json`.** Set `"hasOutputParser": true` on both chains.
+- [ ] **Step 4: Fix `chat.json`.** Replace the three tools with `n8n-nodes-base.httpRequestTool` (the HTTP Request node used as a tool, typeVersion 4.2). Keep the same URL, method and Header Auth credential, and send the body as JSON:
+  - `run_id` from `$('Webhook').first().json.body.run_id`;
+  - each model-filled argument as `$fromAI(name, description, type, default)`, with descriptions taken from `app/agents/tools.py`;
+  - types: `string` for `query`, `text`, `date_from`, `date_to` and `focus`; `number` for `k`, default 8; `json` for `tags` and `sources`.
+  - Give each tool node the description of its LangGraph tool.
+- [ ] **Step 5: Check the workflows in n8n 2.1.4.** Import the three files into a scratch n8n: `N8N_USER_FOLDER=<scratch> npx --yes n8n@2.1.4 import:workflow --input=<file>`. If that can't run here, say so in the task report. Either way, list in the report the laptop checks the lead must run: the three `Invoke-RestMethod` calls from `docs/setup.md`, and one Chat question that triggers a transcript search.
+- [ ] **Step 6: Run** `uv run pytest`, `uv run ruff check .`, `uv run ruff format --check .` and `uv run pyright`, and confirm they pass.
+- [ ] **Step 7: Update the PR #83 description.** Its "Not done, or done differently" section must state what this review found, and whether the scratch import ran.
+- [ ] **Step 8: Commit** with the message `fix(n8n): output parsers, typed tool arguments and tolerant callback bodies`.
+
+### Task 5: Small fixes (does not block merge)
+No dependency; may run with Task 4.
+
+**Files:**
+- Modify: `n8n/import.ps1`, `docs/setup.md`, `backend/app/container.py`
+
+- [ ] **Step 1: Fix `import.ps1`.** Check `$LASTEXITCODE` after every `docker` call, and stop with an error naming the file. Today it prints "All workflows imported successfully." even when an import fails.
+- [ ] **Step 2: Fix the export instructions in `docs/setup.md`.** `export:workflow --all --output=/tmp/workflows.json` writes one bundle inside the container. Replace it with one command per workflow, `docker exec n8n n8n export:workflow --id=<id> --output=/tmp/<name>.json`, followed by `docker cp n8n:/tmp/<name>.json n8n/workflows/<name>.json`.
+- [ ] **Step 3: Restore `container.py`'s builtin lines.** Put the `if settings.ai_backend == "n8n":` block first, ending in `return container`, and leave the original builtin lines after it, byte-identical to `main`. The diff of `container.py` against `main` must then show only added lines (plus the `TYPE_CHECKING` import and the `n8n` field).
+- [ ] **Step 4: Run** `uv run pytest`, `uv run ruff check .`, `uv run ruff format --check .` and `uv run pyright`, and confirm they pass.
+- [ ] **Step 5: Commit** with the message `fix(n8n): import script exit codes, export guide, untouched builtin wiring`.
