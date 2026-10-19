@@ -1,32 +1,16 @@
-import React from 'react';
-import { Text } from 'react-native-paper';
+import type React from 'react';
 
 import type { Schemas } from '../api/client';
-import { CitationLink } from './CitationLink';
-import { splitAnswer } from './citations';
+import { Markdown } from './Markdown';
 
-export function AnswerText({ message }: { message: Schemas['MessageOut'] }) {
+export function AnswerText({
+  message,
+}: {
+  message: Schemas['MessageOut'];
+}): React.JSX.Element {
   if (message.reply_type !== 'answer') {
-    return <Text variant="bodyMedium">{message.text}</Text>;
+    return <Markdown text={message.text} citations={[]} />;
   }
 
-  const parts = splitAnswer(message.text, message.citations);
-
-  return (
-    <Text variant="bodyMedium">
-      {parts.map((part, i) => {
-        if ('citation' in part) {
-          const prevPart = parts[i - 1];
-          const hasPrevCitation = prevPart && 'citation' in prevPart;
-          return (
-            <React.Fragment key={i}>
-              {hasPrevCitation ? ' · ' : null}
-              <CitationLink citation={part.citation} />
-            </React.Fragment>
-          );
-        }
-        return part.text;
-      })}
-    </Text>
-  );
+  return <Markdown text={message.text} citations={message.citations} />;
 }
