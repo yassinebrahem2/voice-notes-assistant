@@ -1,0 +1,314 @@
+{
+  "name": "analyze",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "analyze",
+        "responseMode": "responseNode",
+        "authentication": "headerAuth",
+        "options": {}
+      },
+      "id": "d4a8e0f1-1111-4000-8000-000000000001",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        100,
+        300
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "",
+          "name": "n8n shared secret"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict"
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.body.kind }}",
+                    "rightValue": "meeting",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict"
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.body.kind }}",
+                    "rightValue": "note",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            }
+          ]
+        }
+      },
+      "id": "d4a8e0f1-1111-4000-8000-000000000002",
+      "name": "Switch",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3,
+      "position": [
+        320,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $('Webhook').first().json.body.user_content }}",
+        "messages": {
+          "messageValues": [
+            {
+              "type": "system",
+              "message": "={{ $('Webhook').first().json.body.system_prompt }}"
+            }
+          ]
+        }
+      },
+      "id": "d4a8e0f1-1111-4000-8000-000000000003",
+      "name": "Meeting Chain",
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.4,
+      "position": [
+        580,
+        180
+      ]
+    },
+    {
+      "parameters": {
+        "modelName": "={{ $('Webhook').first().json.body.model }}"
+      },
+      "id": "d4a8e0f1-1111-4000-8000-000000000004",
+      "name": "Google Gemini Chat Model Meeting",
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1,
+      "position": [
+        580,
+        360
+      ],
+      "credentials": {
+        "googlePalmApi": {
+          "id": "",
+          "name": "Gemini"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "schemaType": "fromJson",
+        "jsonSchema": "{\n  \"type\": \"object\",\n  \"title\": \"MeetingAnalysis\",\n  \"properties\": {\n    \"title\": {\"type\": \"string\", \"title\": \"Title\", \"maxLength\": 60},\n    \"tags\": {\"type\": \"array\", \"title\": \"Tags\", \"items\": {\"type\": \"string\"}, \"minItems\": 1, \"maxItems\": 4},\n    \"overview\": {\"type\": \"string\", \"title\": \"Overview\"},\n    \"decisions\": {\n      \"type\": \"array\",\n      \"title\": \"Decisions\",\n      \"items\": {\n        \"type\": \"object\",\n        \"title\": \"Item\",\n        \"properties\": {\n          \"text\": {\"type\": \"string\", \"title\": \"Text\"},\n          \"sources\": {\"type\": \"array\", \"title\": \"Sources\", \"items\": {\"type\": \"integer\"}, \"minItems\": 1, \"maxItems\": 3}\n        },\n        \"required\": [\"text\", \"sources\"]\n      }\n    },\n    \"action_items\": {\n      \"type\": \"array\",\n      \"title\": \"Action Items\",\n      \"items\": {\n        \"type\": \"object\",\n        \"title\": \"ActionItem\",\n        \"properties\": {\n          \"text\": {\"type\": \"string\", \"title\": \"Text\"},\n          \"sources\": {\"type\": \"array\", \"title\": \"Sources\", \"items\": {\"type\": \"integer\"}, \"minItems\": 1, \"maxItems\": 3},\n          \"owner\": {\"title\": \"Owner\", \"anyOf\": [{\"type\": \"string\"}, {\"type\": \"null\"}]},\n          \"due\": {\"title\": \"Due\", \"anyOf\": [{\"type\": \"string\"}, {\"type\": \"null\"}]}\n        },\n        \"required\": [\"text\", \"sources\", \"owner\", \"due\"]\n      }\n    },\n    \"open_questions\": {\n      \"type\": \"array\",\n      \"title\": \"Open Questions\",\n      \"items\": {\n        \"type\": \"object\",\n        \"title\": \"Item\",\n        \"properties\": {\n          \"text\": {\"type\": \"string\", \"title\": \"Text\"},\n          \"sources\": {\"type\": \"array\", \"title\": \"Sources\", \"items\": {\"type\": \"integer\"}, \"minItems\": 1, \"maxItems\": 3}\n        },\n        \"required\": [\"text\", \"sources\"]\n      }\n    }\n  },\n  \"required\": [\"title\", \"tags\", \"overview\", \"decisions\", \"action_items\", \"open_questions\"]\n}"
+      },
+      "id": "d4a8e0f1-1111-4000-8000-000000000005",
+      "name": "Structured Output Parser Meeting",
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "typeVersion": 1.2,
+      "position": [
+        720,
+        360
+      ]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $('Webhook').first().json.body.user_content }}",
+        "messages": {
+          "messageValues": [
+            {
+              "type": "system",
+              "message": "={{ $('Webhook').first().json.body.system_prompt }}"
+            }
+          ]
+        }
+      },
+      "id": "d4a8e0f1-1111-4000-8000-000000000006",
+      "name": "Note Chain",
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.4,
+      "position": [
+        940,
+        180
+      ]
+    },
+    {
+      "parameters": {
+        "modelName": "={{ $('Webhook').first().json.body.model }}"
+      },
+      "id": "d4a8e0f1-1111-4000-8000-000000000007",
+      "name": "Google Gemini Chat Model Note",
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1,
+      "position": [
+        940,
+        360
+      ],
+      "credentials": {
+        "googlePalmApi": {
+          "id": "",
+          "name": "Gemini"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "schemaType": "fromJson",
+        "jsonSchema": "{\n  \"type\": \"object\",\n  \"title\": \"NoteAnalysis\",\n  \"properties\": {\n    \"title\": {\"type\": \"string\", \"title\": \"Title\", \"maxLength\": 60},\n    \"tags\": {\"type\": \"array\", \"title\": \"Tags\", \"items\": {\"type\": \"string\"}, \"minItems\": 1, \"maxItems\": 4},\n    \"key_points\": {\n      \"type\": \"array\",\n      \"title\": \"Key Points\",\n      \"minItems\": 1,\n      \"maxItems\": 8,\n      \"items\": {\n        \"type\": \"object\",\n        \"title\": \"Item\",\n        \"properties\": {\n          \"text\": {\"type\": \"string\", \"title\": \"Text\"},\n          \"sources\": {\"type\": \"array\", \"title\": \"Sources\", \"items\": {\"type\": \"integer\"}, \"minItems\": 1, \"maxItems\": 3}\n        },\n        \"required\": [\"text\", \"sources\"]\n      }\n    },\n    \"clean_text\": {\"type\": \"string\", \"title\": \"Clean Text\"}\n  },\n  \"required\": [\"title\", \"tags\", \"key_points\", \"clean_text\"]\n}"
+      },
+      "id": "d4a8e0f1-1111-4000-8000-000000000008",
+      "name": "Structured Output Parser Note",
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "typeVersion": 1.2,
+      "position": [
+        1080,
+        360
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json.output }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "d4a8e0f1-1111-4000-8000-000000000009",
+      "name": "Respond to Webhook",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        1300,
+        240
+      ]
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Switch",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Switch": {
+      "main": [
+        [
+          {
+            "node": "Meeting Chain",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Note Chain",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Gemini Chat Model Meeting": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Meeting Chain",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Structured Output Parser Meeting": {
+      "ai_outputParser": [
+        [
+          {
+            "node": "Meeting Chain",
+            "type": "ai_outputParser",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Meeting Chain": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Gemini Chat Model Note": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Note Chain",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Structured Output Parser Note": {
+      "ai_outputParser": [
+        [
+          {
+            "node": "Note Chain",
+            "type": "ai_outputParser",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Note Chain": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "1",
+  "id": "vna-analyze"
+}
