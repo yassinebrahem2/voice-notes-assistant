@@ -351,7 +351,12 @@ Follow this order to set up and run n8n mode:
 6. **Exporting workflow updates**:
    After modifying workflows in the n8n UI, export them back to `n8n/workflows/` and commit the changes:
    ```powershell
-   docker exec n8n n8n export:workflow --all --output=/tmp/workflows.json
+   docker exec n8n n8n export:workflow --id=vna-analyze --output=/tmp/analyze.json
+   docker cp n8n:/tmp/analyze.json n8n/workflows/analyze.json
+   docker exec n8n n8n export:workflow --id=vna-embed --output=/tmp/embed.json
+   docker cp n8n:/tmp/embed.json n8n/workflows/embed.json
+   docker exec n8n n8n export:workflow --id=vna-chat --output=/tmp/chat.json
+   docker cp n8n:/tmp/chat.json n8n/workflows/chat.json
    ```
    Or download each workflow from the UI and save to `n8n/workflows/<name>.json`.
 

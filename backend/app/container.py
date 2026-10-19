@@ -68,22 +68,22 @@ def build_container(settings: Settings) -> Container:
         )
         container.chat_runs = ChatRuns(container, build_n8n_chat_graph)
         return container
-    else:
-        embedder = FastEmbedEmbedder(models.roles.embedder.model, settings.model_cache_dir)
-        analyzer = SummarizerAnalyzer(models)
-        container = Container(
-            settings,
-            app_config,
-            models,
-            settings.data_dir / "app.db",
-            settings.speech_backend,
-            asr,
-            diarizer,
-            embedder,
-            analyzer,
-        )
-        from app.agents.chat_graph import build_chat_graph
-        from app.chats.runs import ChatRuns
 
-        container.chat_runs = ChatRuns(container, build_chat_graph)
-        return container
+    embedder = FastEmbedEmbedder(models.roles.embedder.model, settings.model_cache_dir)
+    analyzer = SummarizerAnalyzer(models)
+    container = Container(
+        settings,
+        app_config,
+        models,
+        settings.data_dir / "app.db",
+        settings.speech_backend,
+        asr,
+        diarizer,
+        embedder,
+        analyzer,
+    )
+    from app.agents.chat_graph import build_chat_graph
+    from app.chats.runs import ChatRuns
+
+    container.chat_runs = ChatRuns(container, build_chat_graph)
+    return container

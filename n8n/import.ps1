@@ -18,8 +18,14 @@ foreach ($file in $workflowFiles) {
     $containerTmpPath = "/tmp/$($file.Name)"
     Write-Host "Importing $($file.Name)..."
     docker cp $file.FullName "$($Container):$containerTmpPath"
+    if ($LASTEXITCODE -ne 0) {
+        throw "Failed to copy '$($file.Name)' into container '$Container' (exit code $LASTEXITCODE)"
+    }
     try {
         docker exec $Container n8n import:workflow --input=$containerTmpPath
+        if ($LASTEXITCODE -ne 0) {
+            throw "Failed to import '$($file.Name)' into container '$Container' (exit code $LASTEXITCODE)"
+        }
     }
     finally {
         docker exec $Container rm -f $containerTmpPath
