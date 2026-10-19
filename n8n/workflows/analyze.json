@@ -83,6 +83,7 @@
     {
       "parameters": {
         "promptType": "define",
+        "hasOutputParser": true,
         "text": "={{ $('Webhook').first().json.body.user_content }}",
         "messages": {
           "messageValues": [
@@ -138,6 +139,7 @@
     {
       "parameters": {
         "promptType": "define",
+        "hasOutputParser": true,
         "text": "={{ $('Webhook').first().json.body.user_content }}",
         "messages": {
           "messageValues": [

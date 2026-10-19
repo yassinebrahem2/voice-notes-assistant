@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 import hmac
-from collections.abc import Awaitable, Callable
+import json
+from collections.abc import Awaitable, Callable, Iterable
 from typing import TYPE_CHECKING, Any, cast
 
 from fastapi import APIRouter, HTTPException, Request
 from langchain.tools import ToolRuntime
-from pydantic import BaseModel, SecretStr
+from pydantic import BaseModel, SecretStr, field_validator
 
 from app.agents.chat_context import ChatContext
 from app.agents.tools import find_recordings, search_transcripts, summarize
@@ -18,10 +19,47 @@ if TYPE_CHECKING:
     from app.n8n.client import N8nClient
 
 
+def _normalize_string_list(v: object) -> list[str] | None:
+    if v is None:
+        return None
+    if isinstance(v, str):
+        s = v.strip()
+        if not s:
+            return None
+        if s.startswith("[") and s.endswith("]"):
+            try:
+                parsed: object = json.loads(s)
+                if isinstance(parsed, list):
+                    parsed_list = cast(list[object], parsed)
+                    return [str(item).strip() for item in parsed_list if str(item).strip()]
+            except json.JSONDecodeError:
+                pass
+        parts = [p.strip() for p in s.split(",") if p.strip()]
+        return parts if parts else None
+    if isinstance(v, (list, tuple, set)):
+        seq = cast(Iterable[object], v)
+        return [str(item).strip() for item in seq if str(item).strip()]
+    return None
+
+
 class SearchTranscriptsIn(BaseModel):
     run_id: str
     query: str
     k: int = 8
+
+    @field_validator("k", mode="before")
+    @classmethod
+    def _normalize_k(cls, v: object) -> int:
+        if v is None or v == "":
+            return 8
+        if isinstance(v, str):
+            s = v.strip()
+            if not s:
+                return 8
+            return int(s)
+        if isinstance(v, (int, float)):
+            return int(v)
+        return int(str(v))
 
 
 class FindRecordingsIn(BaseModel):
@@ -31,11 +69,36 @@ class FindRecordingsIn(BaseModel):
     date_to: str | None = None
     tags: list[str] | None = None
 
+    @field_validator("text", "date_from", "date_to", mode="before")
+    @classmethod
+    def _empty_str_to_none(cls, v: object) -> object:
+        if isinstance(v, str) and not v.strip():
+            return None
+        return v
+
+    @field_validator("tags", mode="before")
+    @classmethod
+    def _normalize_tags(cls, v: object) -> list[str] | None:
+        return _normalize_string_list(v)
+
 
 class SummarizeIn(BaseModel):
     run_id: str
     sources: list[str]
     focus: str | None = None
+
+    @field_validator("focus", mode="before")
+    @classmethod
+    def _empty_focus_to_none(cls, v: object) -> object:
+        if isinstance(v, str) and not v.strip():
+            return None
+        return v
+
+    @field_validator("sources", mode="before")
+    @classmethod
+    def _normalize_sources(cls, v: object) -> list[str]:
+        res = _normalize_string_list(v)
+        return res if res is not None else []
 
 
 def build_router(client: N8nClient, secret: SecretStr) -> APIRouter:
