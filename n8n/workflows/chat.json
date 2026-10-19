@@ -32,7 +32,7 @@
         "hasOutputParser": true,
         "options": {
           "systemMessage": "={{ $('Webhook').first().json.body.system_prompt + '\\n\\nCRITICAL: When you are ready to respond to the user, you MUST call the format_final_json_response tool to provide your final answer with reply_type and text. Never reply with plain text.' }}",
-          "maxIterations": 6
+          "maxIterations": 10
         }
       },
       "id": "f6c0a2b3-3333-4000-8000-000000000002",
@@ -66,7 +66,7 @@
     {
       "parameters": {
         "schemaType": "manual",
-        "inputSchema": "{\n  \"type\": \"object\",\n  \"title\": \"ChatReply\",\n  \"properties\": {\n    \"reply_type\": {\n      \"type\": \"string\",\n      \"title\": \"Reply Type\",\n      \"enum\": [\"answer\", \"greeting\", \"help\", \"out_of_scope\"]\n    },\n    \"text\": {\n      \"type\": \"string\",\n      \"title\": \"Text\"\n    }\n  },\n  \"required\": [\"reply_type\", \"text\"]\n}"
+        "inputSchema": "{\n  \"type\": \"object\",\n  \"title\": \"ChatReply\",\n  \"properties\": {\n    \"reply_type\": {\n      \"type\": \"string\",\n      \"title\": \"Reply Type\",\n      \"enum\": [\"answer\", \"not_found\", \"greeting\", \"help\", \"out_of_scope\"]\n    },\n    \"text\": {\n      \"type\": \"string\",\n      \"title\": \"Text\"\n    }\n  },\n  \"required\": [\"reply_type\", \"text\"]\n}"
       },
       "id": "f6c0a2b3-3333-4000-8000-000000000004",
       "name": "Structured Output Parser",

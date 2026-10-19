@@ -791,3 +791,32 @@ def test_find_recordings_escapes_like_special_chars(container: Container) -> Non
 
     res_slash = do_find("back\\slash")
     assert "back\\slash" in res_slash
+
+
+def test_search_transcripts_no_hit_message(container: Container) -> None:
+    from app.agents.tools import search_transcripts
+
+    registry = SourceRegistry()
+    steps: list[str] = []
+    ctx = ChatContext(
+        db_path=container.db_path,
+        embedder=container.embedder,
+        settings=container.settings,
+        models=container.models,
+        scope="both",
+        tag_ids=[],
+        today=date(2026, 10, 17),
+        sources=registry,
+    )
+    runtime: ToolRuntime[ChatContext, dict[str, Any]] = ToolRuntime(
+        state={"messages": []},
+        context=ctx,
+        config={},
+        stream_writer=steps.append,
+        tool_call_id="call_test",
+        store=None,
+    )
+
+    search_fn = cast(Any, search_transcripts).func
+    result = str(search_fn(query="nonexistent topic", runtime=runtime))
+    assert result == "<sources>\n</sources>\nNo passages matched. Try broader or related terms."

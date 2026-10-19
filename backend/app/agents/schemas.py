@@ -41,7 +41,7 @@ class NoteSectionNotes(BaseModel):
 
 
 class ChatReply(BaseModel):
-    reply_type: Literal["answer", "greeting", "help", "out_of_scope"]
+    reply_type: Literal["answer", "not_found", "greeting", "help", "out_of_scope"]
     text: str | None
 
 

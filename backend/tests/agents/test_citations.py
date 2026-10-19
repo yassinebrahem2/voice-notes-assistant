@@ -90,17 +90,66 @@ def test_none_reply_is_could_not_finish() -> None:
     assert res == FinalReply("answer", COULD_NOT_FINISH, [])
 
 
-def test_greeting_help_out_of_scope_fixed_texts() -> None:
+def test_model_written_non_answer_replies() -> None:
     registry = SourceRegistry()
 
-    reply_g = ChatReply(reply_type="greeting", text="Custom greeting attempt")
+    reply_g = ChatReply(reply_type="greeting", text="Hey there!")
     res_g = check_citations(reply_g, registry)
-    assert res_g == FinalReply("greeting", GREETING, [])
+    assert res_g == FinalReply("greeting", "Hey there!", [])
 
-    reply_h = ChatReply(reply_type="help", text=None)
+    reply_h = ChatReply(reply_type="help", text="You can ask about syncs.")
     res_h = check_citations(reply_h, registry)
-    assert res_h == FinalReply("help", HELP, [])
+    assert res_h == FinalReply("help", "You can ask about syncs.", [])
 
-    reply_o = ChatReply(reply_type="out_of_scope", text="What is the weather outside?")
+    reply_o = ChatReply(reply_type="out_of_scope", text="I cannot answer general trivia.")
     res_o = check_citations(reply_o, registry)
-    assert res_o == FinalReply("out_of_scope", OUT_OF_SCOPE, [])
+    assert res_o == FinalReply("out_of_scope", "I cannot answer general trivia.", [])
+
+
+def test_not_found_returns_as_answer_with_no_citations() -> None:
+    registry = SourceRegistry()
+    text = "I looked for war, conflict and military but found nothing."
+    reply = ChatReply(reply_type="not_found", text=text)
+    res = check_citations(reply, registry)
+    assert res == FinalReply("answer", text, [])
+
+
+def test_labels_removed_from_non_answer_replies() -> None:
+    registry = SourceRegistry()
+    h1 = Hit(
+        recording_id="rec_1",
+        recording_title="Meeting Alpha",
+        kind="meeting",
+        created_at="2026-10-17T00:00:00Z",
+        first_segment_id="seg_1",
+        start_ms=1000,
+        end_ms=4000,
+        text="Alpha text",
+        distance=0.1,
+    )
+    registry.add_passage(h1)
+
+    reply = ChatReply(reply_type="not_found", text="Nothing on that [P1], sorry [R2].")
+    res = check_citations(reply, registry)
+    assert res == FinalReply("answer", "Nothing on that, sorry.", [])
+
+    reply_g = ChatReply(reply_type="greeting", text="Hello [P1] friend!")
+    res_g = check_citations(reply_g, registry)
+    assert res_g == FinalReply("greeting", "Hello friend!", [])
+
+
+def test_fallbacks_when_text_empty_whitespace_or_none() -> None:
+    registry = SourceRegistry()
+
+    for empty_val in [None, "", "   \t\n  "]:
+        res_nf = check_citations(ChatReply(reply_type="not_found", text=empty_val), registry)
+        assert res_nf == FinalReply("answer", NOT_FOUND, [])
+
+        res_g = check_citations(ChatReply(reply_type="greeting", text=empty_val), registry)
+        assert res_g == FinalReply("greeting", GREETING, [])
+
+        res_h = check_citations(ChatReply(reply_type="help", text=empty_val), registry)
+        assert res_h == FinalReply("help", HELP, [])
+
+        res_o = check_citations(ChatReply(reply_type="out_of_scope", text=empty_val), registry)
+        assert res_o == FinalReply("out_of_scope", OUT_OF_SCOPE, [])
