@@ -1,4 +1,3 @@
-import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import { useRef, useState } from 'react';
 import {
   KeyboardAvoidingView,
@@ -7,18 +6,17 @@ import {
   ScrollView,
   type ScrollViewInstance,
   StyleSheet,
-  TextInput,
   View,
 } from 'react-native';
 import { Text, useTheme } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { openFanOut } from '../recording/fanOutStore';
-import { fontFamilies } from '../theme/fonts';
 import type { TapeTheme } from '../theme/paperTheme';
-import { radius, spacing, typeScale } from '../theme/tokens';
+import { radius, spacing } from '../theme/tokens';
 import { useReduceMotion } from '../theme/useReduceMotion';
 import { AnswerText } from './AnswerText';
+import { MessageInput } from './MessageInput';
 import { ScopeBar } from './ScopeBar';
 import { isActive, type RunView } from './runMachine';
 import { Starters } from './Starters';
@@ -150,36 +148,12 @@ export function ChatScreen() {
             </View>
           ))}
         </ScrollView>
-        <View style={[styles.inputRow, { borderTopColor: tape.line }]}>
-          <TextInput
-            accessibilityLabel="Message"
-            value={draft}
-            onChangeText={setDraft}
-            placeholder="Ask about your recordings"
-            placeholderTextColor={tape.inkMuted}
-            multiline
-            style={[styles.input, { color: tape.ink, borderColor: tape.line }]}
-          />
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Send"
-            accessibilityState={{ disabled: !canSend }}
-            disabled={!canSend}
-            onPress={send}
-            android_ripple={{ color: tape.onSignal }}
-            style={[
-              styles.send,
-              { backgroundColor: canSend ? tape.signal : tape.raised },
-            ]}
-          >
-            <MaterialCommunityIcons
-              name="arrow-up"
-              size={24}
-              color={canSend ? tape.onSignal : tape.inkMuted}
-              accessible={false}
-            />
-          </Pressable>
-        </View>
+        <MessageInput
+          value={draft}
+          onChangeText={setDraft}
+          onSend={send}
+          canSend={canSend}
+        />
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
@@ -210,30 +184,5 @@ const styles = StyleSheet.create({
   },
   pillSm: {
     minHeight: 32,
-  },
-  inputRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-    gap: spacing.sm,
-    padding: spacing.md,
-    borderTopWidth: StyleSheet.hairlineWidth,
-  },
-  input: {
-    flex: 1,
-    minHeight: 48,
-    maxHeight: 120,
-    paddingHorizontal: spacing.md,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderRadius: radius.card,
-    fontFamily: fontFamilies.regular,
-    fontSize: typeScale.body,
-  },
-  send: {
-    width: 48,
-    height: 48,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: radius.round,
-    overflow: 'hidden',
   },
 });
