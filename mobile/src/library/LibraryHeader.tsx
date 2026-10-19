@@ -3,15 +3,14 @@ import {
   Pressable,
   ScrollView,
   StyleSheet,
-  Text,
   TextInput,
   View,
 } from 'react-native';
 import { useTheme } from 'react-native-paper';
 
 import type { Schemas } from '../api/client';
+import { Chip } from '../components/Chip';
 import { fontFamilies } from '../theme/fonts';
-import { motion } from '../theme/motion';
 import type { TapeTheme } from '../theme/paperTheme';
 import { radius, spacing, typeScale } from '../theme/tokens';
 
@@ -96,41 +95,17 @@ export function LibraryHeader({
           contentContainerStyle={styles.tagScrollContent}
           style={styles.tagScrollView}
         >
-          {tags.map((tag) => {
-            const isSelected = selectedTagIds.includes(tag.id);
-            return (
-              <Pressable
-                key={tag.id}
-                accessibilityRole="button"
-                accessibilityLabel={`Filter by ${tag.name}`}
-                accessibilityState={{ selected: isSelected }}
-                onPress={() => onToggleTag(tag.id)}
-                android_ripple={{ color: tape.line, borderless: false }}
-                style={({ pressed }) => [
-                  styles.tagChip,
-                  {
-                    backgroundColor: isSelected ? tape.signal : tape.surface,
-                    borderColor: isSelected ? tape.signal : tape.line,
-                    transform: [{ scale: pressed ? motion.press.scale : 1 }],
-                  },
-                ]}
-              >
-                <Text
-                  style={[
-                    styles.tagChipText,
-                    {
-                      color: isSelected ? tape.onSignal : tape.ink,
-                      fontFamily: isSelected
-                        ? fontFamilies.semibold
-                        : fontFamilies.regular,
-                    },
-                  ]}
-                >
-                  {tag.name}
-                </Text>
-              </Pressable>
-            );
-          })}
+          {tags.map((tag) => (
+            <Chip
+              key={tag.id}
+              label={tag.name}
+              onPress={() => onToggleTag(tag.id)}
+              accessibilityRole="button"
+              accessibilityLabel={`Filter by ${tag.name}`}
+              selected={selectedTagIds.includes(tag.id)}
+              selectedVariant="signal"
+            />
+          ))}
         </ScrollView>
       ) : null}
     </View>
@@ -169,19 +144,7 @@ const styles = StyleSheet.create({
   tagScrollContent: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing.xs,
+    gap: spacing.sm,
     paddingVertical: spacing.xs,
-  },
-  tagChip: {
-    minWidth: 48,
-    minHeight: 48,
-    borderRadius: radius.round,
-    borderWidth: 1,
-    paddingHorizontal: spacing.md,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  tagChipText: {
-    fontSize: typeScale.small,
   },
 });
