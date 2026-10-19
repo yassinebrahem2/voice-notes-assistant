@@ -31,6 +31,7 @@ class Settings(BaseSettings):
     model_cache_dir: Path = Field(default_factory=lambda data: Path(data["data_dir"]) / "models")
     bind_host: str = "127.0.0.1"
     port: int = 8000
+    ai_backend: Literal["builtin", "n8n"] = "builtin"
     speech_backend: Literal["real", "fake"] = "real"
     upload_max_bytes: int = 200_000_000
     chunk_max_tokens: int = 200
