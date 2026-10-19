@@ -2,7 +2,7 @@
 
 > **For agentic workers:** implement this plan task by task as described in `docs/implementing-plan-tasks.md` (fresh implementer, fresh reviewer, fix loop per task); follow `AGENTS.md`. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-> **Status:** approved. Branch `plan/stage-2-ui-polish`, plan issue #87 (tasks #88–#93). Fixes Bug #86.
+> **Status:** approved. Branch `plan/stage-2-ui-polish`, plan issue #87 (tasks #88–#93). Implements the UI spec amendment in f22f9a8.
 
 **Goal:** Slimmer, less rounded filter and speaker chips; a tighter Chat header; a chat input that stays centred and grows; message bubbles; inline citation links; Markdown in assistant replies.
 
@@ -10,7 +10,7 @@
 
 **Tech Stack:** Expo SDK 58, React Native 0.88, React Native Paper 5, `marked` 18.0.14 (new, pure JS, no dependencies), jest-expo, React Native Testing Library 14. RNTL 14's `render` is async (`await render(...)`), and `toHaveStyle` works with no extra setup (both checked on `main`).
 
-**Spec:** `docs/superpowers/specs/2026-10-16-stage-1-design-ui.md` §3 (Chat, Everywhere) and §4 (Visual direction, Shape), as amended for #86.
+**Spec:** `docs/superpowers/specs/2026-10-16-stage-1-design-ui.md` §3 (Chat, Everywhere) and §4 (Visual direction, Shape), as amended in f22f9a8.
 
 **Stage overview:** none; standalone stage 2 plan. **Builds on:** `main` (stage 1 merged): `ChatScreen`, `ScopeBar`, `AnswerText`, `citations.ts` (`splitAnswer`, `citationTime`, `citationLabel`), `LibraryHeader`, `TranscriptView`, theme tokens.
 
