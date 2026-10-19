@@ -181,3 +181,16 @@ test('an unparseable URL throws the normaliser message', async () => {
     'Enter a valid HTTP or HTTPS server URL.',
   );
 });
+
+test('http is allowed for localhost and 127.0.0.1', async () => {
+  const fetch = jest.spyOn(global, 'fetch').mockResolvedValue(response(health));
+  expect(await testConnection('http://localhost:8000')).toEqual({
+    ok: true,
+    health,
+  });
+  expect(await testConnection('http://127.0.0.1:8000')).toEqual({
+    ok: true,
+    health,
+  });
+  expect(fetch).toHaveBeenCalledTimes(2);
+});

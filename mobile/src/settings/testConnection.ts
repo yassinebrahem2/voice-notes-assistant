@@ -26,11 +26,20 @@ export function isHealth(body: unknown): body is HealthOut {
   );
 }
 
+function isLocalhost(url: string): boolean {
+  try {
+    const parsed = new URL(url);
+    return parsed.hostname === 'localhost' || parsed.hostname === '127.0.0.1';
+  } catch {
+    return false;
+  }
+}
+
 // Calls fetch directly: apiFetch would test the stored URL, not the one being typed.
 // Throws the normaliser's message for an unparseable URL; the screen shows it as a typing error.
 export async function testConnection(input: string): Promise<ConnectionResult> {
   const { url, https } = normalizeServerUrl(input);
-  if (!https) return { ok: false, problem: 'not_https' };
+  if (!https && !isLocalhost(url)) return { ok: false, problem: 'not_https' };
 
   const controller = new AbortController();
   // Raced explicitly, like apiFetch, because a stalled fetch or body read may never reject on abort.

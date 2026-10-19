@@ -2,6 +2,7 @@ from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.errors import ErrorOut, register_error_handlers
 from app.api.routes import chats, health, recordings, tags
@@ -38,8 +39,18 @@ def create_app(container: Container, *, start_worker: bool = False) -> FastAPI:
             "5XX": {"model": ErrorOut, "description": "Server error"},
         },
     )
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=["*"],
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
     app.state.container = container
     register_error_handlers(app)
     for router in (health.router, recordings.router, tags.router, chats.router):
         app.include_router(router, prefix="/api/v1")
+    if container.n8n is not None:
+        from app.n8n.routes import build_router
+
+        app.include_router(build_router(container.n8n.client, container.n8n.secret))
     return app

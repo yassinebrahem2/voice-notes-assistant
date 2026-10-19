@@ -1,0 +1,267 @@
+{
+  "name": "chat",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "chat",
+        "responseMode": "responseNode",
+        "authentication": "headerAuth",
+        "options": {}
+      },
+      "id": "f6c0a2b3-3333-4000-8000-000000000001",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        100,
+        300
+      ],
+      "webhookId": "9b1226b8-297b-4022-8700-1cbb43f2956c",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "",
+          "name": "n8n shared secret"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $('Webhook').first().json.body.prompt }}",
+        "hasOutputParser": true,
+        "options": {
+          "systemMessage": "={{ $('Webhook').first().json.body.system_prompt + '\\n\\nCRITICAL: When you are ready to respond to the user, you MUST call the format_final_json_response tool to provide your final answer with reply_type and text. Never reply with plain text.' }}",
+          "maxIterations": 6
+        }
+      },
+      "id": "f6c0a2b3-3333-4000-8000-000000000002",
+      "name": "AI Agent",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 1.7,
+      "position": [
+        400,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "modelName": "={{ $('Webhook').first().json.body.model }}"
+      },
+      "id": "f6c0a2b3-3333-4000-8000-000000000003",
+      "name": "Google Gemini Chat Model",
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1,
+      "position": [
+        260,
+        520
+      ],
+      "credentials": {
+        "googlePalmApi": {
+          "id": "",
+          "name": "Gemini"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "schemaType": "manual",
+        "inputSchema": "{\n  \"type\": \"object\",\n  \"title\": \"ChatReply\",\n  \"properties\": {\n    \"reply_type\": {\n      \"type\": \"string\",\n      \"title\": \"Reply Type\",\n      \"enum\": [\"answer\", \"greeting\", \"help\", \"out_of_scope\"]\n    },\n    \"text\": {\n      \"type\": \"string\",\n      \"title\": \"Text\"\n    }\n  },\n  \"required\": [\"reply_type\", \"text\"]\n}"
+      },
+      "id": "f6c0a2b3-3333-4000-8000-000000000004",
+      "name": "Structured Output Parser",
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "typeVersion": 1.2,
+      "position": [
+        440,
+        520
+      ]
+    },
+    {
+      "parameters": {
+        "description": "Search transcript passages within scope and tags.",
+        "toolDescription": "Search transcript passages within scope and tags.",
+        "method": "POST",
+        "url": "http://host.docker.internal:8000/internal/n8n/tools/search_transcripts",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { run_id: $('Webhook').first().json.body.run_id, query: $fromAI('query', 'Search query to match transcript passages', 'string'), k: $fromAI('k', 'Maximum number of passages to return', 'number', 8) } }}",
+        "options": {}
+      },
+      "id": "f6c0a2b3-3333-4000-8000-000000000005",
+      "name": "search_transcripts",
+      "type": "n8n-nodes-base.httpRequestTool",
+      "typeVersion": 4.2,
+      "position": [
+        620,
+        520
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "",
+          "name": "n8n shared secret"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "description": "Find recordings by metadata (title, date range, tags, or text search).",
+        "toolDescription": "Find recordings by metadata (title, date range, tags, or text search).",
+        "method": "POST",
+        "url": "http://host.docker.internal:8000/internal/n8n/tools/find_recordings",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { run_id: $('Webhook').first().json.body.run_id, text: $fromAI('text', 'Text search in title or analysis', 'string', ''), date_from: $fromAI('date_from', 'Earliest creation date (YYYY-MM-DD)', 'string', ''), date_to: $fromAI('date_to', 'Latest creation date (YYYY-MM-DD)', 'string', ''), tags: $fromAI('tags', 'Optional comma-separated tag names or IDs to filter by', 'string', '') } }}",
+        "options": {}
+      },
+      "id": "f6c0a2b3-3333-4000-8000-000000000006",
+      "name": "find_recordings",
+      "type": "n8n-nodes-base.httpRequestTool",
+      "typeVersion": 4.2,
+      "position": [
+        800,
+        520
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "",
+          "name": "n8n shared secret"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "description": "Summarize one or more recordings identified by source labels.",
+        "toolDescription": "Summarize one or more recordings identified by source labels.",
+        "method": "POST",
+        "url": "http://host.docker.internal:8000/internal/n8n/tools/summarize",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { run_id: $('Webhook').first().json.body.run_id, sources: $fromAI('sources', 'List of source labels to summarize (e.g. [\"P1\", \"P2\"])', 'json'), focus: $fromAI('focus', 'Optional focus or topic for the summary', 'string', '') } }}",
+        "options": {}
+      },
+      "id": "f6c0a2b3-3333-4000-8000-000000000007",
+      "name": "summarize",
+      "type": "n8n-nodes-base.httpRequestTool",
+      "typeVersion": 4.2,
+      "position": [
+        980,
+        520
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "",
+          "name": "n8n shared secret"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json.output }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "f6c0a2b3-3333-4000-8000-000000000008",
+      "name": "Respond to Webhook",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        720,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Gemini Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Structured Output Parser": {
+      "ai_outputParser": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_outputParser",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "search_transcripts": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "find_recordings": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "summarize": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Agent": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "1",
+  "id": "vna-chat"
+}

@@ -298,3 +298,107 @@ development servers and disable the dedicated Serve endpoint as described above.
 
 For the complete local test, lint, type and API-generation commands, see
 [AGENTS.md](../AGENTS.md).
+
+## n8n mode
+
+n8n mode is an optional add-on backend mode (`AI_BACKEND=n8n`). While builtin mode
+(the default) runs analysis, embedding, and the Chat agent directly in Python,
+n8n mode offloads those three stages to n8n workflows running Gemini in Docker:
+`analyze` handles meeting and note analysis, `embed` batches text embeddings via
+Gemini, and `chat` runs an AI Agent calling callback tools on the backend.
+Speech processing (ASR and diarization) remains on the backend.
+
+### Credentials
+
+Two credentials must be created in the n8n UI (under **Settings > Credentials**):
+
+1. **Header Auth** (`httpHeaderAuth`):
+   - Name: `n8n shared secret`
+   - Header Name: `X-N8N-Secret`
+   - Header Value: The same secret string configured in `N8N_SHARED_SECRET` in `backend/.env`.
+2. **Google Gemini** (`googlePalmApi`):
+   - Name: `Gemini`
+   - API Key: Your Gemini API key.
+
+### Setup and activation
+
+Follow this order to set up and run n8n mode:
+
+1. **Start n8n**:
+   Use an existing container or launch with Docker Compose:
+   ```powershell
+   docker compose -f n8n/compose.yaml up -d
+   ```
+2. **Create credentials**:
+   In the n8n web UI (`http://127.0.0.1:5678`), create the `Gemini` and `n8n shared secret` credentials described above.
+3. **Import workflows**:
+   From the repository root, run the import script to load all workflow files:
+   ```powershell
+   .\n8n\import.ps1
+   ```
+4. **Confirm and activate**:
+   Open each imported workflow (`analyze`, `embed`, `chat`) in the n8n UI, confirm that the credentials (`Gemini` and `n8n shared secret`) are selected on their respective nodes, and activate each workflow.
+5. **Configure backend environment**:
+   In `backend/.env`, set:
+   ```ini
+   AI_BACKEND=n8n
+   N8N_SHARED_SECRET=<your-shared-secret>
+   DATA_DIR=<separate-data-dir-outside-repo>
+   MODEL_CACHE_DIR=<existing-model-cache-dir>
+   RETRIEVAL_MAX_DISTANCE=<calibrated-threshold>
+   ```
+   Because Gemini vectors (768 dimensions) and FastEmbed vectors (384 dimensions) do not mix, use a dedicated `DATA_DIR` for n8n mode. Set `MODEL_CACHE_DIR` to the existing cache directory so speech models are not re-downloaded.
+6. **Exporting workflow updates**:
+   After modifying workflows in the n8n UI, export them back to `n8n/workflows/` and commit the changes:
+   ```powershell
+   docker exec n8n n8n export:workflow --id=vna-analyze --output=/tmp/analyze.json
+   docker cp n8n:/tmp/analyze.json n8n/workflows/analyze.json
+   docker exec n8n n8n export:workflow --id=vna-embed --output=/tmp/embed.json
+   docker cp n8n:/tmp/embed.json n8n/workflows/embed.json
+   docker exec n8n n8n export:workflow --id=vna-chat --output=/tmp/chat.json
+   docker cp n8n:/tmp/chat.json n8n/workflows/chat.json
+   ```
+   Or download each workflow from the UI and save to `n8n/workflows/<name>.json`.
+
+### Direct webhook testing
+
+You can verify each webhook endpoint directly using PowerShell's `Invoke-RestMethod`:
+
+```powershell
+$headers = @{ "X-N8N-Secret" = "your-shared-secret" }
+
+# Test embed webhook
+$embedBody = @{
+    model = "gemini-embedding-001"
+    texts = @("test passage")
+    task  = "RETRIEVAL_DOCUMENT"
+} | ConvertTo-Json
+Invoke-RestMethod -Uri "http://127.0.0.1:5678/webhook/embed" -Method Post -Headers $headers -ContentType "application/json" -Body $embedBody
+
+# Test analyze webhook
+$analyzeBody = @{
+    kind          = "note"
+    model         = "gemini-2.5-flash"
+    system_prompt = "Extract key points."
+    user_content  = "Discussed project timelines."
+} | ConvertTo-Json
+Invoke-RestMethod -Uri "http://127.0.0.1:5678/webhook/analyze" -Method Post -Headers $headers -ContentType "application/json" -Body $analyzeBody
+
+# Test chat webhook
+$chatBody = @{
+    model         = "gemini-2.5-flash"
+    run_id        = "test-run"
+    system_prompt = "You are a helpful assistant."
+    prompt        = "User: Hello\nAssistant:"
+} | ConvertTo-Json
+Invoke-RestMethod -Uri "http://127.0.0.1:5678/webhook/chat" -Method Post -Headers $headers -ContentType "application/json" -Body $chatBody
+```
+
+### Manual verification check
+
+Once configured, verify the end-to-end pipeline:
+1. Start the backend with `uv run python -m app.cli serve`.
+2. Upload a demo audio recording and a note.
+3. Wait for both to reach `ready` status (transcription, diarization, n8n analysis, and n8n embedding complete).
+4. In Chat, ask a question requiring retrieval across the transcripts.
+5. Verify that the reply is returned with valid citations resolving to the source passages.
