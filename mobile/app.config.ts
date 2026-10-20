@@ -15,12 +15,28 @@ const config: ExpoConfig = {
   orientation: 'portrait',
   scheme: slug,
   userInterfaceStyle: 'automatic',
-  android: { package: `com.app.${slug.replace(/-/g, '')}` },
-  web: { output: 'single' },
+  icon: './assets/icon.png',
+  android: {
+    package: `com.app.${slug.replace(/-/g, '')}`,
+    adaptiveIcon: {
+      foregroundImage: './assets/adaptive-icon.png',
+      monochromeImage: './assets/adaptive-icon-monochrome.png',
+      backgroundColor: '#191512',
+    },
+  },
+  web: { output: 'single', favicon: './assets/favicon.png' },
   plugins: [
     'expo-router',
     'expo-font',
-    'expo-splash-screen',
+    [
+      'expo-splash-screen',
+      {
+        image: './assets/splash-icon.png',
+        imageWidth: 200,
+        resizeMode: 'contain',
+        backgroundColor: '#191512',
+      },
+    ],
     [
       'expo-audio',
       {
