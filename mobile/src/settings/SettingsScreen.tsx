@@ -14,6 +14,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { apiFetch } from '../api/client';
 import { errorMessage } from '../api/errorMessages';
+import { AppLogo } from '../components/AppLogo';
 import { appInfo } from '../config/appInfo';
 import { useServerStatusValue } from '../server/statusStore';
 import { fontFamilies } from '../theme/fonts';
@@ -317,7 +318,7 @@ export function SettingsScreen() {
             <Text accessibilityRole="header" variant="titleMedium">
               About
             </Text>
-            <Text>{appInfo.name}</Text>
+            <AppLogo size="large" />
             <Text
               style={{ color: tape.inkMuted, fontFamily: fontFamilies.mono }}
             >

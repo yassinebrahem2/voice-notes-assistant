@@ -26,6 +26,9 @@ jest.mock('expo-font', () => ({
   isLoaded: () => true,
 }));
 
+jest.mock('../config/appInfo', () => ({
+  appInfo: { name: 'Test App', version: '1.2.3' },
+}));
 jest.mock('expo-router', () => ({
   router: { push: jest.fn(), back: jest.fn() },
 }));

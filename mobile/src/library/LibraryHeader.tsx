@@ -9,6 +9,7 @@ import {
 import { useTheme } from 'react-native-paper';
 
 import type { Schemas } from '../api/client';
+import { AppLogo } from '../components/AppLogo';
 import { Chip } from '../components/Chip';
 import { fontFamilies } from '../theme/fonts';
 import type { TapeTheme } from '../theme/paperTheme';
@@ -35,6 +36,9 @@ export function LibraryHeader({
 
   return (
     <View style={styles.header}>
+      <View style={styles.brand}>
+        <AppLogo size="small" />
+      </View>
       <View
         style={[
           styles.searchBar,
@@ -117,6 +121,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
     paddingTop: spacing.sm,
     paddingBottom: spacing.xs,
+  },
+  brand: {
+    paddingVertical: spacing.sm,
+    marginBottom: spacing.xs,
   },
   searchBar: {
     flexDirection: 'row',
