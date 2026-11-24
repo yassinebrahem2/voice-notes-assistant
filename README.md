@@ -1,8 +1,8 @@
-# Meeting & Voice Notes Assistant
+# Audia
 
-A mobile app that records meetings, conversations and solo voice notes, transcribes them on a laptop server, and lets you search, summarise and ask questions about them in natural language, with answers that cite the exact moment they came from.
+Audia is a mobile app that records meetings, conversations and solo voice notes, transcribes them on a laptop server, and lets you search, summarise and ask questions about them in natural language, with answers that cite the exact moment they came from.
 
-The app's name and version are defined only in [`config/app.json`](config/app.json).
+The app's name and version are configured in [`config/app.json`](config/app.json).
 
 ## What it does
 
